@@ -9,6 +9,6 @@ Internal project for ITC Frontendamentals
 | Mentor | [Mentor Name]   |
 | Leader | Tan Wei Quan    |
 | Member | Agracia         |
-| Member | [Member 2 Name] |
+| Member | Janice
 | Member | [Member 3 Name] |
 | Member | [Member 4 Name] |
