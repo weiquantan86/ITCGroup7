@@ -1,9 +1,8 @@
-const client = require('./client');
+import pool from './client.js';
 
 async function initDB() {
   try {
-    await client.connect();
-    await client.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -16,7 +15,7 @@ async function initDB() {
   } catch (err) {
     console.error('Error creating table:', err);
   } finally {
-    await client.end();
+    await pool.end();
   }
 }
 
