@@ -2,8 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-export default function ThreeScene() {
+export default function ThreeScene({ characterPath }) {
   const mountRef = useRef(null);
 
   useEffect(() => {
@@ -11,8 +12,8 @@ export default function ThreeScene() {
     if (!mount) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xeef2f7);
-    scene.fog = new THREE.Fog(0xeef2f7, 10, 32);
+    scene.background = new THREE.Color(0x0b0f1a);
+    scene.fog = new THREE.Fog(0x0b0f1a, 10, 32);
 
     const camera = new THREE.PerspectiveCamera(
       55,
@@ -29,20 +30,20 @@ export default function ThreeScene() {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     mount.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
-    const keyLight = new THREE.SpotLight(0xffffff, 1.2, 40, Math.PI / 4, 0.45, 1);
+    const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.35);
+    const keyLight = new THREE.SpotLight(0xe2e8f0, 1.0, 40, Math.PI / 4, 0.45, 1);
     keyLight.position.set(4, 8, 4);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 1024;
     keyLight.shadow.mapSize.height = 1024;
-    const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x334155, 0.6);
+    const hemiLight = new THREE.HemisphereLight(0x1e293b, 0x0b0f1a, 0.5);
     scene.add(ambientLight, keyLight, hemiLight);
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(120, 120),
       new THREE.MeshStandardMaterial({
-        color: 0x7a5a3a,
-        roughness: 0.95,
+        color: 0x1f2937,
+        roughness: 0.98,
         metalness: 0.02,
       })
     );
@@ -54,8 +55,8 @@ export default function ThreeScene() {
     const grass = new THREE.Mesh(
       new THREE.CircleGeometry(26, 64),
       new THREE.MeshStandardMaterial({
-        color: 0x3f7d2f,
-        roughness: 0.9,
+        color: 0x1f4d2b,
+        roughness: 0.95,
         metalness: 0,
       })
     );
@@ -67,13 +68,13 @@ export default function ThreeScene() {
     const trees = new THREE.Group();
     const treeColliders = [];
     const trunkMaterial = new THREE.MeshStandardMaterial({
-      color: 0x7c4a03,
-      roughness: 0.9,
+      color: 0x4b2e12,
+      roughness: 0.95,
       metalness: 0.05,
     });
     const leafMaterial = new THREE.MeshStandardMaterial({
-      color: 0x15803d,
-      roughness: 0.6,
+      color: 0x0f5132,
+      roughness: 0.7,
       metalness: 0.1,
     });
     for (let i = 0; i < 28; i += 1) {
@@ -125,7 +126,6 @@ export default function ThreeScene() {
     );
     avatarBody.castShadow = true;
     avatarBody.position.y = 0.9;
-    avatar.add(avatarBody);
     const avatarGlow = new THREE.Mesh(
       new THREE.SphereGeometry(0.25, 20, 20),
       new THREE.MeshStandardMaterial({
@@ -135,9 +135,49 @@ export default function ThreeScene() {
       })
     );
     avatarGlow.position.set(0, 1.65, 0);
-    avatar.add(avatarGlow);
+    avatar.add(avatarBody, avatarGlow);
     avatar.position.set(0, -1.4, 6);
     scene.add(avatar);
+
+    let avatarModel = null;
+    let arms = [];
+    let legLeft = null;
+    let legRight = null;
+    const loader = new GLTFLoader();
+    let isMounted = true;
+    const loadCharacter = (path) => {
+      if (!path) return;
+      loader.load(
+        path,
+        (gltf) => {
+          if (!isMounted || !gltf?.scene) return;
+          if (avatarModel) {
+            avatar.remove(avatarModel);
+          }
+          avatarModel = gltf.scene;
+          avatarModel.scale.setScalar(1.15);
+          avatarModel.position.set(0, 0, 0);
+          arms = [];
+          legLeft = null;
+          legRight = null;
+          avatarModel.traverse((child) => {
+            if (child.isMesh) {
+              child.castShadow = true;
+            }
+            if (child.name && child.name.startsWith("arm")) arms.push(child);
+            if (child.name === "legLeft") legLeft = child;
+            if (child.name === "legRight") legRight = child;
+          });
+          avatar.remove(avatarBody, avatarGlow);
+          avatar.add(avatarModel);
+        },
+        undefined,
+        () => {
+          // Keep placeholder if model fails to load.
+        }
+      );
+    };
+    loadCharacter(characterPath || "/assets/characters/adam/adam.glb");
 
     const pressedKeys = new Set();
     const keyMap = {
@@ -165,7 +205,8 @@ export default function ThreeScene() {
       const moveZ =
         (pressedKeys.has("s") || pressedKeys.has("down") ? 1 : 0) +
         (pressedKeys.has("w") || pressedKeys.has("up") ? -1 : 0);
-      if (moveX !== 0 || moveZ !== 0) {
+      const isMoving = moveX !== 0 || moveZ !== 0;
+      if (isMoving) {
         const speedBoost = pressedKeys.has("shift") ? 1.8 : 1;
         const moveSpeed = 3.2 * speedBoost * delta;
         const length = Math.hypot(moveX, moveZ) || 1;
@@ -191,6 +232,20 @@ export default function ThreeScene() {
           avatar.position.x = clampedX;
           avatar.position.z = clampedZ;
         }
+      }
+
+      if (arms.length && legLeft && legRight) {
+        const swing = isMoving ? Math.sin(now * 0.008) * 0.35 : 0;
+        const legSwing = isMoving ? Math.sin(now * 0.008 + Math.PI) * 0.5 : 0;
+        const armCount = arms.length;
+        for (let i = 0; i < armCount; i += 1) {
+          const arm = arms[i];
+          const phase = (i / armCount) * Math.PI * 2;
+          const armSwing = isMoving ? Math.sin(now * 0.008 + phase) * 1 : 0;
+          arm.rotation.x = armSwing - 0.08;
+        }
+        legLeft.rotation.x = legSwing;
+        legRight.rotation.x = -legSwing;
       }
 
       const cameraOffset = new THREE.Vector3(
@@ -276,6 +331,7 @@ export default function ThreeScene() {
     window.addEventListener("blur", handleBlur);
 
     return () => {
+      isMounted = false;
       window.cancelAnimationFrame(animationId);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("keydown", handleKeyDown);
@@ -290,6 +346,18 @@ export default function ThreeScene() {
       avatarBody.material.dispose();
       avatarGlow.geometry.dispose();
       avatarGlow.material.dispose();
+      if (avatarModel) {
+        avatarModel.traverse((child) => {
+          if (child.isMesh) {
+            child.geometry.dispose();
+            if (Array.isArray(child.material)) {
+              child.material.forEach((mat) => mat.dispose());
+            } else if (child.material) {
+              child.material.dispose();
+            }
+          }
+        });
+      }
       ground.geometry.dispose();
       ground.material.dispose();
       grass.geometry.dispose();
@@ -306,11 +374,11 @@ export default function ThreeScene() {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [characterPath]);
 
   return (
     <div
-      className="relative h-[520px] w-full overflow-hidden rounded-[32px] border border-black/10 bg-[#eef2f7] shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)]"
+      className="relative h-[520px] w-full overflow-hidden rounded-[32px] border border-white/5 bg-[#0b0f1a] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
       aria-label="Interactive 3D scene"
     >
       <div ref={mountRef} className="h-full w-full" />
