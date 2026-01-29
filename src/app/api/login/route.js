@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
-import client from '../../../database/client';
+import pool from '../../../database/client';
 
 export async function POST(request) {
   try {
     const { identifier, password } = await request.json();
 
-    await client.connect();
-
     // Find user by email, phone, or username
-    const userQuery = await client.query('SELECT * FROM users WHERE email = $1 OR phone = $1 OR username = $1', [identifier]);
+    const userQuery = await pool.query(
+      'SELECT * FROM users WHERE email = $1 OR phone = $1 OR username = $1',
+      [identifier]
+    );
     if (userQuery.rows.length === 0) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
@@ -26,7 +27,5 @@ export async function POST(request) {
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await client.end();
   }
 }
