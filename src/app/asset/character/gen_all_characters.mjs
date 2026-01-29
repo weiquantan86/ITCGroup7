@@ -4,8 +4,8 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const toolsDir = here;
-const projectRoot = resolve(toolsDir, "..", "..");
+const charactersDir = here;
+const projectRoot = resolve(charactersDir, "..", "..", "..", "..");
 
 const run = (file) =>
   new Promise((resolve, reject) => {
@@ -17,20 +17,29 @@ const run = (file) =>
     });
   });
 
-const entries = await readdir(toolsDir, { withFileTypes: true });
-const generators = entries
-  .filter((entry) => entry.isFile())
-  .map((entry) => entry.name)
-  .filter((name) => name.startsWith("gen_") && name.endsWith("_glb.mjs"))
-  .sort();
+const entries = await readdir(charactersDir, { withFileTypes: true });
+const generators = [];
+
+for (const entry of entries) {
+  if (!entry.isDirectory()) continue;
+  const dir = join(charactersDir, entry.name);
+  const files = await readdir(dir, { withFileTypes: true });
+  for (const file of files) {
+    if (!file.isFile()) continue;
+    const name = file.name;
+    if (name.startsWith("gen_") && name.endsWith("_glb.mjs")) {
+      generators.push(join(dir, name));
+    }
+  }
+}
+generators.sort();
 
 if (generators.length === 0) {
-  console.log("No character generators found in tools/");
+  console.log("No character generators found in app/asset/character/");
 } else {
   console.log(`Generating ${generators.length} character(s)...`);
   for (const file of generators) {
-    const full = join(toolsDir, file);
     console.log(`- ${basename(file)}`);
-    await run(full);
+    await run(file);
   }
 }

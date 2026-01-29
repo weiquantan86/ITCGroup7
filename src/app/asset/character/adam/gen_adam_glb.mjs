@@ -46,100 +46,87 @@ if (typeof globalThis.FileReader === "undefined") {
   };
 }
 
-const outPath = "public/assets/characters/carrot/carrot.glb";
+const outPath = "public/assets/characters/adam/adam.glb";
 mkdirSync(dirname(outPath), { recursive: true });
 
 const scene = new THREE.Scene();
 
-const carrotYellow = new THREE.MeshStandardMaterial({
-  color: 0xfacc15,
-  roughness: 0.5,
-  metalness: 0.08,
-});
-const carrotDark = new THREE.MeshStandardMaterial({
-  color: 0x7c5b1f,
-  roughness: 0.7,
-  metalness: 0.05,
-});
-const eyeMat = new THREE.MeshStandardMaterial({
-  color: 0x0f172a,
-  roughness: 0.4,
-  metalness: 0.0,
-});
+const botGreen = new THREE.MeshStandardMaterial({ color: 0x8bc34a, roughness: 0.55, metalness: 0.05 });
+const botDark = new THREE.MeshStandardMaterial({ color: 0x3f4f3c, roughness: 0.7, metalness: 0.05 });
+const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.0 });
 
 const group = new THREE.Group();
 
-const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.1, 6, 18), carrotYellow);
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.1, 6, 18), botGreen);
 torso.position.y = 0.9;
-torso.scale.y = 0.92;
-torso.scale.x = 0.82;
-torso.scale.z = 0.82;
+torso.scale.y = 0.9;
 
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), carrotYellow);
-head.position.y = 1.75;
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 24, 18), botGreen);
+head.position.y = 1.7;
 
-const eyeBarGeo = new THREE.BoxGeometry(0.04, 0.22, 0.04);
-const makeXEye = () => {
-  const group = new THREE.Group();
-  const barA = new THREE.Mesh(eyeBarGeo, eyeMat);
-  const barB = new THREE.Mesh(eyeBarGeo, eyeMat);
-  barA.rotation.z = Math.PI / 4;
-  barB.rotation.z = -Math.PI / 4;
-  group.add(barA, barB);
-  return group;
-};
-const eyeLeft = makeXEye();
-const eyeRight = makeXEye();
-eyeLeft.position.set(-0.18, 1.8, 0.48);
-eyeRight.position.set(0.18, 1.8, 0.48);
+const antennaLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), botDark);
+const antennaRight = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), botDark);
+antennaLeft.position.set(-0.18, 2.2, 0);
+antennaRight.position.set(0.18, 2.2, 0);
+antennaLeft.rotation.z = Math.PI / 8;
+antennaRight.rotation.z = -Math.PI / 8;
+const antennaTipLeft = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), botDark);
+const antennaTipRight = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), botDark);
+antennaTipLeft.position.set(-0.3, 2.35, 0);
+antennaTipRight.position.set(0.3, 2.35, 0);
+
+const eyeLeft = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), eyeMat);
+const eyeRight = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), eyeMat);
+eyeLeft.position.set(-0.15, 1.78, 0.38);
+eyeRight.position.set(0.15, 1.78, 0.38);
 
 const armGeo = new THREE.CapsuleGeometry(0.14, 0.65, 6, 12);
 const armLeftGroup = new THREE.Group();
 const armRightGroup = new THREE.Group();
 armLeftGroup.name = "armLeft";
 armRightGroup.name = "armRight";
-armLeftGroup.position.set(-0.58, 0.58, 0);
-armRightGroup.position.set(0.58, 0.58, 0);
+armLeftGroup.position.set(-0.55, 0.58, 0);
+armRightGroup.position.set(0.55, 0.58, 0);
 armLeftGroup.rotation.z = Math.PI / 48;
 armRightGroup.rotation.z = -Math.PI / 48;
 
-const armLeft = new THREE.Mesh(armGeo, carrotYellow);
-const armRight = new THREE.Mesh(armGeo, carrotYellow);
+const armLeft = new THREE.Mesh(armGeo, botGreen);
+const armRight = new THREE.Mesh(armGeo, botGreen);
 armLeft.position.y = -0.45;
 armRight.position.y = -0.45;
 
 const handGeo = new THREE.SphereGeometry(0.12, 12, 10);
-const handLeft = new THREE.Mesh(handGeo, carrotDark);
-const handRight = new THREE.Mesh(handGeo, carrotDark);
+const handLeft = new THREE.Mesh(handGeo, botDark);
+const handRight = new THREE.Mesh(handGeo, botDark);
 handLeft.position.y = -1.08;
 handRight.position.y = -1.08;
 
 armLeftGroup.add(armLeft, handLeft);
 armRightGroup.add(armRight, handRight);
 
-const legGeo = new THREE.CapsuleGeometry(0.18, 0.9, 6, 12);
+const legGeo = new THREE.CapsuleGeometry(0.18, 0.55, 6, 12);
 const legLeftGroup = new THREE.Group();
 const legRightGroup = new THREE.Group();
 legLeftGroup.name = "legLeft";
 legRightGroup.name = "legRight";
-legLeftGroup.position.set(-0.24, 0.45, 0);
-legRightGroup.position.set(0.24, 0.45, 0);
+legLeftGroup.position.set(-0.24, 0.3, 0);
+legRightGroup.position.set(0.24, 0.3, 0);
 
-const legLeft = new THREE.Mesh(legGeo, carrotYellow);
-const legRight = new THREE.Mesh(legGeo, carrotYellow);
-legLeft.position.y = -0.55;
-legRight.position.y = -0.55;
+const legLeft = new THREE.Mesh(legGeo, botGreen);
+const legRight = new THREE.Mesh(legGeo, botGreen);
+legLeft.position.y = -0.35;
+legRight.position.y = -0.35;
 
 const footGeo = new THREE.BoxGeometry(0.36, 0.16, 0.54);
-const footLeft = new THREE.Mesh(footGeo, carrotDark);
-const footRight = new THREE.Mesh(footGeo, carrotDark);
-footLeft.position.set(0, -1.05, 0.16);
-footRight.position.set(0, -1.05, 0.16);
+const footLeft = new THREE.Mesh(footGeo, botDark);
+const footRight = new THREE.Mesh(footGeo, botDark);
+footLeft.position.set(0, -0.7, 0.12);
+footRight.position.set(0, -0.7, 0.12);
 
 legLeftGroup.add(legLeft, footLeft);
 legRightGroup.add(legRight, footRight);
 
-[group, torso, head, eyeLeft, eyeRight, legLeftGroup, legRightGroup].forEach((m) => {
+[group, torso, head, antennaLeft, antennaRight, antennaTipLeft, antennaTipRight, eyeLeft, eyeRight, legLeftGroup, legRightGroup].forEach((m) => {
   if (m !== group) group.add(m);
 });
 torso.add(armLeftGroup, armRightGroup);

@@ -110,24 +110,24 @@ for (let i = 0; i < armCount; i += 1) {
   arms.push(armGroup);
 }
 
-const legGeo = new THREE.CapsuleGeometry(0.18, 0.9, 6, 12);
+const legGeo = new THREE.CapsuleGeometry(0.18, 0.55, 6, 12);
 const legLeftGroup = new THREE.Group();
 const legRightGroup = new THREE.Group();
 legLeftGroup.name = "legLeft";
 legRightGroup.name = "legRight";
-legLeftGroup.position.set(-0.24, 0.35, 0);
-legRightGroup.position.set(0.24, 0.35, 0);
+legLeftGroup.position.set(-0.24, 0.2, 0);
+legRightGroup.position.set(0.24, 0.2, 0);
 
 const legLeft = new THREE.Mesh(legGeo, botBlue);
 const legRight = new THREE.Mesh(legGeo, botBlue);
-legLeft.position.y = -0.55;
-legRight.position.y = -0.55;
+legLeft.position.y = -0.35;
+legRight.position.y = -0.35;
 
 const footGeo = new THREE.BoxGeometry(0.36, 0.16, 0.54);
 const footLeft = new THREE.Mesh(footGeo, botDark);
 const footRight = new THREE.Mesh(footGeo, botDark);
-footLeft.position.set(0, -1.05, 0.16);
-footRight.position.set(0, -1.05, 0.16);
+footLeft.position.set(0, -0.7, 0.12);
+footRight.position.set(0, -0.7, 0.12);
 
 legLeftGroup.add(legLeft, footLeft);
 legRightGroup.add(legRight, footRight);

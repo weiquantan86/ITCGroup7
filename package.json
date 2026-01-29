@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node tools/character/gen_all_characters.mjs",
+    "predev": "node src/app/asset/character/gen_all_characters.mjs",
     "dev": "next dev",
-    "prebuild": "node tools/character/gen_all_characters.mjs",
+    "prebuild": "node src/app/asset/character/gen_all_characters.mjs",
     "build": "next build",
-    "prestart": "node tools/character/gen_all_characters.mjs",
+    "prestart": "node src/app/asset/character/gen_all_characters.mjs",
     "start": "next start"
   },
   "dependencies": {

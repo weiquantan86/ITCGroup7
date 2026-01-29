@@ -51,6 +51,9 @@ export default function ThreeScene({ characterPath }) {
     ground.position.y = -1.4;
     ground.receiveShadow = true;
     scene.add(ground);
+    const groundCollider = {
+      y: ground.position.y,
+    };
 
     const grass = new THREE.Mesh(
       new THREE.CircleGeometry(26, 64),
@@ -114,6 +117,10 @@ export default function ThreeScene({ characterPath }) {
     let yaw = 0;
     let pitch = -0.2;
     let zoomTarget = camera.position.z;
+    let velocityY = 0;
+    let isGrounded = true;
+    const gravity = -18;
+    const jumpVelocity = 6.5;
 
     const avatar = new THREE.Group();
     const avatarBody = new THREE.Mesh(
@@ -143,6 +150,10 @@ export default function ThreeScene({ characterPath }) {
     let arms = [];
     let legLeft = null;
     let legRight = null;
+    let isCarrotModel = false;
+    let isBaronModel = false;
+    let modelFootOffset = 0;
+
     const loader = new GLTFLoader();
     let isMounted = true;
     const loadCharacter = (path) => {
@@ -155,6 +166,8 @@ export default function ThreeScene({ characterPath }) {
             avatar.remove(avatarModel);
           }
           avatarModel = gltf.scene;
+          isCarrotModel = path.includes("/carrot/");
+          isBaronModel = path.includes("/baron/");
           avatarModel.scale.setScalar(1.15);
           avatarModel.position.set(0, 0, 0);
           arms = [];
@@ -170,6 +183,12 @@ export default function ThreeScene({ characterPath }) {
           });
           avatar.remove(avatarBody, avatarGlow);
           avatar.add(avatarModel);
+          avatar.updateMatrixWorld(true);
+          const modelBounds = new THREE.Box3().setFromObject(avatarModel);
+          modelFootOffset = avatar.position.y - modelBounds.min.y;
+          avatar.position.y = groundCollider.y + modelFootOffset;
+          velocityY = 0;
+          isGrounded = true;
         },
         undefined,
         () => {
@@ -191,6 +210,7 @@ export default function ThreeScene({ characterPath }) {
       ArrowRight: "right",
       ShiftLeft: "shift",
       ShiftRight: "shift",
+      Space: "space",
     };
     let animationId;
     let lastTime = 0;
@@ -234,18 +254,56 @@ export default function ThreeScene({ characterPath }) {
         }
       }
 
+      velocityY += gravity * delta;
+      avatar.position.y += velocityY * delta;
+      const groundY = groundCollider.y + modelFootOffset;
+      if (avatar.position.y <= groundY) {
+        avatar.position.y = groundY;
+        velocityY = 0;
+        isGrounded = true;
+      } else {
+        isGrounded = false;
+      }
+
       if (arms.length && legLeft && legRight) {
-        const swing = isMoving ? Math.sin(now * 0.008) * 0.35 : 0;
         const legSwing = isMoving ? Math.sin(now * 0.008 + Math.PI) * 0.5 : 0;
-        const armCount = arms.length;
-        for (let i = 0; i < armCount; i += 1) {
-          const arm = arms[i];
-          const phase = (i / armCount) * Math.PI * 2;
-          const armSwing = isMoving ? Math.sin(now * 0.008 + phase) * 1 : 0;
-          arm.rotation.x = armSwing - 0.08;
+        if (isBaronModel) {
+          const baseArm = isMoving ? 0.9 : 0.1;
+          const sway = isMoving ? Math.sin(now * 0.012) * 0.18 : 0;
+          arms.forEach((arm) => {
+            const targetArm = baseArm + sway;
+            arm.rotation.x = THREE.MathUtils.lerp(arm.rotation.x, targetArm, 0.2);
+          });
+        } else {
+          const swing = isMoving ? Math.sin(now * 0.008) * 0.35 : 0;
+          const armCount = arms.length;
+          for (let i = 0; i < armCount; i += 1) {
+            const arm = arms[i];
+            const phase = (i / armCount) * Math.PI * 2;
+            const armSwing = isMoving ? Math.sin(now * 0.008 + phase) * 1 : 0;
+            arm.rotation.x = armSwing - 0.08;
+          }
         }
         legLeft.rotation.x = legSwing;
         legRight.rotation.x = -legSwing;
+      }
+
+      if (avatarModel && isCarrotModel) {
+        const swayTarget = isMoving ? Math.sin(now * 0.006) * 0.12 : 0;
+        avatarModel.rotation.z = THREE.MathUtils.lerp(
+          avatarModel.rotation.z,
+          swayTarget,
+          0.1
+        );
+      }
+
+      if (avatarModel && isBaronModel) {
+        const tiltTarget = isMoving ? -0.12 : 0;
+        avatarModel.rotation.x = THREE.MathUtils.lerp(
+          avatarModel.rotation.x,
+          tiltTarget,
+          0.08
+        );
       }
 
       const cameraOffset = new THREE.Vector3(
@@ -307,6 +365,10 @@ export default function ThreeScene({ characterPath }) {
       const mapped = keyMap[event.code];
       if (mapped) {
         pressedKeys.add(mapped);
+      }
+      if (mapped === "space" && isGrounded) {
+        velocityY = jumpVelocity;
+        isGrounded = false;
       }
     };
 
