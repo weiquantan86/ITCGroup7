@@ -61,7 +61,7 @@ const torsoGeo = new THREE.ConeGeometry(0.62, 1.5, 18);
 torsoGeo.rotateX(Math.PI);
 const torso = new THREE.Mesh(torsoGeo, botBlue);
 torso.position.y = 0.75;
-torso.scale.set(0.7, 1, 0.7);
+torso.scale.set(0.7, 0.9, 0.7);
 
 const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 24, 18), botBlue);
 head.position.y = 1.7;
@@ -85,7 +85,8 @@ eyeLeft.rotation.x = Math.PI / 2;
 eyeRight.rotation.x = Math.PI / 2;
 
 const armGeo = new THREE.CapsuleGeometry(0.12, 0.75, 6, 12);
-const handGeo = new THREE.SphereGeometry(0.11, 12, 10);
+const handGeo = new THREE.ConeGeometry(0.12, 0.24, 12);
+handGeo.rotateX(Math.PI);
 const armCount = 2;
 const armRadius = 0.7;
 const armHeight = 0.75;
@@ -105,7 +106,7 @@ for (let i = 0; i < armCount; i += 1) {
   const arm = new THREE.Mesh(armGeo, botBlue);
   arm.position.y = -0.5;
   const hand = new THREE.Mesh(handGeo, botDark);
-  hand.position.y = -1.1;
+  hand.position.y = -1.25;
   armGroup.add(arm, hand);
   arms.push(armGroup);
 }

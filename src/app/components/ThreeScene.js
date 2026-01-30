@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { getCharacterProfile } from "../asset/character/registry.js";
 
 export default function ThreeScene({ characterPath }) {
   const mountRef = useRef(null);
@@ -114,6 +115,7 @@ export default function ThreeScene({ characterPath }) {
     let isDragging = false;
     let lastX = 0;
     let lastY = 0;
+    let rightButtonDown = false;
     let yaw = 0;
     let pitch = -0.2;
     let zoomTarget = camera.position.z;
@@ -146,18 +148,91 @@ export default function ThreeScene({ characterPath }) {
     avatar.position.set(0, -1.4, 6);
     scene.add(avatar);
 
+    const defaultCharacterPath = "/assets/characters/adam/adam.glb";
+    let characterProfile = getCharacterProfile(
+      characterPath || defaultCharacterPath
+    );
+
     let avatarModel = null;
     let arms = [];
     let legLeft = null;
     let legRight = null;
-    let isCarrotModel = false;
-    let isBaronModel = false;
     let modelFootOffset = 0;
+    let isSlashing = false;
+    let slashStart = 0;
+    let slashFacing = 0;
+    const slashDuration = 360;
+    const defaultSlashConfig = {
+      color: 0xffffff,
+      radius: 1.1,
+      segments: 36,
+      thetaStart: -Math.PI / 4,
+      thetaLength: Math.PI / 2,
+      height: 1.15,
+      forward: 0.9,
+      expandFrom: 0.7,
+      expandTo: 1.3,
+      opacity: 0.85,
+      rotationX: 0,
+      rotationY: 0,
+      rotationZ: 0,
+    };
+    const resolveSlashConfig = (profile) => ({
+      ...defaultSlashConfig,
+      ...(profile?.slash?.effect ?? {}),
+    });
+    let slashConfig = resolveSlashConfig(characterProfile);
+    const slashMaterial = new THREE.MeshBasicMaterial({
+      color: characterProfile.slash?.color ?? defaultSlashConfig.color,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const slashMesh = new THREE.Mesh(
+      new THREE.CircleGeometry(
+        slashConfig.radius,
+        slashConfig.segments,
+        slashConfig.thetaStart,
+        slashConfig.thetaLength
+      ),
+      slashMaterial
+    );
+    slashMesh.visible = false;
+    slashMesh.position.set(0, slashConfig.height, slashConfig.forward);
+    slashMesh.rotation.set(
+      slashConfig.rotationX,
+      slashConfig.rotationY,
+      slashConfig.rotationZ
+    );
+    avatar.add(slashMesh);
 
     const loader = new GLTFLoader();
     let isMounted = true;
+    const selectProfile = (path) => {
+      characterProfile = getCharacterProfile(path);
+      slashConfig = resolveSlashConfig(characterProfile);
+      slashMaterial.color.set(
+        characterProfile?.slash?.color ?? defaultSlashConfig.color
+      );
+      slashMesh.geometry.dispose();
+      slashMesh.geometry = new THREE.CircleGeometry(
+        slashConfig.radius,
+        slashConfig.segments,
+        slashConfig.thetaStart,
+        slashConfig.thetaLength
+      );
+      slashMesh.position.set(0, slashConfig.height, slashConfig.forward);
+      slashMesh.rotation.set(
+        slashConfig.rotationX,
+        slashConfig.rotationY,
+        slashConfig.rotationZ
+      );
+    };
     const loadCharacter = (path) => {
       if (!path) return;
+      selectProfile(path);
       loader.load(
         path,
         (gltf) => {
@@ -166,8 +241,6 @@ export default function ThreeScene({ characterPath }) {
             avatar.remove(avatarModel);
           }
           avatarModel = gltf.scene;
-          isCarrotModel = path.includes("/carrot/");
-          isBaronModel = path.includes("/baron/");
           avatarModel.scale.setScalar(1.15);
           avatarModel.position.set(0, 0, 0);
           arms = [];
@@ -196,7 +269,7 @@ export default function ThreeScene({ characterPath }) {
         }
       );
     };
-    loadCharacter(characterPath || "/assets/characters/adam/adam.glb");
+    loadCharacter(characterPath || defaultCharacterPath);
 
     const pressedKeys = new Set();
     const keyMap = {
@@ -233,7 +306,9 @@ export default function ThreeScene({ characterPath }) {
         const dirX = moveX / length;
         const dirZ = moveZ / length;
         const angle = Math.atan2(dirX, dirZ) + yaw;
-        avatar.rotation.y = angle;
+        if (!isSlashing) {
+          avatar.rotation.y = angle;
+        }
         const nextX = avatar.position.x + Math.sin(angle) * moveSpeed;
         const nextZ = avatar.position.z + Math.cos(angle) * moveSpeed;
         const clampedX = THREE.MathUtils.clamp(nextX, -12, 12);
@@ -267,13 +342,14 @@ export default function ThreeScene({ characterPath }) {
 
       if (arms.length && legLeft && legRight) {
         const legSwing = isMoving ? Math.sin(now * 0.008 + Math.PI) * 0.5 : 0;
-        if (isBaronModel) {
-          const baseArm = isMoving ? 0.9 : 0.1;
-          const sway = isMoving ? Math.sin(now * 0.012) * 0.18 : 0;
+        if (isSlashing && characterProfile.slash?.freezeArms) {
           arms.forEach((arm) => {
-            const targetArm = baseArm + sway;
-            arm.rotation.x = THREE.MathUtils.lerp(arm.rotation.x, targetArm, 0.2);
+            arm.rotation.x = -0.08;
+            arm.rotation.y = 0;
+            arm.rotation.z = 0;
           });
+        } else if (characterProfile.animateArms) {
+          characterProfile.animateArms({ arms, isMoving, now, THREE });
         } else {
           const swing = isMoving ? Math.sin(now * 0.008) * 0.35 : 0;
           const armCount = arms.length;
@@ -288,22 +364,33 @@ export default function ThreeScene({ characterPath }) {
         legRight.rotation.x = -legSwing;
       }
 
-      if (avatarModel && isCarrotModel) {
-        const swayTarget = isMoving ? Math.sin(now * 0.006) * 0.12 : 0;
-        avatarModel.rotation.z = THREE.MathUtils.lerp(
-          avatarModel.rotation.z,
-          swayTarget,
-          0.1
+      if (isSlashing && characterProfile.slash?.enabled) {
+        const elapsed = now - slashStart;
+        const progress = THREE.MathUtils.clamp(elapsed / slashDuration, 0, 1);
+        const swing = Math.sin(progress * Math.PI);
+        const slashAngle = swing * (Math.PI / 2);
+        avatar.rotation.y = slashFacing;
+        slashMesh.visible = true;
+        slashMaterial.opacity = slashConfig.opacity * (1 - progress);
+        const scale =
+          slashConfig.expandFrom +
+          (slashConfig.expandTo - slashConfig.expandFrom) * progress;
+        slashMesh.scale.set(scale, scale, scale);
+        slashMesh.rotation.set(
+          slashConfig.rotationX,
+          slashConfig.rotationY,
+          slashConfig.rotationZ
         );
+        if (progress >= 1) {
+          isSlashing = false;
+        }
+      } else if (slashMesh.visible) {
+        slashMesh.visible = false;
+        slashMaterial.opacity = 0;
       }
 
-      if (avatarModel && isBaronModel) {
-        const tiltTarget = isMoving ? -0.12 : 0;
-        avatarModel.rotation.x = THREE.MathUtils.lerp(
-          avatarModel.rotation.x,
-          tiltTarget,
-          0.08
-        );
+      if (avatarModel && characterProfile.animateModel) {
+        characterProfile.animateModel({ avatarModel, isMoving, now, THREE });
       }
 
       const cameraOffset = new THREE.Vector3(
@@ -332,7 +419,21 @@ export default function ThreeScene({ characterPath }) {
     };
     window.addEventListener("resize", handleResize);
 
+    const triggerSlash = () => {
+      if (!characterProfile.slash?.enabled) return;
+      isSlashing = true;
+      slashStart = performance.now();
+      slashFacing = getFacing();
+    };
+
     const handlePointerMove = (event) => {
+      const rightDown = (event.buttons & 2) === 2;
+      if (rightDown && !rightButtonDown) {
+        rightButtonDown = true;
+        triggerSlash();
+      } else if (!rightDown && rightButtonDown) {
+        rightButtonDown = false;
+      }
       if (!isDragging) return;
       const deltaX = event.clientX - lastX;
       const deltaY = event.clientY - lastY;
@@ -343,14 +444,47 @@ export default function ThreeScene({ characterPath }) {
       pitch = THREE.MathUtils.clamp(pitch, -0.7, 0.6);
     };
 
+    const getFacing = () => {
+      const moveX =
+        (pressedKeys.has("d") || pressedKeys.has("right") ? 1 : 0) +
+        (pressedKeys.has("a") || pressedKeys.has("left") ? -1 : 0);
+      const moveZ =
+        (pressedKeys.has("s") || pressedKeys.has("down") ? 1 : 0) +
+        (pressedKeys.has("w") || pressedKeys.has("up") ? -1 : 0);
+      if (moveX !== 0 || moveZ !== 0) {
+        const length = Math.hypot(moveX, moveZ) || 1;
+        const dirX = moveX / length;
+        const dirZ = moveZ / length;
+        return Math.atan2(dirX, dirZ) + yaw;
+      }
+      return avatar.rotation.y;
+    };
+
     const handlePointerDown = (event) => {
+      if (event.button === 2) {
+        event.preventDefault();
+        if (!rightButtonDown) {
+          rightButtonDown = true;
+          triggerSlash();
+        }
+        return;
+      }
+      if (event.button !== 0) return;
       isDragging = true;
       lastX = event.clientX;
       lastY = event.clientY;
     };
 
-    const handlePointerUp = () => {
-      isDragging = false;
+    const handlePointerUp = (event) => {
+      if (event.button === 2) {
+        rightButtonDown = false;
+      }
+      if ((event.buttons & 2) !== 2) {
+        rightButtonDown = false;
+      }
+      if (event.button === 0 || (event.buttons & 1) !== 1) {
+        isDragging = false;
+      }
     };
 
     const handleWheel = (event) => {
@@ -359,6 +493,9 @@ export default function ThreeScene({ characterPath }) {
         7,
         14
       );
+    };
+    const handleContextMenu = (event) => {
+      event.preventDefault();
     };
 
     const handleKeyDown = (event) => {
@@ -381,12 +518,15 @@ export default function ThreeScene({ characterPath }) {
 
     const handleBlur = () => {
       pressedKeys.clear();
+      rightButtonDown = false;
+      isDragging = false;
     };
 
     mount.addEventListener("pointermove", handlePointerMove);
     mount.addEventListener("pointerdown", handlePointerDown);
     mount.addEventListener("pointerup", handlePointerUp);
     mount.addEventListener("pointerleave", handlePointerUp);
+    mount.addEventListener("contextmenu", handleContextMenu);
     mount.addEventListener("wheel", handleWheel, { passive: true });
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
@@ -403,6 +543,7 @@ export default function ThreeScene({ characterPath }) {
       mount.removeEventListener("pointerdown", handlePointerDown);
       mount.removeEventListener("pointerup", handlePointerUp);
       mount.removeEventListener("pointerleave", handlePointerUp);
+      mount.removeEventListener("contextmenu", handleContextMenu);
       mount.removeEventListener("wheel", handleWheel);
       avatarBody.geometry.dispose();
       avatarBody.material.dispose();
@@ -435,6 +576,8 @@ export default function ThreeScene({ characterPath }) {
       if (renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
+      slashMesh.geometry.dispose();
+      slashMaterial.dispose();
     };
   }, [characterPath]);
 
