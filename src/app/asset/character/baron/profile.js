@@ -2,9 +2,25 @@ export const profile = {
   id: "baron",
   label: "Baron",
   pathToken: "/baron/",
+  controls: {
+    rightClick: "slash",
+  },
   slash: {
-    enabled: false,
+    enabled: true,
     color: 0x38bdf8,
+    effect: {
+      shape: "rect",
+      width: 0.35,
+      length: 2.6,
+      height: 1.05,
+      forward: 1.3,
+      expandFrom: 0.85,
+      expandTo: 1.15,
+      opacity: 0.8,
+      rotationX: -Math.PI / 2,
+      rotationY: 0,
+      rotationZ: 0,
+    },
   },
   animateArms: ({ arms, isMoving, now, THREE }) => {
     const baseArm = isMoving ? 0.9 : 0.1;

@@ -63,26 +63,38 @@ const torso = new THREE.Mesh(torsoGeo, botBlue);
 torso.position.y = 0.75;
 torso.scale.set(0.7, 0.9, 0.7);
 
-const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 24, 18), botBlue);
-head.position.y = 1.7;
+const head = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.55, 24), botBlue);
+head.position.y = 1.72;
 
-const antennaLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), botDark);
-const antennaRight = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), botDark);
-antennaLeft.position.set(-0.18, 2.15, 0);
-antennaRight.position.set(0.18, 2.15, 0);
+const antennaLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 8), botDark);
+const antennaRight = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 8), botDark);
+antennaLeft.position.set(-0.16, 2.06, 0);
+antennaRight.position.set(0.16, 2.06, 0);
 antennaLeft.rotation.z = Math.PI / 8;
 antennaRight.rotation.z = -Math.PI / 8;
-const antennaTipLeft = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), botDark);
-const antennaTipRight = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), botDark);
-antennaTipLeft.position.set(-0.3, 2.3, 0);
-antennaTipRight.position.set(0.3, 2.3, 0);
+const antennaTipLeft = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.14, 10), botDark);
+const antennaTipRight = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.14, 10), botDark);
+antennaTipLeft.position.set(-0.27, 2.19, 0);
+antennaTipRight.position.set(0.27, 2.19, 0);
 
-const eyeLeft = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.12, 3), eyeMat);
-const eyeRight = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.12, 3), eyeMat);
-eyeLeft.position.set(-0.2, 1.78, 0.38);
-eyeRight.position.set(0.2, 1.78, 0.38);
-eyeLeft.rotation.x = Math.PI / 2;
-eyeRight.rotation.x = Math.PI / 2;
+const glassesMat = new THREE.MeshStandardMaterial({
+  color: 0x0b0f1a,
+  roughness: 0.2,
+  metalness: 0.6,
+});
+const glassesGroup = new THREE.Group();
+const lensGeo = new THREE.BoxGeometry(0.22, 0.11, 0.06);
+const bridgeGeo = new THREE.BoxGeometry(0.05, 0.025, 0.04);
+const lensLeft = new THREE.Mesh(lensGeo, glassesMat);
+const lensRight = new THREE.Mesh(lensGeo, glassesMat);
+const bridge = new THREE.Mesh(bridgeGeo, glassesMat);
+lensLeft.position.set(-0.18, 0, 0);
+lensRight.position.set(0.18, 0, 0);
+bridge.position.set(0, 0, 0);
+glassesGroup.add(lensLeft, lensRight, bridge);
+glassesGroup.position.set(0, 0.03, 0.2);
+glassesGroup.rotation.x = -0.55;
+head.add(glassesGroup);
 
 const armGeo = new THREE.CapsuleGeometry(0.12, 0.75, 6, 12);
 const handGeo = new THREE.ConeGeometry(0.12, 0.24, 12);
@@ -133,7 +145,7 @@ footRight.position.set(0, -0.7, 0.12);
 legLeftGroup.add(legLeft, footLeft);
 legRightGroup.add(legRight, footRight);
 
-[group, torso, head, antennaLeft, antennaRight, antennaTipLeft, antennaTipRight, eyeLeft, eyeRight, legLeftGroup, legRightGroup].forEach((m) => {
+[group, torso, head, antennaLeft, antennaRight, antennaTipLeft, antennaTipRight, legLeftGroup, legRightGroup].forEach((m) => {
   if (m !== group) group.add(m);
 });
 torso.add(...arms);

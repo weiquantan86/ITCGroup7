@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { getCharacterProfile } from "../asset/character/registry.js";
+import { getCharacterEntry } from "../asset/character/registry.js";
 
 export default function ThreeScene({ characterPath }) {
   const mountRef = useRef(null);
@@ -149,86 +149,26 @@ export default function ThreeScene({ characterPath }) {
     scene.add(avatar);
 
     const defaultCharacterPath = "/assets/characters/adam/adam.glb";
-    let characterProfile = getCharacterProfile(
+    let characterEntry = getCharacterEntry(
       characterPath || defaultCharacterPath
     );
+    let characterRuntime = characterEntry.createRuntime({ avatar });
 
     let avatarModel = null;
     let arms = [];
     let legLeft = null;
     let legRight = null;
     let modelFootOffset = 0;
-    let isSlashing = false;
-    let slashStart = 0;
-    let slashFacing = 0;
-    const slashDuration = 360;
-    const defaultSlashConfig = {
-      color: 0xffffff,
-      radius: 1.1,
-      segments: 36,
-      thetaStart: -Math.PI / 4,
-      thetaLength: Math.PI / 2,
-      height: 1.15,
-      forward: 0.9,
-      expandFrom: 0.7,
-      expandTo: 1.3,
-      opacity: 0.85,
-      rotationX: 0,
-      rotationY: 0,
-      rotationZ: 0,
-    };
-    const resolveSlashConfig = (profile) => ({
-      ...defaultSlashConfig,
-      ...(profile?.slash?.effect ?? {}),
-    });
-    let slashConfig = resolveSlashConfig(characterProfile);
-    const slashMaterial = new THREE.MeshBasicMaterial({
-      color: characterProfile.slash?.color ?? defaultSlashConfig.color,
-      transparent: true,
-      opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    const slashMesh = new THREE.Mesh(
-      new THREE.CircleGeometry(
-        slashConfig.radius,
-        slashConfig.segments,
-        slashConfig.thetaStart,
-        slashConfig.thetaLength
-      ),
-      slashMaterial
-    );
-    slashMesh.visible = false;
-    slashMesh.position.set(0, slashConfig.height, slashConfig.forward);
-    slashMesh.rotation.set(
-      slashConfig.rotationX,
-      slashConfig.rotationY,
-      slashConfig.rotationZ
-    );
-    avatar.add(slashMesh);
 
     const loader = new GLTFLoader();
     let isMounted = true;
     const selectProfile = (path) => {
-      characterProfile = getCharacterProfile(path);
-      slashConfig = resolveSlashConfig(characterProfile);
-      slashMaterial.color.set(
-        characterProfile?.slash?.color ?? defaultSlashConfig.color
-      );
-      slashMesh.geometry.dispose();
-      slashMesh.geometry = new THREE.CircleGeometry(
-        slashConfig.radius,
-        slashConfig.segments,
-        slashConfig.thetaStart,
-        slashConfig.thetaLength
-      );
-      slashMesh.position.set(0, slashConfig.height, slashConfig.forward);
-      slashMesh.rotation.set(
-        slashConfig.rotationX,
-        slashConfig.rotationY,
-        slashConfig.rotationZ
-      );
+      const nextEntry = getCharacterEntry(path);
+      characterEntry = nextEntry;
+      if (characterRuntime) {
+        characterRuntime.dispose();
+      }
+      characterRuntime = nextEntry.createRuntime({ avatar });
     };
     const loadCharacter = (path) => {
       if (!path) return;
@@ -306,7 +246,7 @@ export default function ThreeScene({ characterPath }) {
         const dirX = moveX / length;
         const dirZ = moveZ / length;
         const angle = Math.atan2(dirX, dirZ) + yaw;
-        if (!isSlashing) {
+        if (!characterRuntime?.isFacingLocked?.()) {
           avatar.rotation.y = angle;
         }
         const nextX = avatar.position.x + Math.sin(angle) * moveSpeed;
@@ -340,57 +280,15 @@ export default function ThreeScene({ characterPath }) {
         isGrounded = false;
       }
 
-      if (arms.length && legLeft && legRight) {
-        const legSwing = isMoving ? Math.sin(now * 0.008 + Math.PI) * 0.5 : 0;
-        if (isSlashing && characterProfile.slash?.freezeArms) {
-          arms.forEach((arm) => {
-            arm.rotation.x = -0.08;
-            arm.rotation.y = 0;
-            arm.rotation.z = 0;
-          });
-        } else if (characterProfile.animateArms) {
-          characterProfile.animateArms({ arms, isMoving, now, THREE });
-        } else {
-          const swing = isMoving ? Math.sin(now * 0.008) * 0.35 : 0;
-          const armCount = arms.length;
-          for (let i = 0; i < armCount; i += 1) {
-            const arm = arms[i];
-            const phase = (i / armCount) * Math.PI * 2;
-            const armSwing = isMoving ? Math.sin(now * 0.008 + phase) * 1 : 0;
-            arm.rotation.x = armSwing - 0.08;
-          }
-        }
-        legLeft.rotation.x = legSwing;
-        legRight.rotation.x = -legSwing;
-      }
-
-      if (isSlashing && characterProfile.slash?.enabled) {
-        const elapsed = now - slashStart;
-        const progress = THREE.MathUtils.clamp(elapsed / slashDuration, 0, 1);
-        const swing = Math.sin(progress * Math.PI);
-        const slashAngle = swing * (Math.PI / 2);
-        avatar.rotation.y = slashFacing;
-        slashMesh.visible = true;
-        slashMaterial.opacity = slashConfig.opacity * (1 - progress);
-        const scale =
-          slashConfig.expandFrom +
-          (slashConfig.expandTo - slashConfig.expandFrom) * progress;
-        slashMesh.scale.set(scale, scale, scale);
-        slashMesh.rotation.set(
-          slashConfig.rotationX,
-          slashConfig.rotationY,
-          slashConfig.rotationZ
-        );
-        if (progress >= 1) {
-          isSlashing = false;
-        }
-      } else if (slashMesh.visible) {
-        slashMesh.visible = false;
-        slashMaterial.opacity = 0;
-      }
-
-      if (avatarModel && characterProfile.animateModel) {
-        characterProfile.animateModel({ avatarModel, isMoving, now, THREE });
+      if (characterRuntime) {
+        characterRuntime.update({
+          now,
+          isMoving,
+          arms,
+          legLeft,
+          legRight,
+          avatarModel,
+        });
       }
 
       const cameraOffset = new THREE.Vector3(
@@ -419,18 +317,16 @@ export default function ThreeScene({ characterPath }) {
     };
     window.addEventListener("resize", handleResize);
 
-    const triggerSlash = () => {
-      if (!characterProfile.slash?.enabled) return;
-      isSlashing = true;
-      slashStart = performance.now();
-      slashFacing = getFacing();
+    const triggerRightClick = () => {
+      if (!characterRuntime) return;
+      characterRuntime.handleRightClick(getFacing());
     };
 
     const handlePointerMove = (event) => {
       const rightDown = (event.buttons & 2) === 2;
       if (rightDown && !rightButtonDown) {
         rightButtonDown = true;
-        triggerSlash();
+        triggerRightClick();
       } else if (!rightDown && rightButtonDown) {
         rightButtonDown = false;
       }
@@ -465,7 +361,7 @@ export default function ThreeScene({ characterPath }) {
         event.preventDefault();
         if (!rightButtonDown) {
           rightButtonDown = true;
-          triggerSlash();
+          triggerRightClick();
         }
         return;
       }
@@ -576,8 +472,9 @@ export default function ThreeScene({ characterPath }) {
       if (renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
-      slashMesh.geometry.dispose();
-      slashMaterial.dispose();
+      if (characterRuntime) {
+        characterRuntime.dispose();
+      }
     };
   }, [characterPath]);
 

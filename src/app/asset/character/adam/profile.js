@@ -2,6 +2,9 @@ export const profile = {
   id: "adam",
   label: "Adam",
   pathToken: "/adam/",
+  controls: {
+    rightClick: "slash",
+  },
   slash: {
     enabled: true,
     color: 0x8bc34a,
