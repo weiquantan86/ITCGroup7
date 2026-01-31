@@ -1,5 +1,5 @@
-import bcrypt from 'bcrypt';
-import pool from './client.js';
+﻿import bcrypt from 'bcrypt';
+import pool from './client';
 
 async function initDB() {
   try {
@@ -32,3 +32,4 @@ async function initDB() {
 }
 
 initDB();
+

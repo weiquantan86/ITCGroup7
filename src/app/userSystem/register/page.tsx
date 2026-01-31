@@ -33,7 +33,7 @@ export default function Register() {
       </form>
       <p className="message">{message}</p>
       <div className="link">
-        <a href="/login">Already have an account? Login</a>
+        <a href="/userSystem/login">Already have an account? Login</a>
       </div>
     </div>
   );

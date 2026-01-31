@@ -21,7 +21,7 @@ export default function DragonNestScene() {
           </div>
           <div className="flex gap-3">
             <Link
-              href="/user"
+              href="/userSystem/user"
               className="inline-flex h-11 items-center justify-center rounded-full border border-white/15 px-5 text-sm font-semibold text-slate-200 transition hover:border-white/30 hover:bg-white/10"
             >
               Back to User Home

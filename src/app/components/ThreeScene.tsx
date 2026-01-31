@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { getCharacterEntry } from "../asset/character/registry.js";
+import { getCharacterEntry } from "../asset/character/registry";
 
 export default function ThreeScene({ characterPath }) {
   const mountRef = useRef(null);
@@ -487,3 +487,4 @@ export default function ThreeScene({ characterPath }) {
     </div>
   );
 }
+

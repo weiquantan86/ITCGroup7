@@ -10,7 +10,7 @@ export const profile = {
     color: 0xf97316,
     effect: {
       shape: "cube",
-      size: 0.32,
+      size: 0.45,
       travel: 1.8,
       rollTurns: 1.75,
       height: 0.95,

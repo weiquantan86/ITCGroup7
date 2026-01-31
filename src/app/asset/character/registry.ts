@@ -1,9 +1,9 @@
-import { profile as adamProfile } from "./adam/profile.js";
-import { createRuntime as createAdamRuntime } from "./adam/runtime.js";
-import { profile as baronProfile } from "./baron/profile.js";
-import { createRuntime as createBaronRuntime } from "./baron/runtime.js";
-import { profile as carrotProfile } from "./carrot/profile.js";
-import { createRuntime as createCarrotRuntime } from "./carrot/runtime.js";
+﻿import { profile as adamProfile } from "./adam/profile";
+import { createRuntime as createAdamRuntime } from "./adam/runtime";
+import { profile as baronProfile } from "./baron/profile";
+import { createRuntime as createBaronRuntime } from "./baron/runtime";
+import { profile as carrotProfile } from "./carrot/profile";
+import { createRuntime as createCarrotRuntime } from "./carrot/runtime";
 
 const entries = [
   { profile: adamProfile, createRuntime: createAdamRuntime },
@@ -23,3 +23,4 @@ export const getCharacterEntry = (path) => {
 };
 
 export const characterProfiles = profiles;
+

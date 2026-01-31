@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import ThreeScene from '../components/ThreeScene';
+import ThreeScene from '../../components/ThreeScene';
 import './page.css';
 
 export default function Login() {
@@ -23,7 +23,7 @@ export default function Login() {
     setIsLoggedIn(success);
     setMessage(data.error || (success ? 'Login successful' : 'Login failed'));
     if (success) {
-      router.push('/user');
+      router.push('/userSystem/user');
     }
   };
 
@@ -60,7 +60,7 @@ export default function Login() {
         </div>
       )}
       <div className="link">
-        <a href="/register">Don't have an account? Register</a>
+        <a href="/userSystem/register">Don't have an account? Register</a>
       </div>
     </div>
   );
