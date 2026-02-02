@@ -98,8 +98,8 @@ const armLeftGroup = new THREE.Group();
 const armRightGroup = new THREE.Group();
 armLeftGroup.name = "armLeft";
 armRightGroup.name = "armRight";
-armLeftGroup.position.set(-0.58, 0.58, 0);
-armRightGroup.position.set(0.58, 0.58, 0);
+armLeftGroup.position.set(-0.58, 0.5, 0);
+armRightGroup.position.set(0.58, 0.5, 0);
 armLeftGroup.rotation.z = Math.PI / 48;
 armRightGroup.rotation.z = -Math.PI / 48;
 

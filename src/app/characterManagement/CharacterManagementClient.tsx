@@ -1,6 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import CharacterScene from "./characterScene/CharacterScene";
 
 type CharacterCard = {
@@ -47,20 +54,145 @@ function LockIcon() {
   );
 }
 
-export default function CharacterManagementClient() {
+type CharacterManagementClientProps = {
+  onSelectCharacter?: (id: string) => void;
+};
+
+export default function CharacterManagementClient({
+  onSelectCharacter,
+}: CharacterManagementClientProps) {
   const selectable = useMemo(
     () => characterCards.filter((card) => !card.locked),
     []
   );
   const [selectedId, setSelectedId] = useState(selectable[0]?.id ?? "");
   const selected = characterCards.find((card) => card.id === selectedId);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const selectorPanelRef = useRef<HTMLDivElement | null>(null);
+  const [scrollbar, setScrollbar] = useState({
+    thumbWidth: 100,
+    thumbLeft: 0,
+  });
+
+  const updateScrollbar = useCallback(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+    if (maxScroll <= 0) {
+      setScrollbar({ thumbWidth: 100, thumbLeft: 0 });
+      return;
+    }
+    const thumbWidth = (scrollEl.clientWidth / scrollEl.scrollWidth) * 100;
+    const thumbLeft = (scrollEl.scrollLeft / maxScroll) * (100 - thumbWidth);
+    setScrollbar({ thumbWidth, thumbLeft });
+  }, []);
+
+  const scrollToRatio = useCallback((ratio: number) => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+    if (maxScroll <= 0) return;
+    const clamped = Math.min(Math.max(ratio, 0), 1);
+    scrollEl.scrollLeft = clamped * maxScroll;
+  }, []);
+
+  const handleTrackPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const trackEl = trackRef.current;
+      const scrollEl = scrollRef.current;
+      if (!trackEl || !scrollEl) return;
+      const rect = trackEl.getBoundingClientRect();
+      const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+      if (maxScroll <= 0) return;
+      const thumbWidthPx = (scrollbar.thumbWidth / 100) * rect.width;
+      const clickX = event.clientX - rect.left;
+      const targetLeft = Math.min(
+        Math.max(clickX - thumbWidthPx / 2, 0),
+        rect.width - thumbWidthPx
+      );
+      const ratio = targetLeft / (rect.width - thumbWidthPx || 1);
+      scrollToRatio(ratio);
+    },
+    [scrollToRatio, scrollbar.thumbWidth]
+  );
+
+  const handleThumbPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const trackEl = trackRef.current;
+      const scrollEl = scrollRef.current;
+      if (!trackEl || !scrollEl) return;
+      const rect = trackEl.getBoundingClientRect();
+      const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+      if (maxScroll <= 0) return;
+      const thumbWidthPx = (scrollbar.thumbWidth / 100) * rect.width;
+      const available = rect.width - thumbWidthPx;
+      const startX = event.clientX;
+      const startScroll = scrollEl.scrollLeft;
+
+      const onMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientX - startX;
+        const ratio = delta / (available || 1);
+        const nextScroll = startScroll + ratio * maxScroll;
+        scrollEl.scrollLeft = Math.min(Math.max(nextScroll, 0), maxScroll);
+      };
+
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [scrollbar.thumbWidth]
+  );
+
+  useEffect(() => {
+    updateScrollbar();
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    const observer = new ResizeObserver(updateScrollbar);
+    observer.observe(scrollEl);
+    return () => observer.disconnect();
+  }, [updateScrollbar]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    onSelectCharacter?.(selectedId);
+  }, [onSelectCharacter, selectedId]);
+
+  useEffect(() => {
+    const panel = selectorPanelRef.current;
+    if (!panel) return;
+    const container = document.getElementById("character-management-shell");
+    if (!container) return;
+
+    const updateHeight = () => {
+      const height = Math.round(panel.getBoundingClientRect().height);
+      container.style.setProperty(
+        "--character-selector-height",
+        `${height}px`
+      );
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(panel);
+    return () => {
+      observer.disconnect();
+      container.style.removeProperty("--character-selector-height");
+    };
+  }, []);
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-6">
+    <section className="flex h-full min-h-0 min-w-0 flex-col gap-6">
       <div className="flex items-center justify-between rounded-[22px] border border-slate-200/25 bg-[#0f151f]/90 px-6 py-5 shadow-[0_0_24px_rgba(90,140,220,0.16)]">
         <div className="h-10 w-10 rounded-full border border-slate-200/30 bg-[#0b1119]/90" />
-        <h1 className="text-3xl font-semibold tracking-[0.18em] text-slate-100">
-          Character
+        <h1 className="text-5xl font-semibold tracking-[0.18em] text-slate-100">
+          {selected?.name ?? "Character"}
         </h1>
         <div className="h-10 w-10 rounded-full border border-slate-200/30 bg-[#0b1119]/90" />
       </div>
@@ -75,16 +207,39 @@ export default function CharacterManagementClient() {
         </div>
       </div>
 
-      <div className="rounded-[22px] border border-slate-200/20 bg-[#0f151f]/90 p-5 shadow-[0_0_20px_rgba(90,140,220,0.14)]">
+      <div
+        ref={selectorPanelRef}
+        className="rounded-[22px] border border-slate-200/20 bg-[#0f151f]/90 p-5 shadow-[0_0_20px_rgba(90,140,220,0.14)]"
+      >
         <div className="flex items-center gap-3">
-          <div className="h-2 w-full rounded-full bg-slate-200/10">
-            <div className="h-full w-1/3 rounded-full bg-slate-100/40" />
+          <div
+            ref={trackRef}
+            role="scrollbar"
+            aria-controls="character-scroll"
+            aria-orientation="horizontal"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(scrollbar.thumbLeft)}
+            className="relative h-2 w-full cursor-pointer rounded-full bg-slate-200/10"
+            onPointerDown={handleTrackPointerDown}
+          >
+            <div
+              className="absolute top-0 h-full rounded-full bg-slate-100/40"
+              style={{
+                width: `${scrollbar.thumbWidth}%`,
+                left: `${scrollbar.thumbLeft}%`,
+              }}
+              onPointerDown={handleThumbPointerDown}
+            />
           </div>
-          <span className="text-xs uppercase tracking-[0.35em] text-slate-400">
-            Scroll bar
-          </span>
+          <span className="sr-only">Scroll bar</span>
         </div>
-        <div className="mt-4 flex gap-4 overflow-x-auto pb-2">
+        <div
+          id="character-scroll"
+          ref={scrollRef}
+          onScroll={updateScrollbar}
+          className="scrollbar-hidden mt-4 flex max-w-full gap-4 overflow-x-auto pb-2"
+        >
           {characterCards.map((card) => {
             const isSelected = card.id === selectedId;
             const isLocked = Boolean(card.locked);
@@ -96,7 +251,7 @@ export default function CharacterManagementClient() {
                   if (isLocked) return;
                   setSelectedId(card.id);
                 }}
-                className={`flex min-w-[170px] flex-col items-center justify-center rounded-[16px] border bg-[#0b1119]/90 px-4 py-4 text-sm font-semibold text-slate-100 shadow-[0_0_14px_rgba(90,140,220,0.12)] transition ${
+                className={`flex min-w-[280px] flex-col items-center justify-center rounded-[16px] border bg-[#0b1119]/90 px-7 py-7 text-xl font-semibold text-slate-100 shadow-[0_0_14px_rgba(90,140,220,0.12)] transition ${
                   isLocked
                     ? "cursor-not-allowed border-slate-200/10 text-slate-400"
                     : "border-slate-200/25 hover:border-slate-100/45"

@@ -4,6 +4,14 @@ export const profile: CharacterProfile = {
   id: "carrot",
   label: "Carrot",
   pathToken: "/carrot/",
+  kit: {
+    basicAttack: { id: "basic", label: "Basic", description: "..." },
+    skills: {
+      q: { id: "q", label: "Q", description: "..." },
+      e: { id: "e", label: "E", description: "..." },
+      r: { id: "r", label: "R", description: "..." },
+    },
+  },
   controls: {
     rightClick: "slash",
   },
