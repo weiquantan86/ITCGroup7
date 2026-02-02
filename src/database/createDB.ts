@@ -1,14 +1,19 @@
-﻿import pool from "./client";
+import { Pool } from "pg";
+import { connectionString } from "./client.ts";
+
+const adminUrl = new URL(connectionString);
+adminUrl.pathname = "/postgres";
+const targetDb = "ITCGroup7";
 
 async function createDB() {
+  const adminPool = new Pool({ connectionString: adminUrl.toString() });
   try {
-    await pool.connect();
-    await pool.query('CREATE DATABASE ITCGroup7');
-    console.log('Database ITCGroup7 created successfully');
+    await adminPool.query(`CREATE DATABASE "${targetDb}"`);
+    console.log(`Database ${targetDb} created successfully`);
   } catch (err) {
-    console.error('Error creating database:', err);
+    console.error("Error creating database:", err);
   } finally {
-    await pool.end();
+    await adminPool.end();
   }
 }
 

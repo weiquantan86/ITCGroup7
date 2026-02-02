@@ -97,9 +97,11 @@ export default function SceneLauncher({
 
   return (
     <div
-      className={`relative h-[70vh] min-h-[800px] w-full max-w-[1600px] mx-auto translate-x-20 overflow-hidden rounded-[32px] border border-white/5 bg-[#0b0f1a] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] ${
-        className || ""
-      }`}
+      className={
+        className
+          ? `relative overflow-hidden ${className}`
+          : `relative h-[70vh] min-h-[800px] w-full max-w-[1600px] mx-auto translate-x-20 overflow-hidden rounded-[32px] border border-white/5 bg-[#0b0f1a] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]`
+      }
       aria-label="Interactive 3D scene"
     >
       <div ref={mountRef} className="h-full w-full" />
