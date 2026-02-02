@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import ThreeScene from '../../components/ThreeScene';
+import SceneLauncher from '../../scenes/SceneLauncher';
 import './page.css';
 
 export default function Login() {
@@ -56,7 +56,7 @@ export default function Login() {
       <p className="message">{message}</p>
       {isLoggedIn && (
         <div className="three-preview" aria-live="polite">
-          <ThreeScene />
+          <SceneLauncher sceneId="grass" />
         </div>
       )}
       <div className="link">

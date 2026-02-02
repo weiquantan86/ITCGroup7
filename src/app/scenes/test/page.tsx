@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import ThreeScene from "../../components/ThreeScene";
+import SceneLauncher from "../SceneLauncher";
 
 export default function ThreePage() {
   const characters = [
@@ -19,7 +19,7 @@ export default function ThreePage() {
 
   return (
     <div className="min-h-screen bg-slate-950 px-6 py-16 text-slate-100">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-10">
+      <main className="mx-auto flex w-full max-w-none flex-col gap-10">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">
@@ -35,7 +35,7 @@ export default function ThreePage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_220px]">
-          <ThreeScene characterPath={selected} />
+          <SceneLauncher sceneId="grass" characterPath={selected} />
           <aside className="rounded-2xl border border-white/10 bg-slate-900/70 p-4 shadow-[0_20px_50px_-30px_rgba(2,6,23,0.7)]">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
               Choose Character

@@ -1,4 +1,6 @@
-export const profile = {
+import type { CharacterProfile } from "../types";
+
+export const profile: CharacterProfile = {
   id: "baron",
   label: "Baron",
   pathToken: "/baron/",
