@@ -8,7 +8,12 @@ export const profile: CharacterProfile = {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {
       q: { id: "q", label: "Q", description: "..." },
-      e: { id: "e", label: "E", description: "Next normal attack will be larger" },
+      e: {
+        id: "e",
+        label: "E",
+        description: "Next normal attack will be larger",
+        cost: 20,
+      },
       r: { id: "r", label: "R", description: "..." },
     },
   },

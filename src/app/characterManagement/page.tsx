@@ -20,6 +20,9 @@ export default function CharacterManagementPage() {
   const skillDescription =
     selectedProfile?.kit?.skills?.[activeSkill]?.description ??
     "No description yet.";
+  const testCharacterHref = selectedProfile?.id
+    ? `/scenes/test?character=${selectedProfile.id}`
+    : "/scenes/test";
 
   return (
     <main className="h-screen w-full overflow-hidden bg-[#06080b] text-slate-100">
@@ -68,12 +71,13 @@ export default function CharacterManagementPage() {
                   </div>
                 </div>
 
-                <button
+                <Link
+                  href={testCharacterHref}
                   style={{ height: "var(--character-selector-height, 96px)" }}
                   className="flex items-center justify-center rounded-[18px] border border-slate-200/25 bg-[#101722]/80 px-6 text-2xl font-semibold text-slate-100 shadow-[0_0_16px_rgba(90,140,220,0.16)] transition hover:border-slate-100/45 hover:shadow-[0_0_24px_rgba(120,180,255,0.25)]"
                 >
                   Try Character
-                </button>
+                </Link>
               </aside>
 
               <CharacterManagementClient onSelectCharacter={setSelectedId} />

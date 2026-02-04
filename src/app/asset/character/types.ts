@@ -48,7 +48,7 @@ export interface SlashConfig {
 
 export interface CharacterStats {
   health: number;
-  energy: number;
+  mana: number;
 }
 
 export interface SkillDefinition {
@@ -105,13 +105,28 @@ export interface CharacterRuntime {
   setProfile: (nextProfile: CharacterProfile) => void;
   triggerSlash: (facing: CharacterFacing) => void;
   handleRightClick: (facing: CharacterFacing) => void;
+  handlePrimaryDown?: () => void;
+  handlePrimaryUp?: () => void;
+  handlePrimaryCancel?: () => void;
+  handleSkillE?: () => boolean;
   update: (args: CharacterRuntimeUpdate) => void;
   dispose: () => void;
   isFacingLocked: () => boolean;
 }
 
 export interface CharacterRuntimeFactory {
-  (args: { avatar: THREE.Object3D }): CharacterRuntime;
+  (args: {
+    avatar: THREE.Object3D;
+    mount?: HTMLElement;
+    fireProjectile?: (args?: {
+      speed?: number;
+      lifetime?: number;
+      color?: number;
+      emissive?: number;
+      emissiveIntensity?: number;
+      scale?: number;
+    }) => void;
+  }): CharacterRuntime;
 }
 
 export interface CharacterEntry {

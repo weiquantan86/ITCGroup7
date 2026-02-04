@@ -148,7 +148,7 @@ export default async function UserPage() {
               </Panel>
 
               <Panel className="grid h-full min-h-0 grid-rows-4 gap-6 lg:col-start-3 lg:row-span-2 lg:row-start-1">
-                <MenuButton label="Shop" className="h-full text-4xl" />
+                <MenuButton label="Snack Gacha" className="h-full text-4xl" />
                 <MenuButton
                   label="Character"
                   className="h-full"
@@ -159,14 +159,14 @@ export default async function UserPage() {
               </Panel>
 
               <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
-                <MenuButton label="Mech Onslaught" className="h-full" />
-                <MenuButton label="Dragon Hunter" className="h-full" />
-                <MenuButton label="Bluestone Colossus" className="h-full" />
+                <MenuButton label="Game 1" className="h-full" /> {/* Mech Onslaught */}
+                <MenuButton label="Game 2" className="h-full" /> {/* Dragon Hunter */}
+                <MenuButton label="Game" className="h-full" /> {/* Bluestone Colossus */}
               </Panel>
 
               <Panel className="grid h-full min-h-0 grid-rows-2 gap-6">
-                <MenuButton label="Deathmatch" className="h-full" />
-                <MenuButton label="Can Wars" className="h-full" />
+                <MenuButton label="Subgame1" className="h-full" /> {/* Deathmatch */}
+                <MenuButton label="Subgame2" className="h-full" /> {/* Can Wars */}
               </Panel>
             </div>
           </div>

@@ -1,10 +1,18 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { getCharacterEntry } from "./registry";
+import { getCharacterEntry, resolveCharacterStats } from "./registry";
+import type { CharacterRuntime, CharacterStats } from "./types";
 
 export interface PlayerWorld {
   groundY: number;
   isBlocked?: (x: number, z: number) => boolean;
+  projectileColliders?: THREE.Object3D[];
+  bounds?: {
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+  };
 }
 
 export interface PlayerController {
@@ -25,7 +33,87 @@ export interface Projectile {
   life: number;
   maxLife: number;
   radius: number;
+  material: THREE.Material;
+  ownsMaterial: boolean;
 }
+
+type StatusHud = {
+  setStats: (current: CharacterStats, max: CharacterStats) => void;
+  dispose: () => void;
+};
+
+const createStatusHud = (mount?: HTMLElement): StatusHud => {
+  if (!mount) {
+    return { setStats: () => {}, dispose: () => {} };
+  }
+
+  const host = mount.parentElement ?? mount;
+  if (!host.style.position) {
+    host.style.position = "relative";
+  }
+
+  const hud = document.createElement("div");
+  hud.style.cssText =
+    "position:absolute;left:16px;top:16px;z-index:6;display:flex;" +
+    "flex-direction:column;gap:6px;padding:10px 12px;border-radius:12px;" +
+    "background:rgba(2,6,23,0.55);border:1px solid rgba(148,163,184,0.25);" +
+    "box-shadow:0 10px 28px rgba(2,6,23,0.6);pointer-events:none;";
+
+  const createBar = (label: string, fill: string, glow: string) => {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:8px;min-width:320px;";
+    const text = document.createElement("span");
+    text.textContent = label;
+    text.style.cssText =
+      "width:26px;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;" +
+      "color:rgba(226,232,240,0.9);";
+    const value = document.createElement("span");
+    value.textContent = "0/0";
+    value.style.cssText =
+      "min-width:58px;text-align:right;font-size:11px;font-variant-numeric:tabular-nums;" +
+      "color:rgba(226,232,240,0.85);";
+    const track = document.createElement("div");
+    track.style.cssText =
+      "position:relative;flex:1;height:10px;border-radius:999px;overflow:hidden;" +
+      "background:rgba(15,23,42,0.85);border:1px solid rgba(148,163,184,0.2);";
+    const fillBar = document.createElement("div");
+    fillBar.style.cssText =
+      `height:100%;width:100%;background:${fill};` +
+      `box-shadow:0 0 12px ${glow};transition:width 120ms ease;`;
+    track.appendChild(fillBar);
+    row.append(text, track, value);
+    return { row, fillBar, value };
+  };
+
+  const healthBar = createBar("HP", "#ef4444", "rgba(239,68,68,0.65)");
+  const manaBar = createBar("MP", "#38bdf8", "rgba(56,189,248,0.6)");
+  hud.append(healthBar.row, manaBar.row);
+  host.appendChild(hud);
+
+  const updateFill = (
+    fillBar: HTMLDivElement,
+    value: HTMLSpanElement,
+    current: number,
+    max: number
+  ) => {
+    const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
+    fillBar.style.width = `${Math.round(ratio * 100)}%`;
+    value.textContent = `${Math.max(0, Math.round(current))}/${Math.max(
+      0,
+      Math.round(max)
+    )}`;
+  };
+
+  return {
+    setStats: (current: CharacterStats, max: CharacterStats) => {
+      updateFill(healthBar.fillBar, healthBar.value, current.health, max.health);
+      updateFill(manaBar.fillBar, manaBar.value, current.mana, max.mana);
+    },
+    dispose: () => {
+      hud.parentElement?.removeChild(hud);
+    },
+  };
+};
 
 export const createPlayer = ({
   scene,
@@ -45,6 +133,8 @@ export const createPlayer = ({
   const resolvedWorld: PlayerWorld = {
     groundY: world?.groundY ?? -1.4,
     isBlocked: world?.isBlocked,
+    projectileColliders: world?.projectileColliders,
+    bounds: world?.bounds,
   };
 
   const camera = new THREE.PerspectiveCamera(
@@ -90,7 +180,6 @@ export const createPlayer = ({
   const moveState = {
     baseSpeed: 5,
     sprintMultiplier: 1.6,
-    bounds: 12,
   };
 
   const cameraTarget = new THREE.Vector3();
@@ -110,6 +199,7 @@ export const createPlayer = ({
   const projectileSpeed = 18;
   const projectileLifetime = 2.2;
   const projectileRadius = 0.12;
+  const projectileGravity = -12;
 
   let velocityY = 0;
   let isGrounded = true;
@@ -123,6 +213,10 @@ export const createPlayer = ({
   let isPointerLockRequested = false;
   let projectileId = 0;
   const projectiles: Projectile[] = [];
+  const projectileColliders = resolvedWorld.projectileColliders ?? [];
+  const projectileRaycaster = new THREE.Raycaster();
+  const projectileRayDir = new THREE.Vector3();
+  const projectileNextPos = new THREE.Vector3();
   const projectileGeometry = new THREE.SphereGeometry(projectileRadius, 12, 12);
   const projectileMaterial = new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
@@ -191,7 +285,33 @@ export const createPlayer = ({
 
   const defaultCharacterPath = "/assets/characters/adam/adam.glb";
   let characterEntry = getCharacterEntry(characterPath || defaultCharacterPath);
-  let characterRuntime = characterEntry.createRuntime({ avatar });
+  let characterRuntime: CharacterRuntime | null = null;
+  let fireProjectile: (args?: {
+    speed?: number;
+    lifetime?: number;
+    color?: number;
+    emissive?: number;
+    emissiveIntensity?: number;
+    scale?: number;
+  }) => void = () => {};
+  const statusHud = createStatusHud(mount);
+  let maxStats: CharacterStats = resolveCharacterStats(characterEntry.profile);
+  let currentStats: CharacterStats = { ...maxStats };
+  let statsDirty = true;
+
+  const syncStatsHud = () => {
+    if (!statsDirty) return;
+    statusHud.setStats(currentStats, maxStats);
+    statsDirty = false;
+  };
+
+  const applyStatsFromProfile = () => {
+    const resolved = resolveCharacterStats(characterEntry.profile);
+    maxStats = { ...resolved };
+    currentStats = { ...resolved };
+    statsDirty = true;
+    syncStatsHud();
+  };
 
   const disposeAvatarModel = (model: THREE.Object3D) => {
     model.traverse((child: THREE.Object3D) => {
@@ -211,10 +331,11 @@ export const createPlayer = ({
     const resolvedPath = path || defaultCharacterPath;
     const nextEntry = getCharacterEntry(resolvedPath);
     characterEntry = nextEntry;
+    applyStatsFromProfile();
     if (characterRuntime) {
       characterRuntime.dispose();
     }
-    characterRuntime = nextEntry.createRuntime({ avatar });
+    characterRuntime = nextEntry.createRuntime({ avatar, mount, fireProjectile });
     loader.load(
       resolvedPath,
       (gltf) => {
@@ -336,30 +457,112 @@ export const createPlayer = ({
   const isBlocked = (x: number, z: number) =>
     resolvedWorld.isBlocked ? resolvedWorld.isBlocked(x, z) : false;
 
-  const spawnProjectile = (origin: THREE.Vector3, direction: THREE.Vector3) => {
-    const mesh = new THREE.Mesh(projectileGeometry, projectileMaterial);
+  const clampToBounds = (x: number, z: number) => {
+    if (!resolvedWorld.bounds) return { x, z };
+    return {
+      x: THREE.MathUtils.clamp(
+        x,
+        resolvedWorld.bounds.minX,
+        resolvedWorld.bounds.maxX
+      ),
+      z: THREE.MathUtils.clamp(
+        z,
+        resolvedWorld.bounds.minZ,
+        resolvedWorld.bounds.maxZ
+      ),
+    };
+  };
+
+  const spawnProjectile = (
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    speed: number = projectileSpeed,
+    lifetime: number = projectileLifetime,
+    options?: {
+      color?: number;
+      emissive?: number;
+      emissiveIntensity?: number;
+      scale?: number;
+    }
+  ) => {
+    const useCustomMaterial =
+      options?.color !== undefined ||
+      options?.emissive !== undefined ||
+      options?.emissiveIntensity !== undefined;
+    const material = useCustomMaterial
+      ? new THREE.MeshStandardMaterial({
+          color: options?.color ?? 0xe2e8f0,
+          emissive: options?.emissive ?? 0x93c5fd,
+          emissiveIntensity: options?.emissiveIntensity ?? 0.6,
+          roughness: 0.35,
+          metalness: 0.1,
+        })
+      : projectileMaterial;
+    const mesh = new THREE.Mesh(projectileGeometry, material);
     mesh.position.copy(origin);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
+    if (options?.scale) {
+      mesh.scale.setScalar(options.scale);
+    }
     scene.add(mesh);
-    const velocity = direction.clone().multiplyScalar(projectileSpeed);
+    const velocity = direction.clone().multiplyScalar(speed);
     projectiles.push({
       id: projectileId++,
       mesh,
       velocity,
       life: 0,
-      maxLife: projectileLifetime,
-      radius: projectileRadius,
+      maxLife: lifetime,
+      radius: projectileRadius * (options?.scale ?? 1),
+      material,
+      ownsMaterial: useCustomMaterial,
     });
   };
 
   const updateProjectiles = (delta: number) => {
     for (let i = projectiles.length - 1; i >= 0; i -= 1) {
       const projectile = projectiles[i];
-      projectile.mesh.position.addScaledVector(projectile.velocity, delta);
+      projectile.velocity.y += projectileGravity * delta;
+      projectileNextPos
+        .copy(projectile.mesh.position)
+        .addScaledVector(projectile.velocity, delta);
+
+      if (projectileColliders.length) {
+        projectileRayDir.copy(projectileNextPos).sub(projectile.mesh.position);
+        const travelDistance = projectileRayDir.length();
+        if (travelDistance > 0.000001) {
+          projectileRayDir.divideScalar(travelDistance);
+          projectileRaycaster.set(projectile.mesh.position, projectileRayDir);
+          projectileRaycaster.far = travelDistance + projectile.radius;
+          const hits = projectileRaycaster.intersectObjects(
+            projectileColliders,
+            true
+          );
+          if (hits.length) {
+            projectile.mesh.position
+              .copy(hits[0].point)
+              .addScaledVector(projectileRayDir, -projectile.radius);
+            scene.remove(projectile.mesh);
+            if (projectile.ownsMaterial) {
+              projectile.material.dispose();
+            }
+            projectiles.splice(i, 1);
+            continue;
+          }
+        }
+      }
+
+      projectile.mesh.position.copy(projectileNextPos);
       projectile.life += delta;
-      if (projectile.life >= projectile.maxLife) {
+      if (
+        projectile.life >= projectile.maxLife ||
+        projectile.mesh.position.y <=
+          resolvedWorld.groundY + projectile.radius * 0.4
+      ) {
         scene.remove(projectile.mesh);
+        if (projectile.ownsMaterial) {
+          projectile.material.dispose();
+        }
         projectiles.splice(i, 1);
       }
     }
@@ -375,10 +578,23 @@ export const createPlayer = ({
       .addScaledVector(attackAimDirection, attackAimDistance);
   };
 
-  const triggerProjectileAttack = () => {
-    updateAttackAim();
-    spawnProjectile(attackAimOrigin, attackAimDirection);
-  };
+fireProjectile = (args?: {
+  speed?: number;
+  lifetime?: number;
+  color?: number;
+  emissive?: number;
+  emissiveIntensity?: number;
+  scale?: number;
+}) => {
+  updateAttackAim();
+  spawnProjectile(
+    attackAimOrigin,
+    attackAimDirection,
+    args?.speed ?? projectileSpeed,
+    args?.lifetime ?? projectileLifetime,
+    args
+  );
+};
 
   const triggerPrimaryAttack = () => {
     if (!characterRuntime) return;
@@ -399,7 +615,11 @@ export const createPlayer = ({
           mount.requestPointerLock();
         }
       }
-      triggerProjectileAttack();
+      if (characterRuntime?.handlePrimaryDown) {
+        characterRuntime.handlePrimaryDown();
+      } else {
+        fireProjectile();
+      }
       return;
     }
     if (event.button === 2) {
@@ -408,11 +628,17 @@ export const createPlayer = ({
     }
   };
 
+  const handlePointerUp = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    characterRuntime?.handlePrimaryUp?.();
+  };
+
   const handlePointerLockChange = () => {
     if (!mount) return;
     const isLocked = document.pointerLockElement === mount;
     if (!isLocked) {
       isPointerLockRequested = false;
+      characterRuntime?.handlePrimaryCancel?.();
     }
     mount.style.cursor = isLocked ? "none" : "";
   };
@@ -444,6 +670,16 @@ export const createPlayer = ({
       velocityY = jumpVelocity;
       isGrounded = false;
     }
+    if (event.code === "KeyE" && !event.repeat) {
+      const skillCost = characterEntry.profile.kit?.skills?.e?.cost ?? 0;
+      if (skillCost > 0 && currentStats.mana < skillCost) return;
+      const didTrigger = characterRuntime?.handleSkillE?.() ?? false;
+      if (didTrigger && skillCost > 0) {
+        currentStats.mana = Math.max(0, currentStats.mana - skillCost);
+        statsDirty = true;
+        syncStatsHud();
+      }
+    }
   };
 
   const handleKeyUp = (event: KeyboardEvent) => {
@@ -455,10 +691,12 @@ export const createPlayer = ({
 
   const handleBlur = () => {
     pressedKeys.clear();
+    characterRuntime?.handlePrimaryCancel?.();
   };
 
   mount.addEventListener("pointerdown", handlePointerDown);
   mount.addEventListener("contextmenu", handleContextMenu);
+  window.addEventListener("pointerup", handlePointerUp);
   document.addEventListener("pointerlockchange", handlePointerLockChange);
   document.addEventListener("pointerlockerror", handlePointerLockError);
   document.addEventListener("mousemove", handleMouseMove);
@@ -479,19 +717,10 @@ export const createPlayer = ({
       const moveSpeed = moveState.baseSpeed * speedBoost * delta;
       const nextX = avatar.position.x + moveDir.x * moveSpeed;
       const nextZ = avatar.position.z + moveDir.z * moveSpeed;
-      const clampedX = THREE.MathUtils.clamp(
-        nextX,
-        -moveState.bounds,
-        moveState.bounds
-      );
-      const clampedZ = THREE.MathUtils.clamp(
-        nextZ,
-        -moveState.bounds,
-        moveState.bounds
-      );
-      if (!isBlocked(clampedX, clampedZ)) {
-        avatar.position.x = clampedX;
-        avatar.position.z = clampedZ;
+      const clamped = clampToBounds(nextX, nextZ);
+      if (!isBlocked(clamped.x, clamped.z)) {
+        avatar.position.x = clamped.x;
+        avatar.position.z = clamped.z;
         isMoving = true;
       }
     }
@@ -564,6 +793,7 @@ export const createPlayer = ({
       });
     }
     updateProjectiles(delta);
+    syncStatsHud();
   };
 
   const render = (renderer: THREE.WebGLRenderer) => {
@@ -602,6 +832,7 @@ export const createPlayer = ({
     document.removeEventListener("pointerlockchange", handlePointerLockChange);
     document.removeEventListener("pointerlockerror", handlePointerLockError);
     document.removeEventListener("mousemove", handleMouseMove);
+    window.removeEventListener("pointerup", handlePointerUp);
     window.removeEventListener("keydown", handleKeyDown);
     window.removeEventListener("keyup", handleKeyUp);
     window.removeEventListener("blur", handleBlur);
@@ -620,9 +851,15 @@ export const createPlayer = ({
       characterRuntime.dispose();
     }
     projectiles.forEach((projectile) => scene.remove(projectile.mesh));
+    projectiles.forEach((projectile) => {
+      if (projectile.ownsMaterial) {
+        projectile.material.dispose();
+      }
+    });
     projectiles.length = 0;
     projectileGeometry.dispose();
     projectileMaterial.dispose();
+    statusHud.dispose();
   };
 
   return {
