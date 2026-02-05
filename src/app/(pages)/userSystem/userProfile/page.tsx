@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
-import pool from "../../../database/client";
+import pool from "../../../../database/client";
 import UserProfileClient from "./UserProfileClient";
 
 type PanelProps = {

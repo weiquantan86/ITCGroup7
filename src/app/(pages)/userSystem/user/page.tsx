@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
-import pool from "../../../database/client";
+import pool from "../../../../database/client";
 
 type PanelProps = {
   children: ReactNode;
@@ -148,14 +148,18 @@ export default async function UserPage() {
               </Panel>
 
               <Panel className="grid h-full min-h-0 grid-rows-4 gap-6 lg:col-start-3 lg:row-span-2 lg:row-start-1">
-                <MenuButton label="Snack Gacha" className="h-full text-4xl" />
+                <MenuButton
+                  label="Snack Gacha"
+                  className="h-full text-4xl"
+                  href="/gacha"
+                />
                 <MenuButton
                   label="Character"
                   className="h-full"
                   href="/characterManagement"
                 />
-                <MenuButton label="Storage" className="h-full" />
-                <MenuButton label="Option" className="h-full" />
+                <MenuButton label="Storage" className="h-full" href="/storage" />
+                <MenuButton label="Community" className="h-full" href="/community" />
               </Panel>
 
               <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">

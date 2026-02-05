@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import CharacterScene from "./characterScene/CharacterScene";
+import { characterProfiles } from "../../asset/character/registry";
 
 type CharacterCard = {
   id: string;
@@ -17,13 +18,11 @@ type CharacterCard = {
   locked?: boolean;
 };
 
-const characterCards: CharacterCard[] = [
-  { id: "adam", name: "Adam", path: "/assets/characters/adam/adam.glb" },
-  { id: "baron", name: "Baron", path: "/assets/characters/baron/baron.glb" },
-  { id: "carrot", name: "Carrot", path: "/assets/characters/carrot/carrot.glb" },
-  { id: "locked-1", name: "Unknown", locked: true },
-  { id: "locked-2", name: "Unknown", locked: true },
-];
+const characterCards: CharacterCard[] = characterProfiles.map((profile) => ({
+  id: profile.id,
+  name: profile.label,
+  path: `/assets/characters${profile.pathToken}${profile.id}.glb`,
+}));
 
 function LockIcon() {
   return (
@@ -56,17 +55,25 @@ function LockIcon() {
 
 type CharacterManagementClientProps = {
   onSelectCharacter?: (id: string) => void;
+  ownedIds: string[];
 };
 
 export default function CharacterManagementClient({
   onSelectCharacter,
+  ownedIds,
 }: CharacterManagementClientProps) {
-  const selectable = useMemo(
-    () => characterCards.filter((card) => !card.locked),
-    []
+  const ownedSet = useMemo(() => new Set(ownedIds), [ownedIds]);
+  const cards = useMemo(
+    () =>
+      characterCards.map((card) => ({
+        ...card,
+        locked: !ownedSet.has(card.id),
+      })),
+    [ownedSet]
   );
+  const selectable = useMemo(() => cards.filter((card) => !card.locked), [cards]);
   const [selectedId, setSelectedId] = useState(selectable[0]?.id ?? "");
-  const selected = characterCards.find((card) => card.id === selectedId);
+  const selected = cards.find((card) => card.id === selectedId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const selectorPanelRef = useRef<HTMLDivElement | null>(null);
@@ -160,9 +167,19 @@ export default function CharacterManagementClient({
   }, [updateScrollbar]);
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || selectable.length === 0) return;
     onSelectCharacter?.(selectedId);
-  }, [onSelectCharacter, selectedId]);
+  }, [onSelectCharacter, selectable.length, selectedId]);
+
+  useEffect(() => {
+    if (selectable.length === 0) {
+      if (selectedId) setSelectedId("");
+      return;
+    }
+    if (!selectable.find((card) => card.id === selectedId)) {
+      setSelectedId(selectable[0]?.id ?? "");
+    }
+  }, [selectable, selectedId]);
 
   useEffect(() => {
     const panel = selectorPanelRef.current;
@@ -200,10 +217,16 @@ export default function CharacterManagementClient({
       <div className="relative flex min-h-0 flex-1 rounded-[28px] border border-slate-200/20 bg-[#0f151f]/90 p-5 shadow-[0_0_30px_rgba(90,140,220,0.18)]">
         <div className="absolute inset-6 rounded-[20px] border border-slate-200/15" />
         <div className="relative z-10 h-full w-full">
-          <CharacterScene
-            characterPath={selected?.path}
-            className="h-full w-full border border-slate-200/15 bg-[#0b1119]/90 shadow-[0_0_24px_rgba(90,140,220,0.18)]"
-          />
+          {selected ? (
+            <CharacterScene
+              characterPath={selected.path}
+              className="h-full w-full border border-slate-200/15 bg-[#0b1119]/90 shadow-[0_0_24px_rgba(90,140,220,0.18)]"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center rounded-[20px] border border-dashed border-slate-200/20 bg-[#0b1119]/70 text-center text-sm text-slate-400">
+              No unlocked characters yet.
+            </div>
+          )}
         </div>
       </div>
 
@@ -240,7 +263,7 @@ export default function CharacterManagementClient({
           onScroll={updateScrollbar}
           className="scrollbar-hidden mt-4 flex max-w-full gap-4 overflow-x-auto pb-2"
         >
-          {characterCards.map((card) => {
+          {cards.map((card) => {
             const isSelected = card.id === selectedId;
             const isLocked = Boolean(card.locked);
             return (

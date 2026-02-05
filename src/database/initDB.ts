@@ -28,10 +28,10 @@ async function initDB() {
     await pool.query(
       `
         INSERT INTO characters (name)
-        VALUES ($1), ($2), ($3)
+        VALUES ($1), ($2), ($3), ($4), ($5), ($6), ($7)
         ON CONFLICT DO NOTHING;
       `,
-      ['Adam', 'Baron', 'Carrot']
+      ['Adam', 'Baron', 'Carrot', 'Dakota', 'Eli', 'Felix', 'Grant']
     );
     console.log('Seed characters inserted or already exist');
 
@@ -92,12 +92,23 @@ async function initDB() {
       const userId = userResult.rows[0].id;
       await pool.query(
         `
+          DELETE FROM user_characters uc
+          USING characters c
+          WHERE uc.user_id = $1
+            AND uc.character_id = c.id
+            AND c.name = $2;
+        `,
+        [userId, "Grant"]
+      );
+      await pool.query(
+        `
           INSERT INTO user_characters (user_id, character_id)
           SELECT $1, c.id
           FROM characters c
+          WHERE c.name <> $2
           ON CONFLICT DO NOTHING;
         `,
-        [userId]
+        [userId, "Grant"]
       );
       console.log("Seed user_characters inserted for Sarcus");
     }

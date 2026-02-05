@@ -3,10 +3,24 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import CharacterManagementClient from "./CharacterManagementClient";
-import { characterProfiles } from "../asset/character/registry";
+import { characterProfiles } from "../../asset/character/registry";
 
-export default function CharacterManagementPage() {
-  const [selectedId, setSelectedId] = useState(characterProfiles[0]?.id ?? "");
+type CharacterManagementShellProps = {
+  ownedIds: string[];
+};
+
+export default function CharacterManagementShell({
+  ownedIds,
+}: CharacterManagementShellProps) {
+  const ownedSet = useMemo(() => new Set(ownedIds), [ownedIds]);
+  const fallbackSelectedId = useMemo(() => {
+    return (
+      characterProfiles.find((profile) => ownedSet.has(profile.id))?.id ??
+      characterProfiles[0]?.id ??
+      ""
+    );
+  }, [ownedSet]);
+  const [selectedId, setSelectedId] = useState(fallbackSelectedId);
   const [activeSkill, setActiveSkill] = useState<"q" | "e" | "r">("q");
 
   const selectedProfile = useMemo(() => {
@@ -45,20 +59,20 @@ export default function CharacterManagementPage() {
                   {(["q", "e", "r"] as const).map((key) => {
                     const isActive = activeSkill === key;
                     return (
-                    <button
-                      key={key}
-                      type="button"
-                      aria-pressed={isActive}
-                      onClick={() => setActiveSkill(key)}
-                      className={`flex h-12 w-12 items-center justify-center rounded-full border bg-[#101722]/80 text-sm font-semibold text-slate-100 shadow-[0_0_14px_rgba(90,140,220,0.16)] transition hover:border-slate-100/45 hover:shadow-[0_0_22px_rgba(120,180,255,0.25)] ${
-                        isActive
-                          ? "border-sky-300/80 text-slate-100 shadow-[0_0_20px_rgba(56,189,248,0.35)]"
-                          : "border-slate-200/25 text-slate-300"
-                      }`}
-                    >
-                      {key.toUpperCase()}
-                    </button>
-                  );
+                      <button
+                        key={key}
+                        type="button"
+                        aria-pressed={isActive}
+                        onClick={() => setActiveSkill(key)}
+                        className={`flex h-12 w-12 items-center justify-center rounded-full border bg-[#101722]/80 text-sm font-semibold text-slate-100 shadow-[0_0_14px_rgba(90,140,220,0.16)] transition hover:border-slate-100/45 hover:shadow-[0_0_22px_rgba(120,180,255,0.25)] ${
+                          isActive
+                            ? "border-sky-300/80 text-slate-100 shadow-[0_0_20px_rgba(56,189,248,0.35)]"
+                            : "border-slate-200/25 text-slate-300"
+                        }`}
+                      >
+                        {key.toUpperCase()}
+                      </button>
+                    );
                   })}
                 </div>
 
@@ -80,7 +94,10 @@ export default function CharacterManagementPage() {
                 </Link>
               </aside>
 
-              <CharacterManagementClient onSelectCharacter={setSelectedId} />
+              <CharacterManagementClient
+                onSelectCharacter={setSelectedId}
+                ownedIds={ownedIds}
+              />
             </div>
           </div>
         </div>
