@@ -793,6 +793,13 @@ fireProjectile = (args?: {
       });
     }
     updateProjectiles(delta);
+    if (characterEntry.profile.id === "adam" && maxStats.mana > 0) {
+      const regen = 2 * delta;
+      if (regen > 0 && currentStats.mana < maxStats.mana) {
+        currentStats.mana = Math.min(maxStats.mana, currentStats.mana + regen);
+        statsDirty = true;
+      }
+    }
     syncStatsHud();
   };
 
