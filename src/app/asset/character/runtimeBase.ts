@@ -4,6 +4,7 @@ import type {
   CharacterProfile,
   CharacterRuntime,
   CharacterRuntimeUpdate,
+  SkillKey,
 } from "./types";
 
 export const createCharacterRuntime = ({
@@ -214,6 +215,12 @@ export const createCharacterRuntime = ({
     }
   };
 
+  const handleSkillQ = () => false;
+  const handleSkillE = () => false;
+  const handleSkillR = () => false;
+  const getSkillCooldownRemainingMs = (_key: SkillKey) => null;
+  const getSkillCooldownDurationMs = (_key: SkillKey) => null;
+
   const isFacingLocked = () => isSlashing && lockFacing;
 
   const updateArmsAndLegs = ({ now, isMoving, arms, legLeft, legRight }) => {
@@ -377,6 +384,17 @@ export const createCharacterRuntime = ({
     updateEffects({ now });
   };
 
+  const resetState = () => {
+    isSlashing = false;
+    slashStart = 0;
+    slashFacingYaw = 0;
+    slashFacingPitch = 0;
+    lockFacing = true;
+    slashOriginOverride = null;
+    slashMesh.visible = false;
+    slashMaterial.opacity = 0;
+  };
+
   const dispose = () => {
     slashAnchor.parent?.remove(slashAnchor);
     slashMesh.geometry.dispose();
@@ -387,6 +405,12 @@ export const createCharacterRuntime = ({
     setProfile,
     triggerSlash,
     handleRightClick,
+    handleSkillQ,
+    handleSkillE,
+    handleSkillR,
+    getSkillCooldownRemainingMs,
+    getSkillCooldownDurationMs,
+    resetState,
     update,
     dispose,
     isFacingLocked,

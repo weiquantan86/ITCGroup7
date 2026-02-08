@@ -95,7 +95,17 @@ export default async function UserPage() {
 
   return (
     <main className="h-screen w-full bg-[#06080b] text-slate-200 overflow-hidden">
-      <div className="h-full w-full bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:32px_32px]">
+      <div className="relative h-full w-full bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:32px_32px]">
+        <div className="pointer-events-none absolute right-6 top-6 z-20 flex items-center justify-center">
+          <button
+            type="button"
+            aria-label="Evil button"
+            className="pointer-events-auto group relative flex h-16 w-16 items-center justify-center rounded-full border border-rose-200/40 bg-[radial-gradient(circle_at_top,#3b0a12,#0a0d12_70%)] text-2xl font-semibold text-rose-200 shadow-[0_0_26px_rgba(248,113,113,0.35)] transition duration-200 hover:scale-105 hover:border-rose-100/80 hover:text-rose-100 hover:shadow-[0_0_34px_rgba(248,113,113,0.55)]"
+          >
+            <span className="relative z-10 translate-y-[1px]">{">:)"}</span>
+            <span className="pointer-events-none absolute inset-[4px] rounded-full border border-rose-200/15" />
+          </button>
+        </div>
         <div className="mx-auto flex h-full w-full max-w-[1920px] items-stretch px-6 py-6 lg:px-12 xl:px-16">
           <div className="h-full w-full rounded-[36px] border border-slate-200/20 bg-[#0b1016]/80 py-10 px-12 shadow-[0_0_52px_rgba(70,120,210,0.22)] lg:py-12 lg:px-14">
             <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[1fr_1.5fr_1fr] lg:grid-rows-[280px_minmax(0,1fr)] xl:grid-rows-[320px_minmax(0,1fr)]">

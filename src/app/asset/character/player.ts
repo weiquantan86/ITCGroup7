@@ -1,18 +1,76 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { getCharacterEntry, resolveCharacterStats } from "./registry";
-import type { CharacterRuntime, CharacterStats } from "./types";
+import type {
+  CharacterProfile,
+  CharacterRuntime,
+  CharacterStats,
+  SkillKey,
+} from "./types";
+
+export type RecoveryZoneType = "health" | "mana" | "both";
+
+export interface RecoveryZone {
+  id: string;
+  type: RecoveryZoneType;
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  cooldownMs?: number;
+}
+
+export type PlayerAttackSource = "projectile" | "slash";
+
+export interface PlayerAttackHit {
+  now: number;
+  source: PlayerAttackSource;
+  damage: number;
+  point: THREE.Vector3;
+  direction: THREE.Vector3;
+}
+
+export interface PlayerAttackTarget {
+  id: string;
+  object: THREE.Object3D;
+  isActive?: () => boolean;
+  onHit: (hit: PlayerAttackHit) => void;
+}
+
+export interface PlayerWorldTickArgs {
+  now: number;
+  delta: number;
+  player: THREE.Object3D;
+  camera: THREE.PerspectiveCamera;
+  currentStats: CharacterStats;
+  maxStats: CharacterStats;
+  applyDamage: (amount: number) => number;
+}
 
 export interface PlayerWorld {
   groundY: number;
+  playerSpawn?: THREE.Vector3;
+  resetOnDeath?: boolean;
   isBlocked?: (x: number, z: number) => boolean;
   projectileColliders?: THREE.Object3D[];
+  recoveryZones?: RecoveryZone[];
+  attackTargets?: PlayerAttackTarget[];
+  onTick?: (args: PlayerWorldTickArgs) => void;
+  onPlayerReset?: () => void;
   bounds?: {
     minX: number;
     maxX: number;
     minZ: number;
     maxZ: number;
   };
+}
+
+export interface PlayerUiState {
+  cooldowns: Record<SkillKey, number>;
+  cooldownDurations: Record<SkillKey, number>;
+  manaCurrent: number;
+  manaMax: number;
+  infiniteFire: boolean;
 }
 
 export interface PlayerController {
@@ -33,8 +91,21 @@ export interface Projectile {
   life: number;
   maxLife: number;
   radius: number;
+  damage: number;
+  splitOnImpact: boolean;
+  explosionRadius: number;
+  explosionDamage: number;
   material: THREE.Material;
   ownsMaterial: boolean;
+}
+
+interface ProjectileExplosionFragment {
+  mesh: THREE.Mesh;
+  velocity: THREE.Vector3;
+  spin: THREE.Vector3;
+  life: number;
+  maxLife: number;
+  baseScale: number;
 }
 
 type StatusHud = {
@@ -122,6 +193,9 @@ export const createPlayer = ({
   world,
   hideLocalHead = true,
   hideLocalBody = false,
+  showMiniMap = true,
+  infiniteFire = false,
+  onUiStateChange,
 }: {
   scene: THREE.Scene;
   mount: HTMLElement;
@@ -129,11 +203,20 @@ export const createPlayer = ({
   world?: PlayerWorld;
   hideLocalHead?: boolean;
   hideLocalBody?: boolean;
+  showMiniMap?: boolean;
+  infiniteFire?: boolean;
+  onUiStateChange?: (state: PlayerUiState) => void;
 }): PlayerController => {
   const resolvedWorld: PlayerWorld = {
     groundY: world?.groundY ?? -1.4,
+    playerSpawn: world?.playerSpawn,
+    resetOnDeath: world?.resetOnDeath,
     isBlocked: world?.isBlocked,
     projectileColliders: world?.projectileColliders,
+    recoveryZones: world?.recoveryZones,
+    attackTargets: world?.attackTargets,
+    onTick: world?.onTick,
+    onPlayerReset: world?.onPlayerReset,
     bounds: world?.bounds,
   };
 
@@ -213,10 +296,19 @@ export const createPlayer = ({
   let isPointerLockRequested = false;
   let projectileId = 0;
   const projectiles: Projectile[] = [];
+  const projectileExplosionFragments: ProjectileExplosionFragment[] = [];
   const projectileColliders = resolvedWorld.projectileColliders ?? [];
+  const recoveryZones = resolvedWorld.recoveryZones ?? [];
+  const attackTargets = resolvedWorld.attackTargets ?? [];
+  const worldTick = resolvedWorld.onTick;
+  const worldPlayerReset = resolvedWorld.onPlayerReset;
+  const resetOnDeath = Boolean(resolvedWorld.resetOnDeath);
+  const recoveryZoneLastTriggered = new Map<string, number>();
   const projectileRaycaster = new THREE.Raycaster();
   const projectileRayDir = new THREE.Vector3();
   const projectileNextPos = new THREE.Vector3();
+  const attackRayHitPoint = new THREE.Vector3();
+  const attackRayDirection = new THREE.Vector3();
   const projectileGeometry = new THREE.SphereGeometry(projectileRadius, 12, 12);
   const projectileMaterial = new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
@@ -225,6 +317,21 @@ export const createPlayer = ({
     roughness: 0.35,
     metalness: 0.1,
   });
+  const projectileExplosionGeometry = new THREE.IcosahedronGeometry(0.09, 0);
+  const projectileExplosionMaterial = new THREE.MeshStandardMaterial({
+    color: 0x86efac,
+    roughness: 0.22,
+    metalness: 0.18,
+    emissive: 0x22c55e,
+    emissiveIntensity: 0.7,
+  });
+  const explosionOrigin = new THREE.Vector3();
+  const explosionDirection = new THREE.Vector3();
+  const attackTargetPoint = new THREE.Vector3();
+  const playerSpawn = (
+    resolvedWorld.playerSpawn ?? new THREE.Vector3(0, resolvedWorld.groundY, 6)
+  ).clone();
+  let respawnProtectionUntil = 0;
 
   const isHeadRelated = (obj: THREE.Object3D | null) => {
     let current = obj;
@@ -267,7 +374,7 @@ export const createPlayer = ({
   );
   avatarGlow.position.set(0, 1.65, 0);
   lookPivot.add(avatarBody, avatarGlow);
-  avatar.position.set(0, resolvedWorld.groundY, 6);
+  avatar.position.copy(playerSpawn);
   if (hideLocalBody) {
     avatarBody.layers.set(bodyLayer);
     avatarGlow.layers.set(bodyLayer);
@@ -293,11 +400,109 @@ export const createPlayer = ({
     emissive?: number;
     emissiveIntensity?: number;
     scale?: number;
+    damage?: number;
+    splitOnImpact?: boolean;
+    explosionRadius?: number;
+    explosionDamage?: number;
   }) => void = () => {};
   const statusHud = createStatusHud(mount);
   let maxStats: CharacterStats = resolveCharacterStats(characterEntry.profile);
   let currentStats: CharacterStats = { ...maxStats };
   let statsDirty = true;
+  const skillCodeMap: Record<string, SkillKey> = {
+    KeyQ: "q",
+    KeyE: "e",
+    KeyR: "r",
+  };
+  const resolveSkillCooldownDurations = (
+    profile?: CharacterProfile
+  ): Record<SkillKey, number> => ({
+    q: Math.max(0, profile?.kit?.skills?.q?.cooldownMs ?? 0),
+    e: Math.max(0, profile?.kit?.skills?.e?.cooldownMs ?? 0),
+    r: Math.max(0, profile?.kit?.skills?.r?.cooldownMs ?? 0),
+  });
+  let skillCooldownDurations: Record<SkillKey, number> =
+    resolveSkillCooldownDurations(characterEntry.profile);
+  let skillCooldownUntil: Record<SkillKey, number> = { q: 0, e: 0, r: 0 };
+  let lastUiStateSnapshot = "";
+
+  const getRuntimeSkillHandler = (key: SkillKey) => {
+    if (!characterRuntime) return null;
+    if (key === "q") return characterRuntime.handleSkillQ ?? null;
+    if (key === "e") return characterRuntime.handleSkillE ?? null;
+    return characterRuntime.handleSkillR ?? null;
+  };
+
+  const getRuntimeSkillCooldownRemainingMs = (key: SkillKey) => {
+    const remainingMs = characterRuntime?.getSkillCooldownRemainingMs?.(key);
+    if (remainingMs === null || remainingMs === undefined) return null;
+    return Math.max(0, remainingMs);
+  };
+
+  const getSkillCooldownDurationMs = (key: SkillKey) => {
+    const runtimeDuration = characterRuntime?.getSkillCooldownDurationMs?.(key);
+    if (runtimeDuration === null || runtimeDuration === undefined) {
+      return skillCooldownDurations[key];
+    }
+    return Math.max(0, runtimeDuration);
+  };
+
+  const getSkillCooldownRemainingMs = (now: number, key: SkillKey) => {
+    if (infiniteFire) return 0;
+    const runtimeRemaining = getRuntimeSkillCooldownRemainingMs(key);
+    if (runtimeRemaining !== null) {
+      return runtimeRemaining;
+    }
+    return Math.max(0, skillCooldownUntil[key] - now);
+  };
+
+  const getSkillCooldownRemaining = (now: number, key: SkillKey) =>
+    getSkillCooldownRemainingMs(now, key) / 1000;
+
+  const isRuntimeCooldownManaged = (key: SkillKey) => {
+    if (!characterRuntime) return false;
+    if (characterRuntime.getSkillCooldownRemainingMs?.(key) != null) return true;
+    if (characterRuntime.getSkillCooldownDurationMs?.(key) != null) return true;
+    return false;
+  };
+
+  const getSkillCost = (key: SkillKey) =>
+    Math.max(0, characterEntry.profile.kit?.skills?.[key]?.cost ?? 0);
+
+  const spendSkillCost = (key: SkillKey) => {
+    if (infiniteFire) return;
+    const cost = getSkillCost(key);
+    if (cost <= 0) return;
+    currentStats.mana = Math.max(0, currentStats.mana - cost);
+    statsDirty = true;
+    syncStatsHud();
+  };
+
+  const activateSkillCooldown = (key: SkillKey, now: number) => {
+    if (infiniteFire) return;
+    if (isRuntimeCooldownManaged(key)) return;
+    const cooldownMs = skillCooldownDurations[key];
+    if (cooldownMs <= 0) return;
+    skillCooldownUntil[key] = now + cooldownMs;
+  };
+
+  const tryUseSkill = (key: SkillKey, now: number) => {
+    if (!infiniteFire && getSkillCooldownRemainingMs(now, key) > 0) {
+      return false;
+    }
+    const cost = getSkillCost(key);
+    if (!infiniteFire && cost > 0 && currentStats.mana < cost) {
+      return false;
+    }
+    const handler = getRuntimeSkillHandler(key);
+    if (!handler) return false;
+    const didTrigger = handler();
+    if (!didTrigger) return false;
+    spendSkillCost(key);
+    activateSkillCooldown(key, now);
+    emitUiState(now);
+    return true;
+  };
 
   const syncStatsHud = () => {
     if (!statsDirty) return;
@@ -305,12 +510,158 @@ export const createPlayer = ({
     statsDirty = false;
   };
 
+  const clearActiveProjectiles = () => {
+    for (let i = 0; i < projectiles.length; i += 1) {
+      const projectile = projectiles[i];
+      scene.remove(projectile.mesh);
+      if (projectile.ownsMaterial) {
+        projectile.material.dispose();
+      }
+    }
+    projectiles.length = 0;
+    for (let i = 0; i < projectileExplosionFragments.length; i += 1) {
+      scene.remove(projectileExplosionFragments[i].mesh);
+    }
+    projectileExplosionFragments.length = 0;
+  };
+
+  const resetPlayerState = (now: number) => {
+    pressedKeys.clear();
+    characterRuntime?.handlePrimaryCancel?.();
+    characterRuntime?.resetState?.();
+    velocityY = 0;
+    isGrounded = true;
+    lookState.yaw = 0;
+    lookState.pitch = 0;
+    skillCooldownUntil = { q: 0, e: 0, r: 0 };
+    recoveryZoneLastTriggered.clear();
+    const spawnY = resolvedWorld.groundY + modelFootOffset;
+    avatar.position.set(playerSpawn.x, spawnY, playerSpawn.z);
+    avatar.rotation.y = 0;
+    currentStats = { ...maxStats };
+    statsDirty = true;
+    syncStatsHud();
+    clearActiveProjectiles();
+    worldPlayerReset?.();
+    respawnProtectionUntil = now + 550;
+    emitUiState(now);
+  };
+
+  const emitUiState = (now: number) => {
+    if (!onUiStateChange) return;
+    const cooldowns: Record<SkillKey, number> = {
+      q: getSkillCooldownRemaining(now, "q"),
+      e: getSkillCooldownRemaining(now, "e"),
+      r: getSkillCooldownRemaining(now, "r"),
+    };
+    const cooldownDurations: Record<SkillKey, number> = {
+      q: getSkillCooldownDurationMs("q") / 1000,
+      e: getSkillCooldownDurationMs("e") / 1000,
+      r: getSkillCooldownDurationMs("r") / 1000,
+    };
+    const payload: PlayerUiState = {
+      cooldowns,
+      cooldownDurations,
+      manaCurrent: currentStats.mana,
+      manaMax: maxStats.mana,
+      infiniteFire,
+    };
+    const snapshot = [
+      cooldowns.q.toFixed(2),
+      cooldowns.e.toFixed(2),
+      cooldowns.r.toFixed(2),
+      cooldownDurations.q.toFixed(2),
+      cooldownDurations.e.toFixed(2),
+      cooldownDurations.r.toFixed(2),
+      Math.round(currentStats.mana),
+      Math.round(maxStats.mana),
+      infiniteFire ? "1" : "0",
+    ].join("|");
+    if (snapshot === lastUiStateSnapshot) return;
+    lastUiStateSnapshot = snapshot;
+    onUiStateChange(payload);
+  };
+
+  const applyDamageToPlayer = (amount: number) => {
+    const now = performance.now();
+    if (now < respawnProtectionUntil) return 0;
+    const resolvedAmount = Math.max(0, amount);
+    if (resolvedAmount <= 0) return 0;
+    const before = currentStats.health;
+    currentStats.health = Math.max(0, currentStats.health - resolvedAmount);
+    const applied = before - currentStats.health;
+    if (applied > 0) {
+      statsDirty = true;
+      syncStatsHud();
+    }
+    if (currentStats.health <= 0 && resetOnDeath) {
+      resetPlayerState(now);
+    }
+    return applied;
+  };
+
+  const restoreFullHealth = () => {
+    if (currentStats.health >= maxStats.health) return false;
+    currentStats.health = maxStats.health;
+    return true;
+  };
+
+  const restoreFullMana = () => {
+    if (currentStats.mana >= maxStats.mana) return false;
+    currentStats.mana = maxStats.mana;
+    return true;
+  };
+
+  const applyRecoveryZones = (now: number) => {
+    if (!recoveryZones.length) return;
+
+    const x = avatar.position.x;
+    const z = avatar.position.z;
+
+    for (let i = 0; i < recoveryZones.length; i += 1) {
+      const zone = recoveryZones[i];
+      if (
+        x < zone.minX ||
+        x > zone.maxX ||
+        z < zone.minZ ||
+        z > zone.maxZ
+      ) {
+        continue;
+      }
+
+      const cooldownMs = zone.cooldownMs ?? 200;
+      const lastTriggered = recoveryZoneLastTriggered.get(zone.id) ?? -Infinity;
+      if (now - lastTriggered < cooldownMs) {
+        continue;
+      }
+
+      let recovered = false;
+      if (zone.type === "health" || zone.type === "both") {
+        recovered = restoreFullHealth() || recovered;
+      }
+      if (zone.type === "mana" || zone.type === "both") {
+        recovered = restoreFullMana() || recovered;
+      }
+
+      if (!recovered) continue;
+      statsDirty = true;
+      syncStatsHud();
+      recoveryZoneLastTriggered.set(zone.id, now);
+    }
+  };
+
   const applyStatsFromProfile = () => {
     const resolved = resolveCharacterStats(characterEntry.profile);
     maxStats = { ...resolved };
     currentStats = { ...resolved };
+    skillCooldownDurations = resolveSkillCooldownDurations(characterEntry.profile);
+    skillCooldownUntil = { q: 0, e: 0, r: 0 };
+    if (infiniteFire && maxStats.mana > 0) {
+      currentStats.mana = maxStats.mana;
+    }
     statsDirty = true;
     syncStatsHud();
+    emitUiState(performance.now());
   };
 
   const disposeAvatarModel = (model: THREE.Object3D) => {
@@ -330,12 +681,18 @@ export const createPlayer = ({
   const loadCharacter = (path?: string) => {
     const resolvedPath = path || defaultCharacterPath;
     const nextEntry = getCharacterEntry(resolvedPath);
-    characterEntry = nextEntry;
-    applyStatsFromProfile();
     if (characterRuntime) {
       characterRuntime.dispose();
+      characterRuntime = null;
     }
-    characterRuntime = nextEntry.createRuntime({ avatar, mount, fireProjectile });
+    characterEntry = nextEntry;
+    applyStatsFromProfile();
+    characterRuntime = nextEntry.createRuntime({
+      avatar,
+      mount,
+      fireProjectile,
+      noCooldown: infiniteFire,
+    });
     loader.load(
       resolvedPath,
       (gltf) => {
@@ -427,6 +784,10 @@ export const createPlayer = ({
   };
 
   const updateMiniViewport = (width: number, height: number) => {
+    if (!showMiniMap) {
+      miniViewport.size = 0;
+      return;
+    }
     const minEdge = Math.min(width, height);
     miniViewport.size = Math.max(120, Math.floor(minEdge * 0.25));
     miniCamera.aspect = 16 / 9;
@@ -473,6 +834,52 @@ export const createPlayer = ({
     };
   };
 
+  const isObjectWithinRoot = (child: THREE.Object3D, root: THREE.Object3D) => {
+    let current: THREE.Object3D | null = child;
+    while (current) {
+      if (current === root) return true;
+      current = current.parent;
+    }
+    return false;
+  };
+
+  const resolveAttackTargetFromObject = (object: THREE.Object3D) => {
+    for (let i = 0; i < attackTargets.length; i += 1) {
+      const target = attackTargets[i];
+      if (target.isActive && !target.isActive()) continue;
+      if (isObjectWithinRoot(object, target.object)) {
+        return target;
+      }
+    }
+    return null;
+  };
+
+  const intersectAttackTargets = (
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    far: number
+  ) => {
+    if (!attackTargets.length) return null;
+    const activeRoots: THREE.Object3D[] = [];
+    for (let i = 0; i < attackTargets.length; i += 1) {
+      const target = attackTargets[i];
+      if (target.isActive && !target.isActive()) continue;
+      activeRoots.push(target.object);
+    }
+    if (!activeRoots.length) return null;
+
+    projectileRaycaster.set(origin, direction);
+    projectileRaycaster.far = far;
+    const hits = projectileRaycaster.intersectObjects(activeRoots, true);
+    for (let i = 0; i < hits.length; i += 1) {
+      const hit = hits[i];
+      const target = resolveAttackTargetFromObject(hit.object);
+      if (!target) continue;
+      return { target, hit };
+    }
+    return null;
+  };
+
   const spawnProjectile = (
     origin: THREE.Vector3,
     direction: THREE.Vector3,
@@ -483,6 +890,10 @@ export const createPlayer = ({
       emissive?: number;
       emissiveIntensity?: number;
       scale?: number;
+      damage?: number;
+      splitOnImpact?: boolean;
+      explosionRadius?: number;
+      explosionDamage?: number;
     }
   ) => {
     const useCustomMaterial =
@@ -507,6 +918,10 @@ export const createPlayer = ({
     }
     scene.add(mesh);
     const velocity = direction.clone().multiplyScalar(speed);
+    const resolvedDamage = Math.max(
+      8,
+      options?.damage ?? Math.round(10 + speed * 0.6)
+    );
     projectiles.push({
       id: projectileId++,
       mesh,
@@ -514,24 +929,154 @@ export const createPlayer = ({
       life: 0,
       maxLife: lifetime,
       radius: projectileRadius * (options?.scale ?? 1),
+      damage: resolvedDamage,
+      splitOnImpact: Boolean(options?.splitOnImpact),
+      explosionRadius: Math.max(0, options?.explosionRadius ?? 0),
+      explosionDamage: Math.max(0, options?.explosionDamage ?? 0),
       material,
       ownsMaterial: useCustomMaterial,
     });
   };
 
-  const updateProjectiles = (delta: number) => {
+  const triggerProjectileExplosion = (
+    now: number,
+    projectile: Projectile,
+    impactPoint: THREE.Vector3,
+    impactDirection: THREE.Vector3,
+    primaryTarget?: PlayerAttackTarget | null
+  ) => {
+    if (!projectile.splitOnImpact) return;
+
+    explosionOrigin.copy(impactPoint);
+    explosionDirection.copy(impactDirection);
+    if (explosionDirection.lengthSq() < 0.000001) {
+      explosionDirection.set(0, 0, 1);
+    }
+    explosionDirection.normalize();
+
+    const baseExplosionRadius = 3.6;
+    const visualFactor = THREE.MathUtils.clamp(
+      projectile.explosionRadius > 0
+        ? projectile.explosionRadius / baseExplosionRadius
+        : 1,
+      0.75,
+      5
+    );
+    const fragmentCount = Math.max(
+      14,
+      Math.min(42, Math.round(14 * visualFactor))
+    );
+    const spread = 0.45 * visualFactor;
+    const velocityScale = Math.sqrt(visualFactor);
+    const minScale = 0.72 * visualFactor;
+    const maxScale = 1.08 * visualFactor;
+
+    for (let i = 0; i < fragmentCount; i += 1) {
+      const mesh = new THREE.Mesh(
+        projectileExplosionGeometry,
+        projectileExplosionMaterial
+      );
+      const baseScale = THREE.MathUtils.lerp(minScale, maxScale, Math.random());
+      mesh.scale.setScalar(baseScale);
+      mesh.position.copy(explosionOrigin).add(
+        new THREE.Vector3(
+          (Math.random() - 0.5) * spread,
+          (Math.random() - 0.5) * spread,
+          (Math.random() - 0.5) * spread
+        )
+      );
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      const velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 4.6 * velocityScale,
+        (1.5 + Math.random() * 2.8) * velocityScale,
+        (Math.random() - 0.5) * 4.6 * velocityScale
+      ).addScaledVector(explosionDirection, -2.2 * velocityScale);
+      projectileExplosionFragments.push({
+        mesh,
+        velocity,
+        spin: new THREE.Vector3(
+          (Math.random() - 0.5) * 7.4,
+          (Math.random() - 0.5) * 7.4,
+          (Math.random() - 0.5) * 7.4
+        ),
+        life: 0,
+        maxLife: (0.55 + Math.random() * 0.2) * velocityScale,
+        baseScale,
+      });
+    }
+
+    if (projectile.explosionRadius <= 0 || projectile.explosionDamage <= 0) return;
+
+    const radius = projectile.explosionRadius;
+    const radiusSq = radius * radius;
+
+    for (let i = 0; i < attackTargets.length; i += 1) {
+      const target = attackTargets[i];
+      if (target.isActive && !target.isActive()) continue;
+      if (primaryTarget && target.id === primaryTarget.id) continue;
+      target.object.getWorldPosition(attackTargetPoint);
+      const distSq = attackTargetPoint.distanceToSquared(explosionOrigin);
+      if (distSq > radiusSq) continue;
+      const dist = Math.sqrt(distSq);
+      const ratio = 1 - dist / radius;
+      const splashDamage = Math.max(
+        1,
+        Math.round(projectile.explosionDamage * (0.45 + ratio * 0.55))
+      );
+      target.onHit({
+        now,
+        source: "projectile",
+        damage: splashDamage,
+        point: explosionOrigin.clone(),
+        direction: explosionDirection.clone(),
+      });
+    }
+  };
+
+  const updateProjectileExplosionFragments = (delta: number) => {
+    for (let i = projectileExplosionFragments.length - 1; i >= 0; i -= 1) {
+      const fragment = projectileExplosionFragments[i];
+      fragment.velocity.y -= 11.5 * delta;
+      fragment.mesh.position.addScaledVector(fragment.velocity, delta);
+      fragment.mesh.rotation.x += fragment.spin.x * delta;
+      fragment.mesh.rotation.y += fragment.spin.y * delta;
+      fragment.mesh.rotation.z += fragment.spin.z * delta;
+      fragment.life += delta;
+      const lifeRatio = Math.max(0, 1 - fragment.life / fragment.maxLife);
+      fragment.mesh.scale.setScalar(
+        Math.max(0.08, fragment.baseScale * lifeRatio)
+      );
+      if (fragment.life >= fragment.maxLife) {
+        scene.remove(fragment.mesh);
+        projectileExplosionFragments.splice(i, 1);
+      }
+    }
+  };
+
+  const updateProjectiles = (now: number, delta: number) => {
     for (let i = projectiles.length - 1; i >= 0; i -= 1) {
       const projectile = projectiles[i];
       projectile.velocity.y += projectileGravity * delta;
       projectileNextPos
         .copy(projectile.mesh.position)
         .addScaledVector(projectile.velocity, delta);
+      let projectileRemoved = false;
 
-      if (projectileColliders.length) {
-        projectileRayDir.copy(projectileNextPos).sub(projectile.mesh.position);
-        const travelDistance = projectileRayDir.length();
-        if (travelDistance > 0.000001) {
-          projectileRayDir.divideScalar(travelDistance);
+      projectileRayDir.copy(projectileNextPos).sub(projectile.mesh.position);
+      const travelDistance = projectileRayDir.length();
+      if (travelDistance > 0.000001) {
+        projectileRayDir.divideScalar(travelDistance);
+
+        const attackHit = intersectAttackTargets(
+          projectile.mesh.position,
+          projectileRayDir,
+          travelDistance + projectile.radius
+        );
+
+        let worldHit: THREE.Intersection | null = null;
+        if (projectileColliders.length) {
           projectileRaycaster.set(projectile.mesh.position, projectileRayDir);
           projectileRaycaster.far = travelDistance + projectile.radius;
           const hits = projectileRaycaster.intersectObjects(
@@ -539,16 +1084,58 @@ export const createPlayer = ({
             true
           );
           if (hits.length) {
-            projectile.mesh.position
-              .copy(hits[0].point)
-              .addScaledVector(projectileRayDir, -projectile.radius);
-            scene.remove(projectile.mesh);
-            if (projectile.ownsMaterial) {
-              projectile.material.dispose();
-            }
-            projectiles.splice(i, 1);
-            continue;
+            worldHit = hits[0];
           }
+        }
+
+        const shouldUseAttackHit =
+          Boolean(attackHit) &&
+          (!worldHit || attackHit!.hit.distance <= worldHit.distance);
+
+        if (shouldUseAttackHit && attackHit) {
+          attackRayHitPoint.copy(attackHit.hit.point);
+          attackRayDirection.copy(projectileRayDir);
+          projectile.mesh.position
+            .copy(attackRayHitPoint)
+            .addScaledVector(attackRayDirection, -projectile.radius);
+          attackHit.target.onHit({
+            now,
+            source: "projectile",
+            damage: projectile.damage,
+            point: attackRayHitPoint.clone(),
+            direction: attackRayDirection.clone(),
+          });
+          triggerProjectileExplosion(
+            now,
+            projectile,
+            attackRayHitPoint,
+            attackRayDirection,
+            attackHit.target
+          );
+          projectileRemoved = true;
+        } else if (worldHit) {
+          attackRayHitPoint.copy(worldHit.point);
+          attackRayDirection.copy(projectileRayDir);
+          projectile.mesh.position
+            .copy(worldHit.point)
+            .addScaledVector(projectileRayDir, -projectile.radius);
+          triggerProjectileExplosion(
+            now,
+            projectile,
+            attackRayHitPoint,
+            attackRayDirection,
+            null
+          );
+          projectileRemoved = true;
+        }
+
+        if (projectileRemoved) {
+          scene.remove(projectile.mesh);
+          if (projectile.ownsMaterial) {
+            projectile.material.dispose();
+          }
+          projectiles.splice(i, 1);
+          continue;
         }
       }
 
@@ -585,6 +1172,10 @@ fireProjectile = (args?: {
   emissive?: number;
   emissiveIntensity?: number;
   scale?: number;
+  damage?: number;
+  splitOnImpact?: boolean;
+  explosionRadius?: number;
+  explosionDamage?: number;
 }) => {
   updateAttackAim();
   spawnProjectile(
@@ -596,6 +1187,24 @@ fireProjectile = (args?: {
   );
 };
 
+  const performSlashAttackHit = (damage: number, maxDistance: number) => {
+    updateAttackAim();
+    const hit = intersectAttackTargets(
+      attackAimOrigin,
+      attackAimDirection,
+      maxDistance
+    );
+    if (!hit) return false;
+    hit.target.onHit({
+      now: performance.now(),
+      source: "slash",
+      damage,
+      point: hit.hit.point.clone(),
+      direction: attackAimDirection.clone(),
+    });
+    return true;
+  };
+
   const triggerPrimaryAttack = () => {
     if (!characterRuntime) return;
     updateAttackAim();
@@ -605,6 +1214,7 @@ fireProjectile = (args?: {
       aimWorld: attackAimPoint,
       aimOriginWorld: attackAimOrigin,
     });
+    performSlashAttackHit(18, 8);
   };
 
   const handlePointerDown = (event: PointerEvent) => {
@@ -670,16 +1280,12 @@ fireProjectile = (args?: {
       velocityY = jumpVelocity;
       isGrounded = false;
     }
-    if (event.code === "KeyE" && !event.repeat) {
-      const skillCost = characterEntry.profile.kit?.skills?.e?.cost ?? 0;
-      if (skillCost > 0 && currentStats.mana < skillCost) return;
-      const didTrigger = characterRuntime?.handleSkillE?.() ?? false;
-      if (didTrigger && skillCost > 0) {
-        currentStats.mana = Math.max(0, currentStats.mana - skillCost);
-        statsDirty = true;
-        syncStatsHud();
-      }
-    }
+    if (event.repeat) return;
+
+    const now = performance.now();
+    const skillKey = skillCodeMap[event.code];
+    if (!skillKey) return;
+    tryUseSkill(skillKey, now);
   };
 
   const handleKeyUp = (event: KeyboardEvent) => {
@@ -706,6 +1312,7 @@ fireProjectile = (args?: {
 
   loadCharacter(characterPath);
   updateMiniViewport(mount.clientWidth, mount.clientHeight);
+  emitUiState(performance.now());
 
   const update = (now: number, delta: number) => {
     const hasMoveInput = resolveInputDirection(moveDir);
@@ -772,8 +1379,8 @@ fireProjectile = (args?: {
       avatar.position.y + eyeHeight * 0.6,
       avatar.position.z
     );
-    const behindDistance = 3.6;
-    const upDistance = 3.4;
+    const behindDistance = 3.9;
+    const upDistance = 2.4;
     miniOffset.set(
       -Math.sin(lookState.yaw) * behindDistance,
       upDistance,
@@ -792,8 +1399,26 @@ fireProjectile = (args?: {
         avatarModel,
       });
     }
-    updateProjectiles(delta);
-    if (characterEntry.profile.id === "adam" && maxStats.mana > 0) {
+    applyRecoveryZones(now);
+    updateProjectiles(now, delta);
+    updateProjectileExplosionFragments(delta);
+    if (worldTick) {
+      worldTick({
+        now,
+        delta,
+        player: avatar,
+        camera,
+        currentStats: { ...currentStats },
+        maxStats: { ...maxStats },
+        applyDamage: applyDamageToPlayer,
+      });
+    }
+    if (infiniteFire && maxStats.mana > 0) {
+      if (currentStats.mana < maxStats.mana) {
+        currentStats.mana = maxStats.mana;
+        statsDirty = true;
+      }
+    } else if (characterEntry.profile.id === "adam" && maxStats.mana > 0) {
       const regen = 2 * delta;
       if (regen > 0 && currentStats.mana < maxStats.mana) {
         currentStats.mana = Math.min(maxStats.mana, currentStats.mana + regen);
@@ -801,6 +1426,7 @@ fireProjectile = (args?: {
       }
     }
     syncStatsHud();
+    emitUiState(now);
   };
 
   const render = (renderer: THREE.WebGLRenderer) => {
@@ -808,6 +1434,7 @@ fireProjectile = (args?: {
     const height = mount.clientHeight;
     renderer.setViewport(0, 0, width, height);
     renderer.render(scene, camera);
+    if (!showMiniMap) return;
 
     const miniSize = miniViewport.size;
     const miniWidth = Math.floor(miniSize * 1.6);
@@ -857,15 +1484,11 @@ fireProjectile = (args?: {
     if (characterRuntime) {
       characterRuntime.dispose();
     }
-    projectiles.forEach((projectile) => scene.remove(projectile.mesh));
-    projectiles.forEach((projectile) => {
-      if (projectile.ownsMaterial) {
-        projectile.material.dispose();
-      }
-    });
-    projectiles.length = 0;
+    clearActiveProjectiles();
     projectileGeometry.dispose();
     projectileMaterial.dispose();
+    projectileExplosionGeometry.dispose();
+    projectileExplosionMaterial.dispose();
     statusHud.dispose();
   };
 

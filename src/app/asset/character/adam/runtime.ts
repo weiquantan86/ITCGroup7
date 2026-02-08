@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { createCharacterRuntime } from "../runtimeBase";
-import type { CharacterRuntimeFactory } from "../types";
+import type { CharacterRuntimeFactory, SkillKey } from "../types";
 import { profile } from "./profile";
 
 type ChargeHud = {
@@ -277,9 +277,11 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
 export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
   mount,
+  noCooldown,
   fireProjectile,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
+  const bypassCooldown = Boolean(noCooldown);
   const hud = createChargeHud(mount);
   const skillGlow = createSkillGlow();
   const chargeConfig = {
@@ -374,14 +376,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillE.active = false;
     skillE.expiresAt = 0;
     skillGlow.setActive(false);
-    if (startCooldown) {
+    if (startCooldown && !bypassCooldown) {
       skillE.cooldownUntil = performance.now() + 10000;
     }
   };
 
   const handleSkillE = () => {
     const now = performance.now();
-    if (skillE.active || now < skillE.cooldownUntil) return false;
+    if (skillE.active || (!bypassCooldown && now < skillE.cooldownUntil)) {
+      return false;
+    }
     skillE.active = true;
     skillE.expiresAt = now + 5000;
     skillGlow.setActive(true);
@@ -413,6 +417,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       chargeConfig.maxLifetime,
       ratio
     );
+    const baseDamage = Math.max(8, Math.round(10 + speed * 0.6));
     if (skillE.active) {
       fireProjectile({
         speed,
@@ -420,7 +425,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
         color: 0x22c55e,
         emissive: 0x22c55e,
         emissiveIntensity: 0.9,
-        scale: 5.1,
+        scale: 12.24,
+        damage: baseDamage * 3,
+        splitOnImpact: true,
+        explosionRadius: 10.8,
+        explosionDamage: baseDamage,
       });
       deactivateSkillE(true);
     } else {
@@ -431,12 +440,38 @@ export const createRuntime: CharacterRuntimeFactory = ({
     hud.setRatio(ratio);
   };
 
+  const resetState = () => {
+    chargeState.startTime = 0;
+    chargeState.ratio = 0;
+    chargeState.releaseUntil = 0;
+    skillE.cooldownUntil = 0;
+    armAnim.raise = 0;
+    armBase.captured = false;
+    cancelCharge();
+    deactivateSkillE(false);
+    baseRuntime.resetState?.();
+  };
+
+  const getSkillCooldownRemainingMs = (key: SkillKey) => {
+    if (key !== "e") return null;
+    if (bypassCooldown) return 0;
+    return Math.max(0, skillE.cooldownUntil - performance.now());
+  };
+
+  const getSkillCooldownDurationMs = (key: SkillKey) => {
+    if (key !== "e") return null;
+    return 10000;
+  };
+
   return {
     ...baseRuntime,
     handlePrimaryDown: beginCharge,
     handlePrimaryUp: releaseCharge,
     handlePrimaryCancel: cancelCharge,
     handleSkillE,
+    getSkillCooldownRemainingMs,
+    getSkillCooldownDurationMs,
+    resetState,
     update: (args) => {
       baseRuntime.update(args);
       if (args.avatarModel) {
@@ -541,8 +576,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
     },
     dispose: () => {
-      cancelCharge();
-      deactivateSkillE(false);
+      resetState();
       skillGlow.dispose();
       hud.dispose();
       baseRuntime.dispose();

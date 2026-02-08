@@ -11,6 +11,8 @@ export interface CharacterFacing {
   aimOriginWorld?: THREE.Vector3;
 }
 
+export type SkillKey = "q" | "e" | "r";
+
 export interface CharacterControls {
   rightClick?: RightClickAction | null;
 }
@@ -108,7 +110,12 @@ export interface CharacterRuntime {
   handlePrimaryDown?: () => void;
   handlePrimaryUp?: () => void;
   handlePrimaryCancel?: () => void;
+  handleSkillQ?: () => boolean;
   handleSkillE?: () => boolean;
+  handleSkillR?: () => boolean;
+  getSkillCooldownRemainingMs?: (key: SkillKey) => number | null;
+  getSkillCooldownDurationMs?: (key: SkillKey) => number | null;
+  resetState?: () => void;
   update: (args: CharacterRuntimeUpdate) => void;
   dispose: () => void;
   isFacingLocked: () => boolean;
@@ -118,6 +125,7 @@ export interface CharacterRuntimeFactory {
   (args: {
     avatar: THREE.Object3D;
     mount?: HTMLElement;
+    noCooldown?: boolean;
     fireProjectile?: (args?: {
       speed?: number;
       lifetime?: number;
@@ -125,6 +133,10 @@ export interface CharacterRuntimeFactory {
       emissive?: number;
       emissiveIntensity?: number;
       scale?: number;
+      damage?: number;
+      splitOnImpact?: boolean;
+      explosionRadius?: number;
+      explosionDamage?: number;
     }) => void;
   }): CharacterRuntime;
 }

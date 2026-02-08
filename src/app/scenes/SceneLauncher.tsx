@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import * as THREE from "three";
-import { createPlayer } from "../asset/character/player";
-import { getSceneDefinition } from "./registry";
+import { createPlayer, type PlayerUiState } from "../asset/character/player";
+import { getSceneDefinition, type SceneUiState } from "./registry";
 
 export default function SceneLauncher({
   sceneId = "grass",
@@ -12,6 +12,10 @@ export default function SceneLauncher({
   className,
   hideLocalHead = true,
   hideLocalBody = false,
+  showMiniMap = true,
+  infiniteFire = false,
+  onSceneStateChange,
+  onPlayerStateChange,
 }: {
   sceneId?: string;
   characterPath?: string;
@@ -19,6 +23,10 @@ export default function SceneLauncher({
   className?: string;
   hideLocalHead?: boolean;
   hideLocalBody?: boolean;
+  showMiniMap?: boolean;
+  infiniteFire?: boolean;
+  onSceneStateChange?: (state: SceneUiState) => void;
+  onPlayerStateChange?: (state: PlayerUiState) => void;
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
@@ -28,7 +36,9 @@ export default function SceneLauncher({
 
     const scene = new THREE.Scene();
     const sceneDefinition = getSceneDefinition(sceneId);
-    const sceneSetup = sceneDefinition?.setupScene?.(scene);
+    const sceneSetup = sceneDefinition?.setupScene?.(scene, {
+      onStateChange: onSceneStateChange,
+    });
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(mount.clientWidth, mount.clientHeight);
@@ -62,6 +72,9 @@ export default function SceneLauncher({
       world: sceneSetup?.world,
       hideLocalHead,
       hideLocalBody,
+      showMiniMap,
+      infiniteFire,
+      onUiStateChange: onPlayerStateChange,
     });
 
     let animationId = 0;
@@ -93,7 +106,16 @@ export default function SceneLauncher({
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
     };
-  }, [characterPath, sceneId, hideLocalHead, hideLocalBody]);
+  }, [
+    characterPath,
+    sceneId,
+    hideLocalHead,
+    hideLocalBody,
+    showMiniMap,
+    infiniteFire,
+    onSceneStateChange,
+    onPlayerStateChange,
+  ]);
 
   return (
     <div

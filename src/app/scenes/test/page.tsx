@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import type { PlayerUiState } from "../../asset/character/player";
 import { characterProfiles } from "../../asset/character/registry";
 import SceneLauncher from "../SceneLauncher";
+import type { SceneUiState } from "../registry";
 
 const characters = characterProfiles.map((profile) => ({
   id: profile.id,
@@ -12,20 +14,46 @@ const characters = characterProfiles.map((profile) => ({
   path: `/assets/characters${profile.pathToken}${profile.id}.glb`,
 }));
 
-export default function ThreePage() {
+function TrainingScenePage() {
   const searchParams = useSearchParams();
   const lockedId = searchParams.get("character") ?? "";
-  const lockedCharacter =
-    characters.find((character) => character.id === lockedId) ?? null;
-  const [selected, setSelected] = useState(
-    () => lockedCharacter?.path ?? characters[0]?.path ?? ""
-  );
-  const showSelector = !lockedCharacter;
+  const selectedCharacterPath =
+    characters.find((character) => character.id === lockedId)?.path ??
+    characters[0]?.path ??
+    "";
+  const [testerState, setTesterState] = useState({
+    health: 0,
+    maxHealth: 0,
+    alive: true,
+  });
+  const [infiniteFire, setInfiniteFire] = useState(false);
+  const [playerUi, setPlayerUi] = useState<PlayerUiState>({
+    cooldowns: { q: 0, e: 0, r: 0 },
+    cooldownDurations: { q: 0, e: 0, r: 0 },
+    manaCurrent: 0,
+    manaMax: 0,
+    infiniteFire: false,
+  });
 
-  useEffect(() => {
-    if (!lockedCharacter?.path) return;
-    setSelected(lockedCharacter.path);
-  }, [lockedCharacter?.path]);
+  const handleSceneStateChange = useCallback((state: SceneUiState) => {
+    if (!state.tester) return;
+    setTesterState(state.tester);
+  }, []);
+
+  const handlePlayerStateChange = useCallback((state: PlayerUiState) => {
+    setPlayerUi(state);
+  }, []);
+
+  const renderCooldown = (label: "Q" | "E" | "R", seconds: number) => (
+    <div className="rounded-lg border border-white/10 bg-slate-900/50 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold tabular-nums text-slate-100">
+        {seconds > 0 ? `${seconds.toFixed(1)}s` : "Ready"}
+      </p>
+    </div>
+  );
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
@@ -44,44 +72,108 @@ export default function ThreePage() {
           </Link>
         </div>
 
-        <div
-          className={`grid gap-6 ${
-            showSelector ? "lg:grid-cols-[minmax(0,1fr)_220px]" : ""
-          }`}
-        >
+        <h1 className="text-center text-4xl font-semibold text-slate-100">
+          Training Scene
+        </h1>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
           <div className="flex justify-center">
             <SceneLauncher
-              sceneId="range"
-              characterPath={selected}
+              sceneId="training"
+              characterPath={selectedCharacterPath || undefined}
+              infiniteFire={infiniteFire}
+              onSceneStateChange={handleSceneStateChange}
+              onPlayerStateChange={handlePlayerStateChange}
               className="relative h-[70vh] min-h-[520px] w-full max-w-[1300px] overflow-hidden rounded-[32px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
             />
           </div>
-          {showSelector ? (
-            <aside className="rounded-2xl border border-white/10 bg-slate-900/70 p-4 shadow-[0_20px_50px_-30px_rgba(2,6,23,0.7)]">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Choose Character
-              </h2>
-              <div className="mt-4 flex flex-col gap-3">
-                {characters.map((character) => (
-                  <button
-                    key={character.id}
-                    type="button"
-                    onClick={() => setSelected(character.path)}
-                    className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
-                      selected === character.path
-                        ? "border-white/60 bg-white text-slate-950"
-                        : "border-white/10 bg-slate-900/60 text-slate-200 hover:border-white/30"
-                    }`}
-                  >
-                    {character.label}
-                  </button>
-                ))}
+          <aside className="rounded-2xl border border-white/10 bg-slate-900/70 p-4 shadow-[0_20px_50px_-30px_rgba(2,6,23,0.7)]">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Tester Monster
+            </h2>
+            <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
+                HP
+              </p>
+              <div className="mt-2 h-3 overflow-hidden rounded-full border border-red-300/40 bg-slate-900">
+                <div
+                  className="h-full bg-red-500 shadow-[0_0_16px_rgba(239,68,68,0.55)] transition-[width] duration-150 ease-out"
+                  style={{
+                    width: `${
+                      testerState.maxHealth > 0
+                        ? Math.round(
+                            (Math.max(0, testerState.health) /
+                              testerState.maxHealth) *
+                              100
+                          )
+                        : 0
+                    }%`,
+                  }}
+                />
               </div>
-            </aside>
-          ) : null}
-        </div>
+              <p className="mt-2 text-right text-xs font-semibold tabular-nums text-slate-200">
+                {Math.max(0, Math.round(testerState.health))}/
+                {Math.max(0, Math.round(testerState.maxHealth))}
+              </p>
+              <p
+                className={`mt-3 text-xs font-semibold uppercase tracking-[0.2em] ${
+                  testerState.alive ? "text-emerald-300" : "text-red-300"
+                }`}
+              >
+                {testerState.alive ? "Alive" : "Down"}
+              </p>
+            </div>
 
+            <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
+                  Q / E / R Cooldown
+                </p>
+                <p className="text-[11px] font-semibold tabular-nums text-cyan-200">
+                  MP {Math.round(playerUi.manaCurrent)}/{Math.round(playerUi.manaMax)}
+                </p>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {renderCooldown("Q", playerUi.cooldowns.q)}
+                {renderCooldown("E", playerUi.cooldowns.e)}
+                {renderCooldown("R", playerUi.cooldowns.r)}
+              </div>
+              <button
+                type="button"
+                onClick={() => setInfiniteFire((prev) => !prev)}
+                className={`mt-4 w-full rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                  infiniteFire
+                    ? "border-emerald-300/70 bg-emerald-400/20 text-emerald-200"
+                    : "border-white/20 bg-slate-900/70 text-slate-100 hover:border-white/40"
+                }`}
+              >
+                {infiniteFire ? "Infinite Fire: On" : "Infinite Fire: Off"}
+              </button>
+              <p className="mt-2 text-[11px] text-slate-400">
+                Toggle to remove cooldown and mana cost for Q/E/R in test scene.
+              </p>
+            </div>
+          </aside>
+        </div>
       </main>
     </div>
+  );
+}
+
+export default function ThreePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 px-6 py-12 text-slate-100">
+          <main className="mx-auto flex w-full max-w-none flex-col gap-8">
+            <h1 className="text-center text-4xl font-semibold text-slate-100">
+              Training Scene
+            </h1>
+          </main>
+        </div>
+      }
+    >
+      <TrainingScenePage />
+    </Suspense>
   );
 }
