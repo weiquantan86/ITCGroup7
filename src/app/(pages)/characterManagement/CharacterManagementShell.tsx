@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import CharacterManagementClient from "./CharacterManagementClient";
-import { characterProfiles } from "../../asset/character/registry";
+import { characterProfiles } from "../../asset/entity/character/registry";
 
 type CharacterManagementShellProps = {
   ownedIds: string[];

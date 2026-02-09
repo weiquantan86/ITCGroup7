@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import SceneLauncher from "../../../scenes/SceneLauncher";
+import SceneLauncher from "../../../asset/scenes/SceneLauncher";
 import './page.css';
 
 export default function Login() {

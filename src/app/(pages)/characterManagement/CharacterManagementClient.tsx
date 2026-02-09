@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import CharacterScene from "./characterScene/CharacterScene";
-import { characterProfiles } from "../../asset/character/registry";
+import { characterProfiles } from "../../asset/entity/character/registry";
 
 type CharacterCard = {
   id: string;

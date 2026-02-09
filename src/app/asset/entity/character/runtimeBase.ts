@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { CharacterRuntimeObject } from "./runtimeObject";
 import type {
   CharacterFacing,
   CharacterProfile,
@@ -401,7 +402,7 @@ export const createCharacterRuntime = ({
     slashMaterial.dispose();
   };
 
-  return {
+  return new CharacterRuntimeObject({
     setProfile,
     triggerSlash,
     handleRightClick,
@@ -414,5 +415,5 @@ export const createCharacterRuntime = ({
     update,
     dispose,
     isFacingLocked,
-  };
+  });
 };

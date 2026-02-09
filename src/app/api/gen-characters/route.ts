@@ -10,7 +10,7 @@ export async function POST() {
 
   try {
     const { stdout, stderr } = await execFileAsync("node", [
-      "src/app/asset/character/gen_all_characters.mjs",
+      "src/app/asset/entity/character/gen_all_characters.mjs",
     ]);
     return new Response(
       JSON.stringify({

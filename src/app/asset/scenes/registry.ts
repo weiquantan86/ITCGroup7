@@ -1,11 +1,12 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { LinearProjectileUpdater } from "../object/projectile/linearUpdater";
 import type {
   PlayerAttackTarget,
   PlayerWorld,
   PlayerWorldTickArgs,
-} from "../asset/character/player";
-import { Monster } from "../asset/monster/general";
+} from "../entity/character/player";
+import { Monster } from "../entity/monster/general";
 
 export interface SceneSetupResult {
   world?: PlayerWorld;
@@ -352,7 +353,7 @@ const createTrainingScene = (
   scene.fog = new THREE.Fog(0x03050a, 14, 40);
 
   const groundY = -1.4;
-  const arenaSize = { width: 32, depth: 46 };
+  const arenaSize = { width: 40, depth: 46 };
   const bounds = {
     minX: -arenaSize.width / 2 + 1.6,
     maxX: arenaSize.width / 2 - 1.6,
@@ -506,28 +507,72 @@ const createTrainingScene = (
     emissive: 0xef4444,
   });
 
-  const launcherPosition = new THREE.Vector3(bounds.minX + 1.1, groundY + 0.6, 0);
+  const launcherHeightOffset = 1.2;
+  const launcherPosition = new THREE.Vector3(
+    bounds.minX + 1.1,
+    groundY + launcherHeightOffset,
+    0
+  );
   const breakableTargetPosition = new THREE.Vector3(
     bounds.minX + 1.1,
-    groundY + 0.6,
+    groundY + 0.9,
     -8
   );
   const triggerPadCenter = new THREE.Vector3(
-    launcherPosition.x + 5,
+    launcherPosition.x + 8,
     groundY + 0.05,
     launcherPosition.z
   );
   const triggerPadSize = { width: 2.2, depth: 2.2 };
 
-  const breakableTarget = new THREE.Mesh(
-    new THREE.BoxGeometry(0.18, 1.2, 2.2),
+  const breakableTargetMaterials = [
+    new THREE.MeshStandardMaterial({
+      color: 0x71717a,
+      roughness: 0.36,
+      metalness: 0.2,
+      emissive: 0x0f172a,
+      emissiveIntensity: 0.1,
+    }),
+    new THREE.MeshStandardMaterial({
+      color: 0x71717a,
+      roughness: 0.36,
+      metalness: 0.2,
+      emissive: 0x0f172a,
+      emissiveIntensity: 0.1,
+    }),
     new THREE.MeshStandardMaterial({
       color: 0xa1a1aa,
-      roughness: 0.3,
-      metalness: 0.25,
+      roughness: 0.28,
+      metalness: 0.24,
       emissive: 0x111827,
+      emissiveIntensity: 0.14,
+    }),
+    new THREE.MeshStandardMaterial({
+      color: 0x52525b,
+      roughness: 0.42,
+      metalness: 0.18,
+      emissive: 0x0f172a,
+      emissiveIntensity: 0.08,
+    }),
+    new THREE.MeshStandardMaterial({
+      color: 0xd4d4d8,
+      roughness: 0.24,
+      metalness: 0.3,
+      emissive: 0x1e293b,
       emissiveIntensity: 0.2,
-    })
+    }),
+    new THREE.MeshStandardMaterial({
+      color: 0x7c7f87,
+      roughness: 0.34,
+      metalness: 0.2,
+      emissive: 0x0f172a,
+      emissiveIntensity: 0.1,
+    }),
+  ];
+
+  const breakableTarget = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 1.8, 2.2),
+    breakableTargetMaterials
   );
   breakableTarget.position.copy(breakableTargetPosition);
   breakableTarget.castShadow = true;
@@ -535,15 +580,43 @@ const createTrainingScene = (
   trainingGroup.add(breakableTarget);
   trackMesh(breakableTarget);
 
+  const launcherBaseMaterial = new THREE.MeshStandardMaterial({
+    color: 0x334155,
+    roughness: 0.75,
+    metalness: 0.2,
+  });
+  const launcherBodyMaterial = new THREE.MeshStandardMaterial({
+    color: 0x9ca3af,
+    roughness: 0.32,
+    metalness: 0.48,
+    emissive: 0x0f172a,
+    emissiveIntensity: 0.24,
+  });
+  const launcherAccentMaterial = new THREE.MeshStandardMaterial({
+    color: 0xe2e8f0,
+    roughness: 0.22,
+    metalness: 0.68,
+    emissive: 0x38bdf8,
+    emissiveIntensity: 0.32,
+  });
+
+  const launcherBase = new THREE.Mesh(
+    new THREE.BoxGeometry(1.1, 0.22, 1.1),
+    launcherBaseMaterial
+  );
+  launcherBase.position.set(
+    launcherPosition.x,
+    launcherPosition.y - 0.49,
+    launcherPosition.z
+  );
+  launcherBase.castShadow = true;
+  launcherBase.receiveShadow = true;
+  trainingGroup.add(launcherBase);
+  trackMesh(launcherBase);
+
   const launcherBody = new THREE.Mesh(
-    new THREE.BoxGeometry(0.6, 1.2, 1.2),
-    new THREE.MeshStandardMaterial({
-      color: 0x9ca3af,
-      roughness: 0.35,
-      metalness: 0.4,
-      emissive: 0x0f172a,
-      emissiveIntensity: 0.2,
-    })
+    new THREE.BoxGeometry(0.62, 0.82, 1.08),
+    launcherBodyMaterial
   );
   launcherBody.position.copy(launcherPosition);
   launcherBody.castShadow = true;
@@ -552,16 +625,12 @@ const createTrainingScene = (
   trackMesh(launcherBody);
 
   const launcherBarrel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.15, 0.15, 0.9, 12),
-    new THREE.MeshStandardMaterial({
-      color: 0xe2e8f0,
-      roughness: 0.2,
-      metalness: 0.65,
-    })
+    new THREE.CylinderGeometry(0.14, 0.14, 1, 14),
+    launcherAccentMaterial
   );
   launcherBarrel.position.set(
-    launcherPosition.x + 0.45,
-    launcherPosition.y + 0.2,
+    launcherPosition.x + 0.48,
+    launcherPosition.y + 0.13,
     launcherPosition.z
   );
   launcherBarrel.rotation.z = Math.PI / 2;
@@ -569,6 +638,34 @@ const createTrainingScene = (
   launcherBarrel.receiveShadow = true;
   trainingGroup.add(launcherBarrel);
   trackMesh(launcherBarrel);
+
+  const launcherMuzzle = new THREE.Mesh(
+    new THREE.SphereGeometry(0.16, 14, 14),
+    launcherAccentMaterial
+  );
+  launcherMuzzle.position.set(
+    launcherPosition.x + 0.95,
+    launcherPosition.y + 0.13,
+    launcherPosition.z
+  );
+  launcherMuzzle.castShadow = true;
+  launcherMuzzle.receiveShadow = true;
+  trainingGroup.add(launcherMuzzle);
+  trackMesh(launcherMuzzle);
+
+  const launcherSpine = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.16, 0.16),
+    launcherBaseMaterial
+  );
+  launcherSpine.position.set(
+    launcherPosition.x + 0.06,
+    launcherPosition.y + 0.48,
+    launcherPosition.z
+  );
+  launcherSpine.castShadow = true;
+  launcherSpine.receiveShadow = true;
+  trainingGroup.add(launcherSpine);
+  trackMesh(launcherSpine);
 
   const triggerPad = new THREE.Mesh(
     new THREE.BoxGeometry(triggerPadSize.width, 0.1, triggerPadSize.depth),
@@ -805,6 +902,7 @@ const createTrainingScene = (
     emissive: 0x1e293b,
     emissiveIntensity: 0.35,
   });
+  const launcherArrowUpdater = new LinearProjectileUpdater();
   geometries.add(launcherArrowGeometry);
   materials.add(launcherArrowMaterial);
   const launcherOrigin = new THREE.Vector3();
@@ -917,33 +1015,54 @@ const createTrainingScene = (
     Math.abs(player.position.z - triggerPadCenter.z) <= triggerPadSize.depth / 2;
 
   const updateLauncherArrows = (
+    now: number,
     delta: number,
     player: THREE.Object3D,
-    applyDamage: (amount: number) => number
+    applyDamage: (amount: number) => number,
+    projectileBlockers: THREE.Object3D[]
   ) => {
+    for (let i = 0; i < projectileBlockers.length; i += 1) {
+      projectileBlockers[i].updateMatrixWorld(true);
+    }
+
     playerChest.copy(player.position);
     playerChest.y += 1.2;
-
-    for (let i = launcherArrows.length - 1; i >= 0; i -= 1) {
-      const arrow = launcherArrows[i];
-      arrow.mesh.position.addScaledVector(arrow.velocity, delta);
-      arrow.life += delta;
-      if (
-        arrow.life >= arrow.maxLife ||
-        arrow.mesh.position.y <= groundY + 0.05
-      ) {
+    launcherArrowUpdater.update(launcherArrows, now, delta, {
+      getObject: (arrow) => arrow.mesh,
+      onTravel: (
+        arrow,
+        _travelNow,
+        _travelDelta,
+        origin,
+        _nextPosition,
+        direction,
+        distance,
+        raycaster,
+        remove
+      ) => {
+        if (!projectileBlockers.length) return;
+        raycaster.set(origin, direction);
+        raycaster.far = distance + arrow.radius;
+        const hits = raycaster.intersectObjects(projectileBlockers, true);
+        if (hits.length) {
+          remove();
+        }
+      },
+      shouldExpire: (arrow) => arrow.mesh.position.y <= groundY + 0.05,
+      onAfterMove: (arrow, _stepNow, _stepDelta, remove) => {
+        const hitRadius = arrow.radius + 0.48;
+        if (
+          arrow.mesh.position.distanceToSquared(playerChest) <=
+          hitRadius * hitRadius
+        ) {
+          applyDamage(14);
+          remove();
+        }
+      },
+      onRemove: (arrow) => {
         arrow.mesh.removeFromParent();
-        launcherArrows.splice(i, 1);
-        continue;
-      }
-
-      const hitRadius = arrow.radius + 0.48;
-      if (arrow.mesh.position.distanceToSquared(playerChest) <= hitRadius * hitRadius) {
-        applyDamage(14);
-        arrow.mesh.removeFromParent();
-        launcherArrows.splice(i, 1);
-      }
-    }
+      },
+    });
   };
 
   const worldTick = ({
@@ -951,6 +1070,7 @@ const createTrainingScene = (
     delta,
     player,
     applyDamage,
+    projectileBlockers,
   }: PlayerWorldTickArgs) => {
     updateTesterLifecycle(now, player);
 
@@ -966,7 +1086,7 @@ const createTrainingScene = (
       spawnLauncherArrow(player, now);
     }
 
-    updateLauncherArrows(delta, player, applyDamage);
+    updateLauncherArrows(now, delta, player, applyDamage, projectileBlockers);
   };
 
   const clearTrainingTransientObjects = () => {
@@ -1034,8 +1154,11 @@ const createTrainingScene = (
     manaPad.frame,
     hpPad.pad,
     hpPad.frame,
+    launcherBase,
     launcherBody,
+    launcherSpine,
     launcherBarrel,
+    launcherMuzzle,
     triggerPad,
   ];
 

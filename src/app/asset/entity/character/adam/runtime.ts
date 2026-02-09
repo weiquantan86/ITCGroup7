@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { createCharacterRuntime } from "../runtimeBase";
+import { CharacterRuntimeObject } from "../runtimeObject";
 import type { CharacterRuntimeFactory, SkillKey } from "../types";
 import { profile } from "./profile";
 
@@ -304,12 +305,50 @@ export const createRuntime: CharacterRuntimeFactory = ({
     expiresAt: 0,
     cooldownUntil: 0,
   };
+  const skillR = {
+    active: false,
+    expiresAt: 0,
+  };
   const armAnim = {
     // Smoothed 0..1 so the arm can return smoothly when charge ends.
     raise: 0,
   };
   const raiseAxis = new THREE.Vector3(1, 0, 0);
   const throwAxis = new THREE.Vector3(0, 0, 1);
+  const skillRDurationMs = 3000;
+  const skillRSphereConfig = {
+    radius: 4.2,
+    forwardOffset: 5.8,
+  };
+  const skillRECombo = {
+    speed: 14,
+    distance: 5,
+    damage: 52,
+    explosionRadius: 12,
+    explosionDamage: 40,
+  };
+  const skillRSphereGeometry = new THREE.SphereGeometry(
+    skillRSphereConfig.radius,
+    40,
+    28
+  );
+  const skillRSphereMaterial = new THREE.MeshStandardMaterial({
+    color: 0x22c55e,
+    roughness: 0.16,
+    metalness: 0.04,
+    emissive: 0x22c55e,
+    emissiveIntensity: 0.9,
+    transparent: true,
+    opacity: 0.4,
+    side: THREE.DoubleSide,
+  });
+  skillRSphereMaterial.depthWrite = false;
+  const skillRSphere = new THREE.Mesh(skillRSphereGeometry, skillRSphereMaterial);
+  skillRSphere.visible = false;
+  skillRSphere.renderOrder = 8;
+  avatar.add(skillRSphere);
+  const activeProjectileBlockers: THREE.Object3D[] = [skillRSphere];
+  const emptyProjectileBlockers: THREE.Object3D[] = [];
   const armBase = {
     captured: false,
     rightId: "",
@@ -320,6 +359,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const baseQuat = new THREE.Quaternion();
   const raiseQuat = new THREE.Quaternion();
   const throwQuat = new THREE.Quaternion();
+  const skillRRightQuat = new THREE.Quaternion();
+  const skillRLeftQuat = new THREE.Quaternion();
+  const skillRArmMidpoint = new THREE.Vector3();
+  const skillRLeftArmWorld = new THREE.Vector3();
+  const skillRRightArmWorld = new THREE.Vector3();
+  const skillRForwardWorld = new THREE.Vector3();
+  const skillRSphereLaunchOrigin = new THREE.Vector3();
+  const skillRSphereLaunchDirection = new THREE.Vector3();
+  let skillRSphereInFlight = false;
 
   const scoreArmCandidate = (
     arm: THREE.Object3D,
@@ -381,11 +429,137 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   };
 
+  const resetSkillRSphereAttachment = () => {
+    skillRSphere.visible = false;
+    skillRSphere.scale.setScalar(1);
+    skillRSphere.removeFromParent();
+    avatar.add(skillRSphere);
+    skillRSphere.position.set(0, 0, 0);
+  };
+
+  const deactivateSkillR = () => {
+    if (!skillR.active && !skillRSphere.visible && !skillRSphereInFlight) return;
+    skillR.active = false;
+    skillR.expiresAt = 0;
+    skillRSphereInFlight = false;
+    resetSkillRSphereAttachment();
+  };
+
+  const updateSkillRSphereTransform = (
+    now: number,
+    leftArm: THREE.Object3D | null,
+    rightArm: THREE.Object3D | null
+  ) => {
+    if (!skillR.active) return;
+
+    if (leftArm && rightArm) {
+      leftArm.getWorldPosition(skillRLeftArmWorld);
+      rightArm.getWorldPosition(skillRRightArmWorld);
+      skillRArmMidpoint
+        .copy(skillRLeftArmWorld)
+        .add(skillRRightArmWorld)
+        .multiplyScalar(0.5);
+    } else {
+      avatar.getWorldPosition(skillRArmMidpoint);
+      skillRArmMidpoint.y += 1.2;
+    }
+
+    skillRForwardWorld.set(0, 0, 1).applyQuaternion(avatar.quaternion);
+    skillRForwardWorld.y = 0;
+    if (skillRForwardWorld.lengthSq() < 0.000001) {
+      skillRForwardWorld.set(0, 0, 1);
+    } else {
+      skillRForwardWorld.normalize();
+    }
+
+    skillRArmMidpoint.y += 0.12;
+    skillRArmMidpoint.addScaledVector(
+      skillRForwardWorld,
+      skillRSphereConfig.forwardOffset
+    );
+
+    avatar.updateMatrixWorld(true);
+    skillRSphere.position.copy(avatar.worldToLocal(skillRArmMidpoint));
+    const pulse = 1 + Math.sin(now * 0.012) * 0.04;
+    skillRSphere.scale.setScalar(pulse);
+    skillRSphereMaterial.emissiveIntensity = 0.9 + Math.sin(now * 0.02) * 0.18;
+    skillRSphere.updateMatrixWorld(true);
+  };
+
+  const handleSkillR = () => {
+    if (skillR.active || skillRSphereInFlight) return false;
+    cancelCharge();
+    armBase.captured = false;
+    skillR.active = true;
+    skillR.expiresAt = performance.now() + skillRDurationMs;
+    skillRSphere.visible = true;
+    return true;
+  };
+
+  const launchSkillRCombo = (now: number) => {
+    if (!skillR.active || skillRSphereInFlight || !fireProjectile) return false;
+    const worldRoot = avatar.parent;
+    if (!worldRoot) return false;
+    cancelCharge();
+    deactivateSkillE(false);
+    avatar.updateMatrixWorld(true);
+    skillRSphere.updateMatrixWorld(true);
+    skillRSphere.getWorldPosition(skillRSphereLaunchOrigin);
+    skillRSphereLaunchDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
+    skillRSphereLaunchDirection.y = 0;
+    if (skillRSphereLaunchDirection.lengthSq() < 0.000001) {
+      skillRSphereLaunchDirection.set(0, 0, 1);
+    } else {
+      skillRSphereLaunchDirection.normalize();
+    }
+    skillRSphere.removeFromParent();
+    worldRoot.add(skillRSphere);
+    skillRSphere.position.copy(skillRSphereLaunchOrigin);
+    skillRSphere.visible = true;
+    skillR.active = false;
+    skillR.expiresAt = 0;
+    skillRSphereInFlight = true;
+
+    const lifetime = skillRECombo.distance / skillRECombo.speed;
+    fireProjectile({
+      origin: skillRSphereLaunchOrigin,
+      direction: skillRSphereLaunchDirection,
+      mesh: skillRSphere,
+      radius: skillRSphereConfig.radius,
+      speed: skillRECombo.speed,
+      lifetime,
+      damage: skillRECombo.damage,
+      splitOnImpact: true,
+      explosionRadius: skillRECombo.explosionRadius,
+      explosionDamage: skillRECombo.explosionDamage,
+      lifecycle: {
+        applyForces: ({ velocity }) => {
+          velocity.y = 0;
+        },
+        onRemove: ({ reason, triggerExplosion }) => {
+          if (reason === "expired") {
+            triggerExplosion();
+          }
+          skillRSphereInFlight = false;
+          resetSkillRSphereAttachment();
+        },
+      },
+    });
+    if (!bypassCooldown) {
+      skillE.cooldownUntil = now + 10000;
+    }
+    return true;
+  };
+
   const handleSkillE = () => {
     const now = performance.now();
-    if (skillE.active || (!bypassCooldown && now < skillE.cooldownUntil)) {
+    if (!bypassCooldown && now < skillE.cooldownUntil) {
       return false;
     }
+    if (skillR.active) {
+      return launchSkillRCombo(now);
+    }
+    if (skillE.active) return false;
     skillE.active = true;
     skillE.expiresAt = now + 5000;
     skillGlow.setActive(true);
@@ -449,6 +623,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     armBase.captured = false;
     cancelCharge();
     deactivateSkillE(false);
+    deactivateSkillR();
     baseRuntime.resetState?.();
   };
 
@@ -463,12 +638,23 @@ export const createRuntime: CharacterRuntimeFactory = ({
     return 10000;
   };
 
-  return {
-    ...baseRuntime,
+  const getProjectileBlockers = () =>
+    skillR.active && skillRSphere.visible
+      ? activeProjectileBlockers
+      : emptyProjectileBlockers;
+
+  return new CharacterRuntimeObject({
+    setProfile: baseRuntime.setProfile,
+    triggerSlash: baseRuntime.triggerSlash,
+    handleRightClick: baseRuntime.handleRightClick,
+    handleSkillQ: baseRuntime.handleSkillQ,
     handlePrimaryDown: beginCharge,
     handlePrimaryUp: releaseCharge,
     handlePrimaryCancel: cancelCharge,
     handleSkillE,
+    handleSkillR,
+    getProjectileBlockers,
+    isMovementLocked: () => skillR.active,
     getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs,
     resetState,
@@ -480,6 +666,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillGlow.update(args.now);
       if (skillE.active && args.now >= skillE.expiresAt) {
         deactivateSkillE(true);
+      }
+      if (skillR.active && args.now >= skillR.expiresAt) {
+        deactivateSkillR();
       }
       if (chargeState.isCharging) {
         const elapsed = args.now - chargeState.startTime;
@@ -508,6 +697,39 @@ export const createRuntime: CharacterRuntimeFactory = ({
           args.arms.find((arm) => arm !== leftArm) ??
           leftArm;
         if (rightArm && leftArm) {
+          if (skillR.active) {
+            if (
+              !armBase.captured ||
+              armBase.rightId !== rightArm.uuid ||
+              armBase.leftId !== leftArm.uuid
+            ) {
+              armBase.captured = true;
+              armBase.rightId = rightArm.uuid;
+              armBase.leftId = leftArm.uuid;
+              armBase.right.copy(rightArm.quaternion);
+              armBase.left.copy(leftArm.quaternion);
+            }
+
+            const pushAngle = -1.12 + Math.sin(args.now * 0.018) * 0.07;
+            const sideSpread = 0.22;
+
+            raiseQuat.setFromAxisAngle(raiseAxis, pushAngle);
+            skillRRightQuat.setFromAxisAngle(throwAxis, -sideSpread);
+            skillRLeftQuat.setFromAxisAngle(throwAxis, sideSpread);
+
+            rightArm.quaternion
+              .copy(armBase.right)
+              .premultiply(raiseQuat)
+              .premultiply(skillRRightQuat);
+            leftArm.quaternion
+              .copy(armBase.left)
+              .premultiply(raiseQuat)
+              .premultiply(skillRLeftQuat);
+
+            updateSkillRSphereTransform(args.now, leftArm, rightArm);
+            return;
+          }
+
           // Target: raise a single arm 180deg (PI) from front to up while charging,
           // keep the right hand frozen while charging/returning, and only allow
           // walk-swing once we are fully back to base.
@@ -574,12 +796,19 @@ export const createRuntime: CharacterRuntimeFactory = ({
             .premultiply(throwQuat);
         }
       }
+      if (skillR.active) {
+        updateSkillRSphereTransform(args.now, null, null);
+      }
     },
     dispose: () => {
       resetState();
       skillGlow.dispose();
       hud.dispose();
+      skillRSphere.removeFromParent();
+      skillRSphereGeometry.dispose();
+      skillRSphereMaterial.dispose();
       baseRuntime.dispose();
     },
-  };
+    isFacingLocked: baseRuntime.isFacingLocked,
+  });
 };

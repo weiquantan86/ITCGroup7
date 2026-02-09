@@ -103,6 +103,41 @@ export interface CharacterRuntimeUpdate {
   avatarModel: THREE.Object3D | null;
 }
 
+export type ProjectileRemoveReason = "impact" | "expired" | "cleared";
+
+export interface ProjectileLifecycleHooks {
+  applyForces?: (args: {
+    velocity: THREE.Vector3;
+    delta: number;
+    applyDefaultGravity: () => void;
+  }) => void;
+  onRemove?: (args: {
+    reason: ProjectileRemoveReason;
+    now: number;
+    position: THREE.Vector3;
+    velocity: THREE.Vector3;
+    triggerExplosion: () => void;
+  }) => void;
+}
+
+export interface FireProjectileArgs {
+  speed?: number;
+  lifetime?: number;
+  origin?: THREE.Vector3;
+  direction?: THREE.Vector3;
+  mesh?: THREE.Mesh;
+  radius?: number;
+  color?: number;
+  emissive?: number;
+  emissiveIntensity?: number;
+  scale?: number;
+  damage?: number;
+  splitOnImpact?: boolean;
+  explosionRadius?: number;
+  explosionDamage?: number;
+  lifecycle?: ProjectileLifecycleHooks;
+}
+
 export interface CharacterRuntime {
   setProfile: (nextProfile: CharacterProfile) => void;
   triggerSlash: (facing: CharacterFacing) => void;
@@ -113,6 +148,8 @@ export interface CharacterRuntime {
   handleSkillQ?: () => boolean;
   handleSkillE?: () => boolean;
   handleSkillR?: () => boolean;
+  getProjectileBlockers?: () => THREE.Object3D[];
+  isMovementLocked?: () => boolean;
   getSkillCooldownRemainingMs?: (key: SkillKey) => number | null;
   getSkillCooldownDurationMs?: (key: SkillKey) => number | null;
   resetState?: () => void;
@@ -126,18 +163,7 @@ export interface CharacterRuntimeFactory {
     avatar: THREE.Object3D;
     mount?: HTMLElement;
     noCooldown?: boolean;
-    fireProjectile?: (args?: {
-      speed?: number;
-      lifetime?: number;
-      color?: number;
-      emissive?: number;
-      emissiveIntensity?: number;
-      scale?: number;
-      damage?: number;
-      splitOnImpact?: boolean;
-      explosionRadius?: number;
-      explosionDamage?: number;
-    }) => void;
+    fireProjectile?: (args?: FireProjectileArgs) => void;
   }): CharacterRuntime;
 }
 

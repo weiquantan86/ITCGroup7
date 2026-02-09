@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const charactersDir = here;
-const projectRoot = resolve(charactersDir, "..", "..", "..", "..");
+const projectRoot = resolve(charactersDir, "..", "..", "..", "..", "..");
 
 const run = (file) =>
   new Promise((resolve, reject) => {
@@ -35,7 +35,7 @@ for (const entry of entries) {
 generators.sort();
 
 if (generators.length === 0) {
-  console.log("No character generators found in app/asset/character/");
+  console.log("No character generators found in app/asset/entity/character/");
 } else {
   console.log(`Generating ${generators.length} character(s)...`);
   for (const file of generators) {
