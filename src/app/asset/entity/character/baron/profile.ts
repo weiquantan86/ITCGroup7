@@ -7,6 +7,10 @@ export const profile: CharacterProfile = {
   energy: {
     movingPerSecond: 10,
   },
+  movement: {
+    baseSpeed: 5,
+    sprintMultiplier: 1.6,
+  },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {
@@ -43,12 +47,12 @@ export const profile: CharacterProfile = {
       arm.rotation.x = THREE.MathUtils.lerp(arm.rotation.x, targetArm, 0.2);
     });
   },
-  animateModel: ({ avatarModel, isMoving, THREE }) => {
-    const tiltTarget = isMoving ? -0.12 : 0;
+  animateModel: ({ avatarModel, isMoving, isSprinting, THREE }) => {
+    const tiltTarget = isSprinting ? 0.54 : isMoving ? 0.2 : 0;
     avatarModel.rotation.x = THREE.MathUtils.lerp(
       avatarModel.rotation.x,
       tiltTarget,
-      0.08
+      isSprinting ? 0.2 : 0.14
     );
   },
 };

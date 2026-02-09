@@ -538,6 +538,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     right: new THREE.Quaternion(),
     left: new THREE.Quaternion(),
   };
+  const armReset = {
+    pending: false,
+  };
   const baseQuat = new THREE.Quaternion();
   const raiseQuat = new THREE.Quaternion();
   const throwQuat = new THREE.Quaternion();
@@ -660,6 +663,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const deactivateSkillR = () => {
     if (!skillR.active && !skillRSphere.visible && !skillRSphereInFlight) return;
+    if (skillR.active) {
+      armReset.pending = true;
+    }
     skillR.active = false;
     skillR.expiresAt = 0;
     skillRSphereInFlight = false;
@@ -840,6 +846,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     worldRoot.add(skillRSphere);
     skillRSphere.position.copy(skillRSphereLaunchOrigin);
     skillRSphere.visible = true;
+    armReset.pending = true;
     skillR.active = false;
     skillR.expiresAt = 0;
     skillRSphereInFlight = true;
@@ -949,6 +956,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillQChargeState.fireAt = 0;
     skillE.cooldownUntil = 0;
     armAnim.raise = 0;
+    armReset.pending = false;
     armBase.captured = false;
     cancelCharge();
     deactivateSkillE(false);
@@ -1014,7 +1022,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         skillQChargeState.active = false;
         skillQChargeState.startAt = 0;
         skillQChargeState.fireAt = 0;
-        armBase.captured = false;
+        armReset.pending = true;
         fireSkillQVolley(args.now);
       }
       updateSkillQChargeFx(args.now);
@@ -1045,6 +1053,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
           args.arms.find((arm) => arm !== leftArm) ??
           leftArm;
         if (rightArm && leftArm) {
+          if (armReset.pending && armBase.captured) {
+            const sameTargets =
+              armBase.rightId === rightArm.uuid && armBase.leftId === leftArm.uuid;
+            if (sameTargets) {
+              rightArm.quaternion.copy(armBase.right);
+              leftArm.quaternion.copy(armBase.left);
+            }
+            armReset.pending = false;
+            armBase.captured = false;
+            return;
+          }
+
           if (skillQChargeState.active) {
             if (
               !armBase.captured ||
@@ -1139,6 +1159,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
           const stillLockArms =
             chargeState.isCharging || releaseActive || armAnim.raise > 0.01;
           if (!stillLockArms) {
+            if (armBase.captured) {
+              const sameTargets =
+                armBase.rightId === rightArm.uuid && armBase.leftId === leftArm.uuid;
+              if (sameTargets) {
+                rightArm.quaternion.copy(armBase.right);
+                leftArm.quaternion.copy(armBase.left);
+              }
+            }
             armBase.captured = false;
             return;
           }

@@ -10,6 +10,10 @@ export const profile: CharacterProfile = {
     hitGain: 4,
     damageTakenRatio: 0,
   },
+  movement: {
+    baseSpeed: 5,
+    sprintMultiplier: 1.6,
+  },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {

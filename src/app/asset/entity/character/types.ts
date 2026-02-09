@@ -61,6 +61,11 @@ export interface CharacterEnergyConfig {
   damageTakenRatio?: number;
 }
 
+export interface CharacterMovementConfig {
+  baseSpeed?: number;
+  sprintMultiplier?: number;
+}
+
 export interface SkillDefinition {
   id: string;
   label: string;
@@ -86,6 +91,7 @@ export interface CharacterProfile {
   pathToken: string;
   stats?: CharacterStats;
   energy?: CharacterEnergyConfig;
+  movement?: CharacterMovementConfig;
   kit?: CharacterKit;
   controls?: CharacterControls;
   slash?: SlashConfig;
@@ -98,6 +104,7 @@ export interface CharacterProfile {
   animateModel?: (args: {
     avatarModel: THREE.Object3D;
     isMoving: boolean;
+    isSprinting?: boolean;
     now?: number;
     THREE: ThreeModule;
   }) => void;
@@ -106,6 +113,7 @@ export interface CharacterProfile {
 export interface CharacterRuntimeUpdate {
   now: number;
   isMoving: boolean;
+  isSprinting?: boolean;
   aimDirectionWorld?: THREE.Vector3;
   arms: THREE.Object3D[];
   legLeft: THREE.Object3D | null;

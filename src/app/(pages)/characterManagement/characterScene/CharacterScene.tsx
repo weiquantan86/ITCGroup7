@@ -10,6 +10,12 @@ type CharacterSceneProps = {
   className?: string;
 };
 
+const withDevCacheBust = (path: string) => {
+  if (process.env.NODE_ENV !== "development") return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}v=${Date.now()}`;
+};
+
 export default function CharacterScene({
   characterPath,
   className = "",
@@ -143,10 +149,11 @@ export default function CharacterScene({
     }
 
     const resolvedPath = characterPath || "/assets/characters/adam/adam.glb";
+    const loadPath = withDevCacheBust(resolvedPath);
     let cancelled = false;
 
     loader.load(
-      resolvedPath,
+      loadPath,
       (gltf) => {
         if (cancelled || !gltf?.scene) return;
         const model = gltf.scene;

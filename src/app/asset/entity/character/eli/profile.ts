@@ -8,6 +8,10 @@ export const profile: CharacterProfile = {
     passivePerSecond: 2,
     damageTakenRatio: 0.7,
   },
+  movement: {
+    baseSpeed: 5,
+    sprintMultiplier: 1.6,
+  },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {

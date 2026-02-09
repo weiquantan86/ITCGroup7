@@ -48,6 +48,12 @@ export const createPlayer = ({
   infiniteFire?: boolean;
   onUiStateChange?: (state: PlayerUiState) => void;
 }): PlayerController => {
+  const withDevCacheBust = (path: string) => {
+    if (process.env.NODE_ENV !== "development") return path;
+    const separator = path.includes("?") ? "&" : "?";
+    return `${path}${separator}v=${Date.now()}`;
+  };
+
   const resolvedWorld: PlayerWorld = {
     sceneId: world?.sceneId,
     groundY: world?.groundY ?? -1.4,
@@ -90,14 +96,10 @@ export const createPlayer = ({
     sensitivity: 0.002,
   };
 
-  const moveState = {
-    baseSpeed: 5,
-    sprintMultiplier: 1.6,
-  };
-
   const cameraTarget = new THREE.Vector3();
   const cameraLookDir = new THREE.Vector3();
   const cameraLookAt = new THREE.Vector3();
+  const headWorldTarget = new THREE.Vector3();
   const miniTarget = new THREE.Vector3();
   const miniOffset = new THREE.Vector3();
   const moveDir = new THREE.Vector3();
@@ -267,6 +269,10 @@ export const createPlayer = ({
     hitGain: number;
     damageTakenRatio: number;
   };
+  type MovementConfigResolved = {
+    baseSpeed: number;
+    sprintMultiplier: number;
+  };
   const resolveEnergyConfig = (
     profile?: CharacterProfile
   ): EnergyConfigResolved => ({
@@ -284,8 +290,19 @@ export const createPlayer = ({
       profile?.energy?.damageTakenRatio ?? 0
     ),
   });
+  const resolveMovementConfig = (
+    profile?: CharacterProfile
+  ): MovementConfigResolved => ({
+    baseSpeed: Math.max(0.1, profile?.movement?.baseSpeed ?? 5),
+    sprintMultiplier: Math.max(
+      1,
+      profile?.movement?.sprintMultiplier ?? 1.6
+    ),
+  });
   let energyConfig: EnergyConfigResolved =
     resolveEnergyConfig(characterEntry.profile);
+  let movementConfig: MovementConfigResolved =
+    resolveMovementConfig(characterEntry.profile);
 
   const getRuntimeSkillHandler = (key: SkillKey) => {
     if (!characterRuntime) return null;
@@ -619,6 +636,7 @@ export const createPlayer = ({
     maxStats = { ...resolved };
     currentStats = { ...resolved };
     energyConfig = resolveEnergyConfig(characterEntry.profile);
+    movementConfig = resolveMovementConfig(characterEntry.profile);
     healthPool.reset(maxStats.health, maxStats.health);
     syncHealthFromPool();
     skillCooldownDurations = resolveSkillCooldownDurations(characterEntry.profile);
@@ -650,6 +668,7 @@ export const createPlayer = ({
 
   const loadCharacter = (path?: string) => {
     const resolvedPath = path || defaultCharacterPath;
+    const loadPath = withDevCacheBust(resolvedPath);
     const nextEntry = getCharacterEntry(resolvedPath);
     if (characterRuntime) {
       clearActiveProjectiles();
@@ -665,7 +684,7 @@ export const createPlayer = ({
       noCooldown: infiniteFire,
     });
     loader.load(
-      resolvedPath,
+      loadPath,
       (gltf) => {
         if (!isMounted || !gltf?.scene) return;
         if (avatarModel) {
@@ -1397,12 +1416,11 @@ fireProjectile = (args?: FireProjectileArgs) => {
   const update = (now: number, delta: number) => {
     const movementLocked = isRuntimeMovementLocked();
     const hasMoveInput = movementLocked ? false : resolveInputDirection(moveDir);
+    const shiftHeld = pressedKeys.has("shift");
     let isMoving = false;
     if (hasMoveInput) {
-      const speedBoost = pressedKeys.has("shift")
-        ? moveState.sprintMultiplier
-        : 1;
-      const moveSpeed = moveState.baseSpeed * speedBoost * delta;
+      const speedBoost = shiftHeld ? movementConfig.sprintMultiplier : 1;
+      const moveSpeed = movementConfig.baseSpeed * speedBoost * delta;
       const nextX = avatar.position.x + moveDir.x * moveSpeed;
       const nextZ = avatar.position.z + moveDir.z * moveSpeed;
       const clamped = clampToBounds(nextX, nextZ);
@@ -1412,6 +1430,7 @@ fireProjectile = (args?: FireProjectileArgs) => {
         isMoving = true;
       }
     }
+    const isSprinting = isMoving && shiftHeld;
 
     velocityY += gravity * delta;
     avatar.position.y += velocityY * delta;
@@ -1441,11 +1460,16 @@ fireProjectile = (args?: FireProjectileArgs) => {
       lookPivot.rotation.x = headPitch * 0.35;
     }
 
-    cameraTarget.set(
-      avatar.position.x,
-      avatar.position.y + eyeHeight,
-      avatar.position.z
-    );
+    if (characterEntry.profile.id === "baron" && headBone) {
+      headBone.getWorldPosition(headWorldTarget);
+      cameraTarget.copy(headWorldTarget);
+    } else {
+      cameraTarget.set(
+        avatar.position.x,
+        avatar.position.y + eyeHeight,
+        avatar.position.z
+      );
+    }
     cameraLookDir.set(
       Math.sin(lookState.yaw) * Math.cos(lookState.pitch),
       Math.sin(lookState.pitch),
@@ -1474,6 +1498,7 @@ fireProjectile = (args?: FireProjectileArgs) => {
       characterRuntime.update({
         now,
         isMoving,
+        isSprinting,
         aimDirectionWorld: cameraLookDir,
         arms,
         legLeft,

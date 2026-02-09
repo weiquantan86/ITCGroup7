@@ -7,6 +7,10 @@ export const profile: CharacterProfile = {
   energy: {
     hitGain: 18,
   },
+  movement: {
+    baseSpeed: 5,
+    sprintMultiplier: 1.6,
+  },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {

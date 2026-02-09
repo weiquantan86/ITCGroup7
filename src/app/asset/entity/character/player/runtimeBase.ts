@@ -365,6 +365,7 @@ export const createCharacterRuntime = ({
   const update = ({
     now,
     isMoving,
+    isSprinting = false,
     arms,
     legLeft,
     legRight,
@@ -379,7 +380,13 @@ export const createCharacterRuntime = ({
     }
     updateArmsAndLegs({ now, isMoving, arms, legLeft, legRight });
     if (avatarModel && currentProfile?.animateModel) {
-      currentProfile.animateModel({ avatarModel, isMoving, now, THREE });
+      currentProfile.animateModel({
+        avatarModel,
+        isMoving,
+        isSprinting,
+        now,
+        THREE,
+      });
     }
     updateSlashAnchorPosition();
     updateEffects({ now });
