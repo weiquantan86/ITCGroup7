@@ -7,6 +7,7 @@ import { getSceneDefinition, type SceneUiState } from "./registry";
 
 export default function SceneLauncher({
   sceneId = "grass",
+  gameMode = "default",
   characterPath,
   decorations,
   className,
@@ -18,6 +19,7 @@ export default function SceneLauncher({
   onPlayerStateChange,
 }: {
   sceneId?: string;
+  gameMode?: string;
   characterPath?: string;
   decorations?: ReactNode;
   className?: string;
@@ -70,6 +72,7 @@ export default function SceneLauncher({
       mount,
       characterPath,
       world: sceneSetup?.world,
+      gameMode,
       hideLocalHead,
       hideLocalBody,
       showMiniMap,
@@ -109,6 +112,7 @@ export default function SceneLauncher({
   }, [
     characterPath,
     sceneId,
+    gameMode,
     hideLocalHead,
     hideLocalBody,
     showMiniMap,

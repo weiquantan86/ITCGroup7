@@ -97,6 +97,7 @@ export interface CharacterProfile {
 export interface CharacterRuntimeUpdate {
   now: number;
   isMoving: boolean;
+  aimDirectionWorld?: THREE.Vector3;
   arms: THREE.Object3D[];
   legLeft: THREE.Object3D | null;
   legRight: THREE.Object3D | null;
@@ -127,6 +128,7 @@ export interface FireProjectileArgs {
   direction?: THREE.Vector3;
   mesh?: THREE.Mesh;
   radius?: number;
+  targetHitRadius?: number;
   color?: number;
   emissive?: number;
   emissiveIntensity?: number;

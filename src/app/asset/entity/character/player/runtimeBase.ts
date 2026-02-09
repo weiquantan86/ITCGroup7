@@ -6,7 +6,7 @@ import type {
   CharacterRuntime,
   CharacterRuntimeUpdate,
   SkillKey,
-} from "./types";
+} from "../types";
 
 export const createCharacterRuntime = ({
   avatar,

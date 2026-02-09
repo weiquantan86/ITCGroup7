@@ -105,6 +105,7 @@ const createGrassScene = (scene: THREE.Scene): SceneSetupResult => {
   scene.add(trees);
 
   const world: PlayerWorld = {
+    sceneId: "grass",
     groundY: ground.position.y,
     bounds: {
       minX: -groundSize.width / 2 + 3,
@@ -326,6 +327,7 @@ const createRangeScene = (scene: THREE.Scene): SceneSetupResult => {
   });
 
   const world: PlayerWorld = {
+    sceneId: "range",
     groundY,
     bounds,
     projectileColliders: [rangeGroup],
@@ -1163,9 +1165,14 @@ const createTrainingScene = (
   ];
 
   const world: PlayerWorld = {
+    sceneId: "training",
     groundY,
     playerSpawn,
-    resetOnDeath: true,
+    onPlayerDeath: ({ gameMode, resetPlayer }) => {
+      if (gameMode !== "training") return "ignore";
+      resetPlayer();
+      return "handled";
+    },
     bounds,
     projectileColliders,
     attackTargets,
@@ -1211,7 +1218,7 @@ const createTrainingScene = (
 };
 
 const createEmptyScene = (): SceneSetupResult => ({
-  world: { groundY: -1.4 },
+  world: { sceneId: "empty", groundY: -1.4 },
 });
 
 const sceneRegistry: Record<string, SceneDefinition> = {

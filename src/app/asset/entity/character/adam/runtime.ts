@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { createCharacterRuntime } from "../runtimeBase";
-import { CharacterRuntimeObject } from "../runtimeObject";
+import { createCharacterRuntime } from "../player/runtimeBase";
+import { CharacterRuntimeObject } from "../player/runtimeObject";
 import type { CharacterRuntimeFactory, SkillKey } from "../types";
 import { profile } from "./profile";
 
@@ -275,6 +275,102 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
     };
   };
 
+type ElectricAura = {
+  group: THREE.Group;
+  setVisible: (visible: boolean) => void;
+  update: (now: number) => void;
+  dispose: () => void;
+};
+
+const createElectricAura = ({
+  radius,
+  arcCount,
+  pointsPerArc,
+  color = 0x22c55e,
+  opacity = 0.72,
+  jitter = 0.2,
+}: {
+  radius: number;
+  arcCount: number;
+  pointsPerArc: number;
+  color?: number;
+  opacity?: number;
+  jitter?: number;
+}): ElectricAura => {
+  const group = new THREE.Group();
+  const material = new THREE.LineBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const arcs: Array<{
+    geometry: THREE.BufferGeometry;
+    positions: Float32Array;
+    phase: number;
+    speed: number;
+    lift: number;
+  }> = [];
+
+  for (let i = 0; i < arcCount; i += 1) {
+    const positions = new Float32Array(pointsPerArc * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const line = new THREE.Line(geometry, material);
+    line.rotation.y = (i / arcCount) * Math.PI * 2;
+    line.rotation.x = (Math.random() - 0.5) * 0.9;
+    line.rotation.z = (Math.random() - 0.5) * 0.9;
+    group.add(line);
+    arcs.push({
+      geometry,
+      positions,
+      phase: Math.random() * Math.PI * 2,
+      speed: 1 + Math.random() * 1.4,
+      lift: 1 + Math.random() * 0.45,
+    });
+  }
+
+  const update = (now: number) => {
+    const time = now * 0.001;
+    for (let i = 0; i < arcs.length; i += 1) {
+      const arc = arcs[i];
+      const position = arc.positions;
+      for (let j = 0; j < pointsPerArc; j += 1) {
+        const t = j / (pointsPerArc - 1);
+        const angle = t * Math.PI * 2 + arc.phase + time * arc.speed;
+        const pulse =
+          1 + Math.sin(time * 5.6 + j * 0.9 + arc.phase * 1.5) * jitter;
+        const radial = radius * pulse;
+        const x = Math.cos(angle) * radial;
+        const z = Math.sin(angle) * radial;
+        const y =
+          (t - 0.5) * radius * 0.85 * arc.lift +
+          Math.sin(time * 7.1 + j * 0.7 + arc.phase) * radius * 0.12;
+        const idx = j * 3;
+        position[idx] = x;
+        position[idx + 1] = y;
+        position[idx + 2] = z;
+      }
+      (
+        arc.geometry.attributes.position as THREE.BufferAttribute
+      ).needsUpdate = true;
+    }
+  };
+
+  return {
+    group,
+    setVisible: (visible: boolean) => {
+      group.visible = visible;
+    },
+    update,
+    dispose: () => {
+      arcs.forEach((arc) => arc.geometry.dispose());
+      material.dispose();
+    },
+  };
+};
+
 export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
   mount,
@@ -323,9 +419,27 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillRECombo = {
     speed: 14,
     distance: 5,
-    damage: 52,
+    damage: 74,
     explosionRadius: 12,
-    explosionDamage: 40,
+    explosionDamage: 60,
+  };
+  const skillQVolley = {
+    count: 3,
+    chargeMs: 2000,
+    speed: 17,
+    distance: 20,
+    spreadRad: THREE.MathUtils.degToRad(18),
+    lateralSpacing: 1.7,
+    forwardSpawnOffset: 2.3,
+    verticalSpawnOffset: 1.25,
+    radius: 1.45,
+    targetHitRadius: 1.7,
+    damage: 42,
+  };
+  const skillQChargeState = {
+    active: false,
+    startAt: 0,
+    fireAt: 0,
   };
   const skillRSphereGeometry = new THREE.SphereGeometry(
     skillRSphereConfig.radius,
@@ -347,6 +461,66 @@ export const createRuntime: CharacterRuntimeFactory = ({
   skillRSphere.visible = false;
   skillRSphere.renderOrder = 8;
   avatar.add(skillRSphere);
+  const skillQProjectileGeometry = new THREE.SphereGeometry(
+    skillQVolley.radius,
+    36,
+    26
+  );
+  const skillQProjectileMaterial = new THREE.MeshStandardMaterial({
+    color: 0x22c55e,
+    roughness: 0.18,
+    metalness: 0.06,
+    emissive: 0x22c55e,
+    emissiveIntensity: 1.2,
+  });
+  const skillQChargeShellGeometry = new THREE.CapsuleGeometry(0.92, 1.85, 6, 16);
+  const skillQChargeShellMaterial = new THREE.MeshBasicMaterial({
+    color: 0x22c55e,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const skillQChargeShell = new THREE.Mesh(
+    skillQChargeShellGeometry,
+    skillQChargeShellMaterial
+  );
+  skillQChargeShell.position.set(0, 1.15, 0);
+  skillQChargeShell.visible = false;
+  avatar.add(skillQChargeShell);
+  const skillQChargeAura = createElectricAura({
+    radius: 1.75,
+    arcCount: 16,
+    pointsPerArc: 18,
+    opacity: 0.62,
+    jitter: 0.28,
+  });
+  skillQChargeAura.group.position.set(0, 1.15, 0);
+  skillQChargeAura.setVisible(false);
+  avatar.add(skillQChargeAura.group);
+  type SkillQProjectileEntry = {
+    mesh: THREE.Mesh;
+    aura: ElectricAura;
+  };
+  const skillQProjectilePoolSize = 12;
+  const skillQProjectilePool: SkillQProjectileEntry[] = Array.from(
+    { length: skillQProjectilePoolSize },
+    () => {
+      const mesh = new THREE.Mesh(skillQProjectileGeometry, skillQProjectileMaterial);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      const aura = createElectricAura({
+        radius: skillQVolley.radius * 1.06,
+        arcCount: 9,
+        pointsPerArc: 14,
+        opacity: 0.88,
+        jitter: 0.23,
+      });
+      aura.setVisible(false);
+      mesh.add(aura.group);
+      return { mesh, aura };
+    }
+  );
   const activeProjectileBlockers: THREE.Object3D[] = [skillRSphere];
   const emptyProjectileBlockers: THREE.Object3D[] = [];
   const armBase = {
@@ -366,8 +540,36 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillRRightArmWorld = new THREE.Vector3();
   const skillRForwardWorld = new THREE.Vector3();
   const skillRSphereLaunchOrigin = new THREE.Vector3();
-  const skillRSphereLaunchDirection = new THREE.Vector3();
+  const skillQAimDirection = new THREE.Vector3(0, 0, 1);
+  const skillQOrigin = new THREE.Vector3();
+  const skillQBaseDirection = new THREE.Vector3();
+  const skillQRight = new THREE.Vector3();
+  const skillQShotOrigin = new THREE.Vector3();
+  const skillQShotDirection = new THREE.Vector3();
+  const skillQUp = new THREE.Vector3(0, 1, 0);
   let skillRSphereInFlight = false;
+
+  const acquireSkillQProjectile = () => {
+    for (let i = 0; i < skillQProjectilePool.length; i += 1) {
+      const entry = skillQProjectilePool[i];
+      if (!entry.mesh.parent) return entry;
+    }
+    const mesh = new THREE.Mesh(skillQProjectileGeometry, skillQProjectileMaterial);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    const aura = createElectricAura({
+      radius: skillQVolley.radius * 1.06,
+      arcCount: 9,
+      pointsPerArc: 14,
+      opacity: 0.88,
+      jitter: 0.23,
+    });
+    aura.setVisible(false);
+    mesh.add(aura.group);
+    const entry = { mesh, aura };
+    skillQProjectilePool.push(entry);
+    return entry;
+  };
 
   const scoreArmCandidate = (
     arm: THREE.Object3D,
@@ -400,7 +602,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const beginCharge = () => {
-    if (chargeState.isCharging || !fireProjectile) return;
+    if (chargeState.isCharging || skillQChargeState.active || !fireProjectile) {
+      return;
+    }
     chargeState.isCharging = true;
     chargeState.startTime = performance.now();
     chargeState.ratio = 0;
@@ -445,6 +649,35 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetSkillRSphereAttachment();
   };
 
+  const setSkillQChargeFxActive = (active: boolean) => {
+    skillQChargeShell.visible = active;
+    skillQChargeAura.setVisible(active);
+    if (!active) {
+      skillQChargeShellMaterial.opacity = 0;
+      skillQChargeShell.scale.setScalar(1);
+    }
+  };
+
+  const updateSkillQChargeFx = (now: number) => {
+    if (!skillQChargeState.active) {
+      setSkillQChargeFxActive(false);
+      return;
+    }
+    setSkillQChargeFxActive(true);
+    const progress = THREE.MathUtils.clamp(
+      (now - skillQChargeState.startAt) / skillQVolley.chargeMs,
+      0,
+      1
+    );
+    skillQChargeAura.update(now);
+    skillQChargeShellMaterial.opacity =
+      0.12 +
+      progress * 0.13 +
+      Math.max(0, Math.sin(now * 0.018 + progress * Math.PI * 2)) * 0.12;
+    const pulse = 1 + Math.sin(now * 0.02) * 0.05 + progress * 0.08;
+    skillQChargeShell.scale.setScalar(pulse);
+  };
+
   const updateSkillRSphereTransform = (
     now: number,
     leftArm: THREE.Object3D | null,
@@ -487,12 +720,95 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const handleSkillR = () => {
+    if (skillQChargeState.active) return false;
     if (skillR.active || skillRSphereInFlight) return false;
     cancelCharge();
     armBase.captured = false;
     skillR.active = true;
     skillR.expiresAt = performance.now() + skillRDurationMs;
     skillRSphere.visible = true;
+    return true;
+  };
+
+  const fireSkillQVolley = (now: number) => {
+    if (!fireProjectile) return;
+
+    avatar.updateMatrixWorld(true);
+    avatar.getWorldPosition(skillQOrigin);
+    skillQBaseDirection.copy(skillQAimDirection);
+    if (skillQBaseDirection.lengthSq() < 0.000001) {
+      skillQBaseDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
+    }
+    skillQBaseDirection.normalize();
+
+    skillQRight.crossVectors(skillQUp, skillQBaseDirection);
+    if (skillQRight.lengthSq() < 0.000001) {
+      skillQRight.set(1, 0, 0).applyQuaternion(avatar.quaternion);
+    }
+    if (skillQRight.lengthSq() < 0.000001) {
+      skillQRight.set(1, 0, 0);
+    } else {
+      skillQRight.normalize();
+    }
+
+    skillQOrigin
+      .addScaledVector(skillQBaseDirection, skillQVolley.forwardSpawnOffset);
+    skillQOrigin.y += skillQVolley.verticalSpawnOffset;
+    const lifetime = skillQVolley.distance / skillQVolley.speed;
+    const sideOffsets = [0, 1, -1];
+
+    for (let i = 0; i < sideOffsets.length; i += 1) {
+      const side = sideOffsets[i];
+      const entry = acquireSkillQProjectile();
+      const yawOffset = side * skillQVolley.spreadRad;
+
+      skillQShotDirection
+        .copy(skillQBaseDirection)
+        .applyAxisAngle(skillQUp, yawOffset)
+        .normalize();
+      skillQShotOrigin
+        .copy(skillQOrigin)
+        .addScaledVector(skillQRight, side * skillQVolley.lateralSpacing);
+
+      entry.mesh.visible = true;
+      entry.aura.setVisible(true);
+      entry.aura.update(now);
+      fireProjectile({
+        origin: skillQShotOrigin,
+        direction: skillQShotDirection,
+        mesh: entry.mesh,
+        radius: skillQVolley.radius,
+        targetHitRadius: skillQVolley.targetHitRadius,
+        speed: skillQVolley.speed,
+        lifetime,
+        damage: skillQVolley.damage,
+        splitOnImpact: false,
+        lifecycle: {
+          applyForces: () => {
+            entry.aura.update(performance.now());
+            entry.mesh.rotation.x += 0.08;
+            entry.mesh.rotation.y += 0.14;
+          },
+          onRemove: () => {
+            entry.aura.setVisible(false);
+            entry.mesh.rotation.set(0, 0, 0);
+          },
+        },
+      });
+    }
+  };
+
+  const handleSkillQ = () => {
+    if (!fireProjectile) return false;
+    if (skillQChargeState.active) return false;
+    if (skillR.active || skillRSphereInFlight) return false;
+
+    const now = performance.now();
+    cancelCharge();
+    armBase.captured = false;
+    skillQChargeState.active = true;
+    skillQChargeState.startAt = now;
+    skillQChargeState.fireAt = now + skillQVolley.chargeMs;
     return true;
   };
 
@@ -505,13 +821,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     avatar.updateMatrixWorld(true);
     skillRSphere.updateMatrixWorld(true);
     skillRSphere.getWorldPosition(skillRSphereLaunchOrigin);
-    skillRSphereLaunchDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
-    skillRSphereLaunchDirection.y = 0;
-    if (skillRSphereLaunchDirection.lengthSq() < 0.000001) {
-      skillRSphereLaunchDirection.set(0, 0, 1);
-    } else {
-      skillRSphereLaunchDirection.normalize();
-    }
     skillRSphere.removeFromParent();
     worldRoot.add(skillRSphere);
     skillRSphere.position.copy(skillRSphereLaunchOrigin);
@@ -523,7 +832,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const lifetime = skillRECombo.distance / skillRECombo.speed;
     fireProjectile({
       origin: skillRSphereLaunchOrigin,
-      direction: skillRSphereLaunchDirection,
       mesh: skillRSphere,
       radius: skillRSphereConfig.radius,
       speed: skillRECombo.speed,
@@ -533,8 +841,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       explosionRadius: skillRECombo.explosionRadius,
       explosionDamage: skillRECombo.explosionDamage,
       lifecycle: {
-        applyForces: ({ velocity }) => {
-          velocity.y = 0;
+        // Keep camera aim direction exactly; just disable default gravity.
+        applyForces: () => {
         },
         onRemove: ({ reason, triggerExplosion }) => {
           if (reason === "expired") {
@@ -552,6 +860,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const handleSkillE = () => {
+    if (skillQChargeState.active) return false;
     const now = performance.now();
     if (!bypassCooldown && now < skillE.cooldownUntil) {
       return false;
@@ -618,12 +927,20 @@ export const createRuntime: CharacterRuntimeFactory = ({
     chargeState.startTime = 0;
     chargeState.ratio = 0;
     chargeState.releaseUntil = 0;
+    skillQChargeState.active = false;
+    skillQChargeState.startAt = 0;
+    skillQChargeState.fireAt = 0;
     skillE.cooldownUntil = 0;
     armAnim.raise = 0;
     armBase.captured = false;
     cancelCharge();
     deactivateSkillE(false);
     deactivateSkillR();
+    setSkillQChargeFxActive(false);
+    skillQProjectilePool.forEach((entry) => {
+      entry.aura.setVisible(false);
+      entry.mesh.rotation.set(0, 0, 0);
+    });
     baseRuntime.resetState?.();
   };
 
@@ -646,15 +963,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
   return new CharacterRuntimeObject({
     setProfile: baseRuntime.setProfile,
     triggerSlash: baseRuntime.triggerSlash,
-    handleRightClick: baseRuntime.handleRightClick,
-    handleSkillQ: baseRuntime.handleSkillQ,
+    handleRightClick: (facing) => {
+      if (skillQChargeState.active) return;
+      baseRuntime.handleRightClick(facing);
+    },
+    handleSkillQ,
     handlePrimaryDown: beginCharge,
     handlePrimaryUp: releaseCharge,
     handlePrimaryCancel: cancelCharge,
     handleSkillE,
     handleSkillR,
     getProjectileBlockers,
-    isMovementLocked: () => skillR.active,
+    isMovementLocked: () => skillR.active || skillQChargeState.active,
     getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs,
     resetState,
@@ -664,12 +984,23 @@ export const createRuntime: CharacterRuntimeFactory = ({
         skillGlow.bindModel(args.avatarModel);
       }
       skillGlow.update(args.now);
+      if (args.aimDirectionWorld && args.aimDirectionWorld.lengthSq() > 0.000001) {
+        skillQAimDirection.copy(args.aimDirectionWorld).normalize();
+      }
       if (skillE.active && args.now >= skillE.expiresAt) {
         deactivateSkillE(true);
       }
       if (skillR.active && args.now >= skillR.expiresAt) {
         deactivateSkillR();
       }
+      if (skillQChargeState.active && args.now >= skillQChargeState.fireAt) {
+        skillQChargeState.active = false;
+        skillQChargeState.startAt = 0;
+        skillQChargeState.fireAt = 0;
+        armBase.captured = false;
+        fireSkillQVolley(args.now);
+      }
+      updateSkillQChargeFx(args.now);
       if (chargeState.isCharging) {
         const elapsed = args.now - chargeState.startTime;
         const ratio = THREE.MathUtils.clamp(
@@ -697,6 +1028,43 @@ export const createRuntime: CharacterRuntimeFactory = ({
           args.arms.find((arm) => arm !== leftArm) ??
           leftArm;
         if (rightArm && leftArm) {
+          if (skillQChargeState.active) {
+            if (
+              !armBase.captured ||
+              armBase.rightId !== rightArm.uuid ||
+              armBase.leftId !== leftArm.uuid
+            ) {
+              armBase.captured = true;
+              armBase.rightId = rightArm.uuid;
+              armBase.leftId = leftArm.uuid;
+              armBase.right.copy(rightArm.quaternion);
+              armBase.left.copy(leftArm.quaternion);
+            }
+
+            const progress = THREE.MathUtils.clamp(
+              (args.now - skillQChargeState.startAt) / skillQVolley.chargeMs,
+              0,
+              1
+            );
+            const pushAngle =
+              -0.62 - progress * 0.78 + Math.sin(args.now * 0.024) * 0.06;
+            const sideSpread = 0.16 + Math.sin(args.now * 0.021) * 0.03;
+
+            raiseQuat.setFromAxisAngle(raiseAxis, pushAngle);
+            skillRRightQuat.setFromAxisAngle(throwAxis, -sideSpread);
+            skillRLeftQuat.setFromAxisAngle(throwAxis, sideSpread);
+
+            rightArm.quaternion
+              .copy(armBase.right)
+              .premultiply(raiseQuat)
+              .premultiply(skillRRightQuat);
+            leftArm.quaternion
+              .copy(armBase.left)
+              .premultiply(raiseQuat)
+              .premultiply(skillRLeftQuat);
+            return;
+          }
+
           if (skillR.active) {
             if (
               !armBase.captured ||
@@ -807,8 +1175,20 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillRSphere.removeFromParent();
       skillRSphereGeometry.dispose();
       skillRSphereMaterial.dispose();
+      skillQChargeAura.group.removeFromParent();
+      skillQChargeAura.dispose();
+      skillQChargeShell.removeFromParent();
+      skillQChargeShellGeometry.dispose();
+      skillQChargeShellMaterial.dispose();
+      skillQProjectilePool.forEach((entry) => {
+        entry.aura.dispose();
+        entry.mesh.removeFromParent();
+      });
+      skillQProjectileGeometry.dispose();
+      skillQProjectileMaterial.dispose();
       baseRuntime.dispose();
     },
     isFacingLocked: baseRuntime.isFacingLocked,
   });
 };
+

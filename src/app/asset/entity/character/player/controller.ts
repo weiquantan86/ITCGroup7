@@ -1,12 +1,20 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { LinearProjectileUpdater } from "../../object/projectile/linearUpdater";
+import { LinearProjectileUpdater } from "../../../object/projectile/linearUpdater";
 import type {
-  Projectile as CharacterProjectile,
   ProjectileExplosionFragment,
-} from "../../object/projectile/types";
-import { HpPool } from "../hpPool";
+} from "../../../object/projectile/types";
+import { HpPool } from "../../hpPool";
 import { getCharacterEntry, resolveCharacterStats } from "./registry";
+import { bindPlayerInput } from "./input";
+import { createStatusHud } from "./statusHud";
+import type {
+  PlayerAttackTarget,
+  PlayerController,
+  PlayerUiState,
+  PlayerWorld,
+  Projectile,
+} from "./types";
 import type {
   FireProjectileArgs,
   CharacterProfile,
@@ -15,170 +23,14 @@ import type {
   CharacterRuntime,
   CharacterStats,
   SkillKey,
-} from "./types";
-
-export type RecoveryZoneType = "health" | "mana" | "both";
-
-export interface RecoveryZone {
-  id: string;
-  type: RecoveryZoneType;
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-  cooldownMs?: number;
-}
-
-export type PlayerAttackSource = "projectile" | "slash";
-
-export interface PlayerAttackHit {
-  now: number;
-  source: PlayerAttackSource;
-  damage: number;
-  point: THREE.Vector3;
-  direction: THREE.Vector3;
-}
-
-export interface PlayerAttackTarget {
-  id: string;
-  object: THREE.Object3D;
-  isActive?: () => boolean;
-  onHit: (hit: PlayerAttackHit) => void;
-}
-
-export interface PlayerWorldTickArgs {
-  now: number;
-  delta: number;
-  player: THREE.Object3D;
-  camera: THREE.PerspectiveCamera;
-  currentStats: CharacterStats;
-  maxStats: CharacterStats;
-  applyDamage: (amount: number) => number;
-  projectileBlockers: THREE.Object3D[];
-}
-
-export interface PlayerWorld {
-  groundY: number;
-  playerSpawn?: THREE.Vector3;
-  resetOnDeath?: boolean;
-  isBlocked?: (x: number, z: number) => boolean;
-  projectileColliders?: THREE.Object3D[];
-  recoveryZones?: RecoveryZone[];
-  attackTargets?: PlayerAttackTarget[];
-  onTick?: (args: PlayerWorldTickArgs) => void;
-  onPlayerReset?: () => void;
-  bounds?: {
-    minX: number;
-    maxX: number;
-    minZ: number;
-    maxZ: number;
-  };
-}
-
-export interface PlayerUiState {
-  cooldowns: Record<SkillKey, number>;
-  cooldownDurations: Record<SkillKey, number>;
-  manaCurrent: number;
-  manaMax: number;
-  infiniteFire: boolean;
-}
-
-export interface PlayerController {
-  camera: THREE.PerspectiveCamera;
-  miniCamera: THREE.PerspectiveCamera;
-  projectiles: Projectile[];
-  update: (now: number, delta: number) => void;
-  render: (renderer: THREE.WebGLRenderer) => void;
-  resize: (width: number, height: number) => void;
-  setCharacterPath: (path?: string) => void;
-  dispose: () => void;
-}
-
-export type Projectile = CharacterProjectile;
-
-type StatusHud = {
-  setStats: (current: CharacterStats, max: CharacterStats) => void;
-  dispose: () => void;
-};
-
-const createStatusHud = (mount?: HTMLElement): StatusHud => {
-  if (!mount) {
-    return { setStats: () => {}, dispose: () => {} };
-  }
-
-  const host = mount.parentElement ?? mount;
-  if (!host.style.position) {
-    host.style.position = "relative";
-  }
-
-  const hud = document.createElement("div");
-  hud.style.cssText =
-    "position:absolute;left:16px;top:16px;z-index:6;display:flex;" +
-    "flex-direction:column;gap:6px;padding:10px 12px;border-radius:12px;" +
-    "background:rgba(2,6,23,0.55);border:1px solid rgba(148,163,184,0.25);" +
-    "box-shadow:0 10px 28px rgba(2,6,23,0.6);pointer-events:none;";
-
-  const createBar = (label: string, fill: string, glow: string) => {
-    const row = document.createElement("div");
-    row.style.cssText = "display:flex;align-items:center;gap:8px;min-width:320px;";
-    const text = document.createElement("span");
-    text.textContent = label;
-    text.style.cssText =
-      "width:26px;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;" +
-      "color:rgba(226,232,240,0.9);";
-    const value = document.createElement("span");
-    value.textContent = "0/0";
-    value.style.cssText =
-      "min-width:58px;text-align:right;font-size:11px;font-variant-numeric:tabular-nums;" +
-      "color:rgba(226,232,240,0.85);";
-    const track = document.createElement("div");
-    track.style.cssText =
-      "position:relative;flex:1;height:10px;border-radius:999px;overflow:hidden;" +
-      "background:rgba(15,23,42,0.85);border:1px solid rgba(148,163,184,0.2);";
-    const fillBar = document.createElement("div");
-    fillBar.style.cssText =
-      `height:100%;width:100%;background:${fill};` +
-      `box-shadow:0 0 12px ${glow};transition:width 120ms ease;`;
-    track.appendChild(fillBar);
-    row.append(text, track, value);
-    return { row, fillBar, value };
-  };
-
-  const healthBar = createBar("HP", "#ef4444", "rgba(239,68,68,0.65)");
-  const manaBar = createBar("MP", "#38bdf8", "rgba(56,189,248,0.6)");
-  hud.append(healthBar.row, manaBar.row);
-  host.appendChild(hud);
-
-  const updateFill = (
-    fillBar: HTMLDivElement,
-    value: HTMLSpanElement,
-    current: number,
-    max: number
-  ) => {
-    const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
-    fillBar.style.width = `${Math.round(ratio * 100)}%`;
-    value.textContent = `${Math.max(0, Math.round(current))}/${Math.max(
-      0,
-      Math.round(max)
-    )}`;
-  };
-
-  return {
-    setStats: (current: CharacterStats, max: CharacterStats) => {
-      updateFill(healthBar.fillBar, healthBar.value, current.health, max.health);
-      updateFill(manaBar.fillBar, manaBar.value, current.mana, max.mana);
-    },
-    dispose: () => {
-      hud.parentElement?.removeChild(hud);
-    },
-  };
-};
+} from "../types";
 
 export const createPlayer = ({
   scene,
   mount,
   characterPath,
   world,
+  gameMode = "default",
   hideLocalHead = true,
   hideLocalBody = false,
   showMiniMap = true,
@@ -189,6 +41,7 @@ export const createPlayer = ({
   mount: HTMLElement;
   characterPath?: string;
   world?: PlayerWorld;
+  gameMode?: string;
   hideLocalHead?: boolean;
   hideLocalBody?: boolean;
   showMiniMap?: boolean;
@@ -196,6 +49,7 @@ export const createPlayer = ({
   onUiStateChange?: (state: PlayerUiState) => void;
 }): PlayerController => {
   const resolvedWorld: PlayerWorld = {
+    sceneId: world?.sceneId,
     groundY: world?.groundY ?? -1.4,
     playerSpawn: world?.playerSpawn,
     resetOnDeath: world?.resetOnDeath,
@@ -204,6 +58,7 @@ export const createPlayer = ({
     recoveryZones: world?.recoveryZones,
     attackTargets: world?.attackTargets,
     onTick: world?.onTick,
+    onPlayerDeath: world?.onPlayerDeath,
     onPlayerReset: world?.onPlayerReset,
     bounds: world?.bounds,
   };
@@ -226,19 +81,6 @@ export const createPlayer = ({
   }
 
   const pressedKeys = new Set<string>();
-  const keyMap: Record<string, string> = {
-    KeyW: "w",
-    KeyA: "a",
-    KeyS: "s",
-    KeyD: "d",
-    ArrowUp: "up",
-    ArrowLeft: "left",
-    ArrowDown: "down",
-    ArrowRight: "right",
-    ShiftLeft: "shift",
-    ShiftRight: "shift",
-    Space: "space",
-  };
 
   const lookState = {
     yaw: 0,
@@ -281,7 +123,6 @@ export const createPlayer = ({
   const miniViewport = { size: 0, margin: 14 };
   const headLayer = 1;
   const bodyLayer = 2;
-  let isPointerLockRequested = false;
   let projectileId = 0;
   const projectiles: Projectile[] = [];
   const projectileLifecycleHooks = new Map<number, ProjectileLifecycleHooks>();
@@ -292,6 +133,7 @@ export const createPlayer = ({
   const recoveryZones = resolvedWorld.recoveryZones ?? [];
   const attackTargets = resolvedWorld.attackTargets ?? [];
   const worldTick = resolvedWorld.onTick;
+  const worldPlayerDeath = resolvedWorld.onPlayerDeath;
   const worldPlayerReset = resolvedWorld.onPlayerReset;
   const resetOnDeath = Boolean(resolvedWorld.resetOnDeath);
   const recoveryZoneLastTriggered = new Map<string, number>();
@@ -299,6 +141,10 @@ export const createPlayer = ({
   const projectileUpdater = new LinearProjectileUpdater();
   const attackRayHitPoint = new THREE.Vector3();
   const attackRayDirection = new THREE.Vector3();
+  const attackTargetBounds = new THREE.Box3();
+  const attackTargetSphere = new THREE.Sphere();
+  const attackTargetCenterOffset = new THREE.Vector3();
+  const attackTargetClosestPoint = new THREE.Vector3();
   const projectileGeometry = new THREE.SphereGeometry(projectileRadius, 12, 12);
   const projectileMaterial = new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
@@ -392,11 +238,6 @@ export const createPlayer = ({
     current: currentStats.health,
   });
   let statsDirty = true;
-  const skillCodeMap: Record<string, SkillKey> = {
-    KeyQ: "q",
-    KeyE: "e",
-    KeyR: "r",
-  };
   const resolveSkillCooldownDurations = (
     profile?: CharacterProfile
   ): Record<SkillKey, number> => ({
@@ -595,8 +436,30 @@ export const createPlayer = ({
       statsDirty = true;
       syncStatsHud();
     }
-    if (!healthPool.isAlive && resetOnDeath) {
-      resetPlayerState(now);
+    if (!healthPool.isAlive) {
+      let didReset = false;
+      const resetPlayer = () => {
+        if (didReset) return;
+        didReset = true;
+        resetPlayerState(now);
+      };
+      const deathResolution = worldPlayerDeath?.({
+        now,
+        sceneId: resolvedWorld.sceneId,
+        gameMode,
+        player: avatar,
+        currentStats,
+        maxStats,
+        resetPlayer,
+      });
+      if (didReset || deathResolution === "handled") {
+        return applied;
+      }
+      if (deathResolution === "reset") {
+        resetPlayer();
+      } else if (deathResolution === undefined && resetOnDeath) {
+        resetPlayer();
+      }
     }
     return applied;
   };
@@ -859,11 +722,17 @@ export const createPlayer = ({
     return null;
   };
 
-  const intersectAttackTargets = (
+  type AttackTargetHit = {
+    target: PlayerAttackTarget;
+    point: THREE.Vector3;
+    distance: number;
+  };
+
+  const intersectAttackTargetsByRay = (
     origin: THREE.Vector3,
     direction: THREE.Vector3,
     far: number
-  ) => {
+  ): AttackTargetHit | null => {
     if (!attackTargets.length) return null;
     const activeRoots: THREE.Object3D[] = [];
     for (let i = 0; i < attackTargets.length; i += 1) {
@@ -880,9 +749,85 @@ export const createPlayer = ({
       const hit = hits[i];
       const target = resolveAttackTargetFromObject(hit.object);
       if (!target) continue;
-      return { target, hit };
+      return {
+        target,
+        point: hit.point.clone(),
+        distance: hit.distance,
+      };
     }
     return null;
+  };
+
+  // Radius-aware fallback so large projectiles do not visually pass through targets.
+  const intersectAttackTargetsByRadius = (
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    far: number,
+    projectileHitRadius: number
+  ): AttackTargetHit | null => {
+    if (!attackTargets.length) return null;
+    let nearest: AttackTargetHit | null = null;
+
+    for (let i = 0; i < attackTargets.length; i += 1) {
+      const target = attackTargets[i];
+      if (target.isActive && !target.isActive()) continue;
+
+      target.object.updateMatrixWorld(true);
+      attackTargetBounds.setFromObject(target.object);
+      if (attackTargetBounds.isEmpty()) continue;
+      attackTargetBounds.getBoundingSphere(attackTargetSphere);
+
+      attackTargetCenterOffset.copy(attackTargetSphere.center).sub(origin);
+      const projectedDistance = THREE.MathUtils.clamp(
+        attackTargetCenterOffset.dot(direction),
+        0,
+        far
+      );
+      attackTargetClosestPoint
+        .copy(origin)
+        .addScaledVector(direction, projectedDistance);
+
+      const combinedRadius = attackTargetSphere.radius + projectileHitRadius;
+      if (
+        attackTargetClosestPoint.distanceToSquared(attackTargetSphere.center) >
+        combinedRadius * combinedRadius
+      ) {
+        continue;
+      }
+
+      if (!nearest || projectedDistance < nearest.distance) {
+        nearest = {
+          target,
+          point: attackTargetClosestPoint.clone(),
+          distance: projectedDistance,
+        };
+      }
+    }
+
+    return nearest;
+  };
+
+  const intersectAttackTargets = (
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    far: number,
+    projectileHitRadius: number
+  ): AttackTargetHit | null => {
+    const rayHit = intersectAttackTargetsByRay(origin, direction, far);
+    if (projectileHitRadius <= 0) {
+      return rayHit;
+    }
+    const radiusHit = intersectAttackTargetsByRadius(
+      origin,
+      direction,
+      far,
+      projectileHitRadius
+    );
+
+    if (rayHit && radiusHit) {
+      return rayHit.distance <= radiusHit.distance ? rayHit : radiusHit;
+    }
+    return rayHit ?? radiusHit;
   };
 
   const spawnProjectile = (
@@ -959,6 +904,7 @@ export const createPlayer = ({
         0.05,
         resolvedRadius ?? projectileRadius * (options?.scale ?? 1)
       ),
+      targetHitRadius: Math.max(0, options?.targetHitRadius ?? 0),
       damage: resolvedDamage,
       splitOnImpact: Boolean(options?.splitOnImpact),
       explosionRadius: Math.max(0, options?.explosionRadius ?? 0),
@@ -1130,7 +1076,12 @@ export const createPlayer = ({
         remove
       ) => {
         const reach = distance + projectile.radius;
-        const attackHit = intersectAttackTargets(origin, direction, reach);
+        const attackHit = intersectAttackTargets(
+          origin,
+          direction,
+          reach,
+          projectile.targetHitRadius
+        );
 
         let worldHit: THREE.Intersection | null = null;
         if (projectileColliders.length) {
@@ -1155,11 +1106,11 @@ export const createPlayer = ({
 
         const shouldUseAttackHit =
           Boolean(attackHit) &&
-          (!worldHit || attackHit!.hit.distance <= worldHit.distance);
+          (!worldHit || attackHit!.distance <= worldHit.distance);
 
         if (shouldUseAttackHit && attackHit) {
           projectileRemovedReason.set(projectile.id, "impact");
-          attackRayHitPoint.copy(attackHit.hit.point);
+          attackRayHitPoint.copy(attackHit.point);
           attackRayDirection.copy(direction);
           attackHit.target.onHit({
             now: travelNow,
@@ -1271,7 +1222,7 @@ fireProjectile = (args?: FireProjectileArgs) => {
 
   const performSlashAttackHit = (damage: number, maxDistance: number) => {
     updateAttackAim();
-    const hit = intersectAttackTargets(
+    const hit = intersectAttackTargetsByRay(
       attackAimOrigin,
       attackAimDirection,
       maxDistance
@@ -1281,7 +1232,7 @@ fireProjectile = (args?: FireProjectileArgs) => {
       now: performance.now(),
       source: "slash",
       damage,
-      point: hit.hit.point.clone(),
+      point: hit.point.clone(),
       direction: attackAimDirection.clone(),
     });
     return true;
@@ -1299,98 +1250,36 @@ fireProjectile = (args?: FireProjectileArgs) => {
     performSlashAttackHit(18, 8);
   };
 
-  const handlePointerDown = (event: PointerEvent) => {
-    if (event.button === 0) {
-      if (mount?.requestPointerLock) {
-        if (document.pointerLockElement !== mount && !isPointerLockRequested) {
-          isPointerLockRequested = true;
-          mount.requestPointerLock();
-        }
-      }
+  const inputBindings = bindPlayerInput({
+    mount,
+    pressedKeys,
+    lookState,
+    isGrounded: () => isGrounded,
+    isMovementLocked: isRuntimeMovementLocked,
+    onJump: () => {
+      velocityY = jumpVelocity;
+      isGrounded = false;
+    },
+    onPrimaryDown: () => {
       if (characterRuntime?.handlePrimaryDown) {
         characterRuntime.handlePrimaryDown();
       } else {
         fireProjectile();
       }
-      return;
-    }
-    if (event.button === 2) {
-      event.preventDefault();
-      triggerPrimaryAttack();
-    }
-  };
-
-  const handlePointerUp = (event: PointerEvent) => {
-    if (event.button !== 0) return;
-    characterRuntime?.handlePrimaryUp?.();
-  };
-
-  const handlePointerLockChange = () => {
-    if (!mount) return;
-    const isLocked = document.pointerLockElement === mount;
-    if (!isLocked) {
-      isPointerLockRequested = false;
+    },
+    onPrimaryUp: () => {
+      characterRuntime?.handlePrimaryUp?.();
+    },
+    onPrimaryCancel: () => {
       characterRuntime?.handlePrimaryCancel?.();
-    }
-    mount.style.cursor = isLocked ? "none" : "";
-  };
-
-  const handlePointerLockError = () => {
-    isPointerLockRequested = false;
-  };
-
-  const handleMouseMove = (event: MouseEvent) => {
-    if (document.pointerLockElement !== mount) return;
-    lookState.yaw -= event.movementX * lookState.sensitivity;
-    lookState.pitch = THREE.MathUtils.clamp(
-      lookState.pitch - event.movementY * lookState.sensitivity,
-      lookState.minPitch,
-      lookState.maxPitch
-    );
-  };
-
-  const handleContextMenu = (event: Event) => {
-    event.preventDefault();
-  };
-
-  const handleKeyDown = (event: KeyboardEvent) => {
-    const mapped = keyMap[event.code];
-    if (mapped) {
-      pressedKeys.add(mapped);
-    }
-    if (mapped === "space" && isGrounded && !isRuntimeMovementLocked()) {
-      velocityY = jumpVelocity;
-      isGrounded = false;
-    }
-    if (event.repeat) return;
-
-    const now = performance.now();
-    const skillKey = skillCodeMap[event.code];
-    if (!skillKey) return;
-    tryUseSkill(skillKey, now);
-  };
-
-  const handleKeyUp = (event: KeyboardEvent) => {
-    const mapped = keyMap[event.code];
-    if (mapped) {
-      pressedKeys.delete(mapped);
-    }
-  };
-
-  const handleBlur = () => {
-    pressedKeys.clear();
-    characterRuntime?.handlePrimaryCancel?.();
-  };
-
-  mount.addEventListener("pointerdown", handlePointerDown);
-  mount.addEventListener("contextmenu", handleContextMenu);
-  window.addEventListener("pointerup", handlePointerUp);
-  document.addEventListener("pointerlockchange", handlePointerLockChange);
-  document.addEventListener("pointerlockerror", handlePointerLockError);
-  document.addEventListener("mousemove", handleMouseMove);
-  window.addEventListener("keydown", handleKeyDown);
-  window.addEventListener("keyup", handleKeyUp);
-  window.addEventListener("blur", handleBlur);
+    },
+    onSecondaryDown: () => {
+      triggerPrimaryAttack();
+    },
+    onSkill: (skillKey, now) => {
+      tryUseSkill(skillKey, now);
+    },
+  });
 
   loadCharacter(characterPath);
   updateMiniViewport(mount.clientWidth, mount.clientHeight);
@@ -1476,6 +1365,7 @@ fireProjectile = (args?: FireProjectileArgs) => {
       characterRuntime.update({
         now,
         isMoving,
+        aimDirectionWorld: cameraLookDir,
         arms,
         legLeft,
         legRight,
@@ -1550,18 +1440,7 @@ fireProjectile = (args?: FireProjectileArgs) => {
 
   const dispose = () => {
     isMounted = false;
-    mount.removeEventListener("pointerdown", handlePointerDown);
-    mount.removeEventListener("contextmenu", handleContextMenu);
-    document.removeEventListener("pointerlockchange", handlePointerLockChange);
-    document.removeEventListener("pointerlockerror", handlePointerLockError);
-    document.removeEventListener("mousemove", handleMouseMove);
-    window.removeEventListener("pointerup", handlePointerUp);
-    window.removeEventListener("keydown", handleKeyDown);
-    window.removeEventListener("keyup", handleKeyUp);
-    window.removeEventListener("blur", handleBlur);
-    if (document.pointerLockElement === mount && document.exitPointerLock) {
-      document.exitPointerLock();
-    }
+    inputBindings.dispose();
     avatarBody.geometry.dispose();
     avatarBody.material.dispose();
     avatarGlow.geometry.dispose();

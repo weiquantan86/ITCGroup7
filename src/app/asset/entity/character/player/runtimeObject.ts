@@ -1,4 +1,4 @@
-import type { CharacterRuntime, CharacterRuntimeUpdate } from "./types";
+import type { CharacterRuntime, CharacterRuntimeUpdate } from "../types";
 
 type CharacterRuntimeObjectInit = {
   setProfile: CharacterRuntime["setProfile"];
