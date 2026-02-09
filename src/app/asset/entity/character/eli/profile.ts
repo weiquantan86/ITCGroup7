@@ -4,6 +4,10 @@ export const profile: CharacterProfile = {
   id: "eli",
   label: "Eli",
   pathToken: "/eli/",
+  energy: {
+    passivePerSecond: 2,
+    damageTakenRatio: 0.7,
+  },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {

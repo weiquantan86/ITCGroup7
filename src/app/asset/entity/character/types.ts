@@ -51,6 +51,14 @@ export interface SlashConfig {
 export interface CharacterStats {
   health: number;
   mana: number;
+  energy: number;
+}
+
+export interface CharacterEnergyConfig {
+  passivePerSecond?: number;
+  movingPerSecond?: number;
+  hitGain?: number;
+  damageTakenRatio?: number;
 }
 
 export interface SkillDefinition {
@@ -77,6 +85,7 @@ export interface CharacterProfile {
   label: string;
   pathToken: string;
   stats?: CharacterStats;
+  energy?: CharacterEnergyConfig;
   kit?: CharacterKit;
   controls?: CharacterControls;
   slash?: SlashConfig;
@@ -134,6 +143,7 @@ export interface FireProjectileArgs {
   emissiveIntensity?: number;
   scale?: number;
   damage?: number;
+  energyGainOnHit?: number;
   splitOnImpact?: boolean;
   explosionRadius?: number;
   explosionDamage?: number;

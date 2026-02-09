@@ -4,6 +4,10 @@ export const profile: CharacterProfile = {
   id: "carrot",
   label: "Carrot",
   pathToken: "/carrot/",
+  energy: {
+    passivePerSecond: 3,
+    movingPerSecond: 3,
+  },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {

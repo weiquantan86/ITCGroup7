@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Projectile as CharacterProjectile } from "../../../object/projectile/types";
 import type { CharacterStats, SkillKey } from "../types";
 
-export type RecoveryZoneType = "health" | "mana" | "both";
+export type RecoveryZoneType = "health" | "mana" | "energy" | "both";
 
 export interface RecoveryZone {
   id: string;
@@ -81,6 +81,8 @@ export interface PlayerUiState {
   cooldownDurations: Record<SkillKey, number>;
   manaCurrent: number;
   manaMax: number;
+  energyCurrent: number;
+  energyMax: number;
   infiniteFire: boolean;
 }
 

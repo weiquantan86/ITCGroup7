@@ -10,5 +10,11 @@ export async function POST(request: Request) {
     path: "/",
     maxAge: 0,
   });
+  response.cookies.set({
+    name: "selected_character_id",
+    value: "",
+    path: "/",
+    maxAge: 0,
+  });
   return response;
 }

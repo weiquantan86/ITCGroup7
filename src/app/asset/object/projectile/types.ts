@@ -44,6 +44,7 @@ export interface Projectile extends LinearProjectileState {
   mesh: THREE.Mesh;
   targetHitRadius: number;
   damage: number;
+  energyGainOnHit: number | null;
   splitOnImpact: boolean;
   explosionRadius: number;
   explosionDamage: number;

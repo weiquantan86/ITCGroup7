@@ -50,7 +50,8 @@ export const createStatusHud = (mount?: HTMLElement): StatusHud => {
 
   const healthBar = createBar("HP", "#ef4444", "rgba(239,68,68,0.65)");
   const manaBar = createBar("MP", "#38bdf8", "rgba(56,189,248,0.6)");
-  hud.append(healthBar.row, manaBar.row);
+  const energyBar = createBar("EN", "#22c55e", "rgba(34,197,94,0.62)");
+  hud.append(healthBar.row, manaBar.row, energyBar.row);
   host.appendChild(hud);
 
   const updateFill = (
@@ -71,6 +72,7 @@ export const createStatusHud = (mount?: HTMLElement): StatusHud => {
     setStats: (current: CharacterStats, max: CharacterStats) => {
       updateFill(healthBar.fillBar, healthBar.value, current.health, max.health);
       updateFill(manaBar.fillBar, manaBar.value, current.mana, max.mana);
+      updateFill(energyBar.fillBar, energyBar.value, current.energy, max.energy);
     },
     dispose: () => {
       hud.parentElement?.removeChild(hud);

@@ -4,6 +4,9 @@ export const profile: CharacterProfile = {
   id: "dakota",
   label: "Dakota",
   pathToken: "/dakota/",
+  energy: {
+    hitGain: 18,
+  },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {

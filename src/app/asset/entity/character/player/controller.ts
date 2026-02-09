@@ -250,8 +250,42 @@ export const createPlayer = ({
   let skillCooldownUntil: Record<SkillKey, number> = { q: 0, e: 0, r: 0 };
   let lastUiStateSnapshot = "";
   const emptyProjectileBlockers: THREE.Object3D[] = [];
-  const worldTickCurrentStatsSnapshot: CharacterStats = { health: 0, mana: 0 };
-  const worldTickMaxStatsSnapshot: CharacterStats = { health: 0, mana: 0 };
+  const worldTickCurrentStatsSnapshot: CharacterStats = {
+    health: 0,
+    mana: 0,
+    energy: 0,
+  };
+  const worldTickMaxStatsSnapshot: CharacterStats = {
+    health: 0,
+    mana: 0,
+    energy: 0,
+  };
+
+  type EnergyConfigResolved = {
+    passivePerSecond: number;
+    movingPerSecond: number;
+    hitGain: number;
+    damageTakenRatio: number;
+  };
+  const resolveEnergyConfig = (
+    profile?: CharacterProfile
+  ): EnergyConfigResolved => ({
+    passivePerSecond: Math.max(
+      0,
+      profile?.energy?.passivePerSecond ?? 0
+    ),
+    movingPerSecond: Math.max(
+      0,
+      profile?.energy?.movingPerSecond ?? 0
+    ),
+    hitGain: Math.max(0, profile?.energy?.hitGain ?? 0),
+    damageTakenRatio: Math.max(
+      0,
+      profile?.energy?.damageTakenRatio ?? 0
+    ),
+  });
+  let energyConfig: EnergyConfigResolved =
+    resolveEnergyConfig(characterEntry.profile);
 
   const getRuntimeSkillHandler = (key: SkillKey) => {
     if (!characterRuntime) return null;
@@ -302,14 +336,63 @@ export const createPlayer = ({
     return false;
   };
 
-  const getSkillCost = (key: SkillKey) =>
-    Math.max(0, characterEntry.profile.kit?.skills?.[key]?.cost ?? 0);
+  const applyEnergy = (amount: number) => {
+    if (infiniteFire) return 0;
+    if (maxStats.energy <= 0 || amount <= 0) return 0;
+    const next = Math.min(maxStats.energy, currentStats.energy + amount);
+    const gained = next - currentStats.energy;
+    if (gained > 0) {
+      currentStats.energy = next;
+      statsDirty = true;
+    }
+    return gained;
+  };
+
+  const getSkillCost = (key: SkillKey) => {
+    if (characterEntry.profile.id === "adam" && key === "q") {
+      return 0;
+    }
+    const configuredCost = characterEntry.profile.kit?.skills?.[key]?.cost;
+    if (configuredCost == null) {
+      // Q is energy-based globally; keep a small default cost when profiles omit it.
+      return key === "q" ? 20 : 0;
+    }
+    return Math.max(0, configuredCost);
+  };
+
+  const getSkillResource = (key: SkillKey): "mana" | "energy" =>
+    key === "q" ? "energy" : "mana";
+
+  const hasEnoughSkillResource = (key: SkillKey) => {
+    if (infiniteFire) return true;
+    if (characterEntry.profile.id === "adam" && key === "q") {
+      return currentStats.energy > 0;
+    }
+    const cost = getSkillCost(key);
+    if (cost <= 0) return true;
+    if (getSkillResource(key) === "energy") {
+      return currentStats.energy >= cost;
+    }
+    return currentStats.mana >= cost;
+  };
 
   const spendSkillCost = (key: SkillKey) => {
     if (infiniteFire) return;
     const cost = getSkillCost(key);
     if (cost <= 0) return;
-    currentStats.mana = Math.max(0, currentStats.mana - cost);
+    if (getSkillResource(key) === "energy") {
+      currentStats.energy = Math.max(0, currentStats.energy - cost);
+    } else {
+      currentStats.mana = Math.max(0, currentStats.mana - cost);
+    }
+    statsDirty = true;
+    syncStatsHud();
+  };
+
+  const consumeAllEnergy = () => {
+    if (infiniteFire) return;
+    if (currentStats.energy <= 0) return;
+    currentStats.energy = 0;
     statsDirty = true;
     syncStatsHud();
   };
@@ -326,14 +409,16 @@ export const createPlayer = ({
     if (!infiniteFire && getSkillCooldownRemainingMs(now, key) > 0) {
       return false;
     }
-    const cost = getSkillCost(key);
-    if (!infiniteFire && cost > 0 && currentStats.mana < cost) {
+    if (!hasEnoughSkillResource(key)) {
       return false;
     }
     const handler = getRuntimeSkillHandler(key);
     if (!handler) return false;
     const didTrigger = handler();
     if (!didTrigger) return false;
+    if (characterEntry.profile.id === "adam" && key === "q") {
+      consumeAllEnergy();
+    }
     spendSkillCost(key);
     activateSkillCooldown(key, now);
     emitUiState(now);
@@ -409,6 +494,8 @@ export const createPlayer = ({
       cooldownDurations,
       manaCurrent: currentStats.mana,
       manaMax: maxStats.mana,
+      energyCurrent: currentStats.energy,
+      energyMax: maxStats.energy,
       infiniteFire,
     };
     const snapshot = [
@@ -420,6 +507,8 @@ export const createPlayer = ({
       cooldownDurations.r.toFixed(2),
       Math.round(currentStats.mana),
       Math.round(maxStats.mana),
+      Math.round(currentStats.energy),
+      Math.round(maxStats.energy),
       infiniteFire ? "1" : "0",
     ].join("|");
     if (snapshot === lastUiStateSnapshot) return;
@@ -433,6 +522,7 @@ export const createPlayer = ({
     const applied = healthPool.takeDamage(amount);
     if (applied > 0) {
       syncHealthFromPool();
+      applyEnergy(applied * energyConfig.damageTakenRatio);
       statsDirty = true;
       syncStatsHud();
     }
@@ -477,6 +567,12 @@ export const createPlayer = ({
     return true;
   };
 
+  const restoreFullEnergy = () => {
+    if (currentStats.energy >= maxStats.energy) return false;
+    currentStats.energy = maxStats.energy;
+    return true;
+  };
+
   const applyRecoveryZones = (now: number) => {
     if (!recoveryZones.length) return;
 
@@ -507,6 +603,9 @@ export const createPlayer = ({
       if (zone.type === "mana" || zone.type === "both") {
         recovered = restoreFullMana() || recovered;
       }
+      if (zone.type === "energy" || zone.type === "both") {
+        recovered = restoreFullEnergy() || recovered;
+      }
 
       if (!recovered) continue;
       statsDirty = true;
@@ -519,12 +618,16 @@ export const createPlayer = ({
     const resolved = resolveCharacterStats(characterEntry.profile);
     maxStats = { ...resolved };
     currentStats = { ...resolved };
+    energyConfig = resolveEnergyConfig(characterEntry.profile);
     healthPool.reset(maxStats.health, maxStats.health);
     syncHealthFromPool();
     skillCooldownDurations = resolveSkillCooldownDurations(characterEntry.profile);
     skillCooldownUntil = { q: 0, e: 0, r: 0 };
     if (infiniteFire && maxStats.mana > 0) {
       currentStats.mana = maxStats.mana;
+    }
+    if (infiniteFire && maxStats.energy > 0) {
+      currentStats.energy = maxStats.energy;
     }
     statsDirty = true;
     syncStatsHud();
@@ -906,6 +1009,10 @@ export const createPlayer = ({
       ),
       targetHitRadius: Math.max(0, options?.targetHitRadius ?? 0),
       damage: resolvedDamage,
+      energyGainOnHit:
+        options?.energyGainOnHit == null
+          ? null
+          : Math.max(0, options.energyGainOnHit),
       splitOnImpact: Boolean(options?.splitOnImpact),
       explosionRadius: Math.max(0, options?.explosionRadius ?? 0),
       explosionDamage: Math.max(0, options?.explosionDamage ?? 0),
@@ -1112,6 +1219,7 @@ export const createPlayer = ({
           projectileRemovedReason.set(projectile.id, "impact");
           attackRayHitPoint.copy(attackHit.point);
           attackRayDirection.copy(direction);
+          applyEnergy(projectile.energyGainOnHit ?? energyConfig.hitGain);
           attackHit.target.onHit({
             now: travelNow,
             source: "projectile",
@@ -1228,6 +1336,7 @@ fireProjectile = (args?: FireProjectileArgs) => {
       maxDistance
     );
     if (!hit) return false;
+    applyEnergy(energyConfig.hitGain);
     hit.target.onHit({
       now: performance.now(),
       source: "slash",
@@ -1379,8 +1488,10 @@ fireProjectile = (args?: FireProjectileArgs) => {
     if (worldTick) {
       worldTickCurrentStatsSnapshot.health = currentStats.health;
       worldTickCurrentStatsSnapshot.mana = currentStats.mana;
+      worldTickCurrentStatsSnapshot.energy = currentStats.energy;
       worldTickMaxStatsSnapshot.health = maxStats.health;
       worldTickMaxStatsSnapshot.mana = maxStats.mana;
+      worldTickMaxStatsSnapshot.energy = maxStats.energy;
       worldTick({
         now,
         delta,
@@ -1392,16 +1503,28 @@ fireProjectile = (args?: FireProjectileArgs) => {
         projectileBlockers: runtimeProjectileBlockers,
       });
     }
-    if (infiniteFire && maxStats.mana > 0) {
-      if (currentStats.mana < maxStats.mana) {
+    if (infiniteFire) {
+      if (maxStats.mana > 0 && currentStats.mana < maxStats.mana) {
         currentStats.mana = maxStats.mana;
         statsDirty = true;
       }
-    } else if (characterEntry.profile.id === "adam" && maxStats.mana > 0) {
-      const regen = 2 * delta;
-      if (regen > 0 && currentStats.mana < maxStats.mana) {
-        currentStats.mana = Math.min(maxStats.mana, currentStats.mana + regen);
+      if (maxStats.energy > 0 && currentStats.energy < maxStats.energy) {
+        currentStats.energy = maxStats.energy;
         statsDirty = true;
+      }
+    } else {
+      if (characterEntry.profile.id === "adam" && maxStats.mana > 0) {
+        const manaRegen = 2 * delta;
+        if (manaRegen > 0 && currentStats.mana < maxStats.mana) {
+          currentStats.mana = Math.min(maxStats.mana, currentStats.mana + manaRegen);
+          statsDirty = true;
+        }
+      }
+      if (maxStats.energy > 0) {
+        const energyRegen =
+          energyConfig.passivePerSecond * delta +
+          (isMoving ? energyConfig.movingPerSecond * delta : 0);
+        applyEnergy(energyRegen);
       }
     }
     syncStatsHud();

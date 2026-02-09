@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PlayerUiState } from "../../entity/character/player";
 import { characterProfiles } from "../../entity/character/player/registry";
 import SceneLauncher from "../SceneLauncher";
@@ -14,11 +13,15 @@ const characters = characterProfiles.map((profile) => ({
   path: `/assets/characters${profile.pathToken}${profile.id}.glb`,
 }));
 
-function TrainingScenePage() {
-  const searchParams = useSearchParams();
-  const lockedId = searchParams.get("character") ?? "";
+type TrainingScenePageProps = {
+  selectedCharacterId?: string;
+};
+
+export default function TrainingScenePage({
+  selectedCharacterId = "",
+}: TrainingScenePageProps) {
   const selectedCharacterPath =
-    characters.find((character) => character.id === lockedId)?.path ??
+    characters.find((character) => character.id === selectedCharacterId)?.path ??
     characters[0]?.path ??
     "";
   const [testerState, setTesterState] = useState({
@@ -32,6 +35,8 @@ function TrainingScenePage() {
     cooldownDurations: { q: 0, e: 0, r: 0 },
     manaCurrent: 0,
     manaMax: 0,
+    energyCurrent: 0,
+    energyMax: 0,
     infiniteFire: false,
   });
 
@@ -133,6 +138,9 @@ function TrainingScenePage() {
                 <p className="text-[11px] font-semibold tabular-nums text-cyan-200">
                   MP {Math.round(playerUi.manaCurrent)}/{Math.round(playerUi.manaMax)}
                 </p>
+                <p className="text-[11px] font-semibold tabular-nums text-emerald-200">
+                  EN {Math.round(playerUi.energyCurrent)}/{Math.round(playerUi.energyMax)}
+                </p>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 {renderCooldown("Q", playerUi.cooldowns.q)}
@@ -151,30 +159,12 @@ function TrainingScenePage() {
                 {infiniteFire ? "Infinite Fire: On" : "Infinite Fire: Off"}
               </button>
               <p className="mt-2 text-[11px] text-slate-400">
-                Toggle to remove cooldown and mana cost for Q/E/R in test scene.
+                Toggle to remove cooldown and mana/energy cost for Q/E/R in test scene.
               </p>
             </div>
           </aside>
         </div>
       </main>
     </div>
-  );
-}
-
-export default function ThreePage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-slate-950 px-6 py-12 text-slate-100">
-          <main className="mx-auto flex w-full max-w-none flex-col gap-8">
-            <h1 className="text-center text-4xl font-semibold text-slate-100">
-              Training Scene
-            </h1>
-          </main>
-        </div>
-      }
-    >
-      <TrainingScenePage />
-    </Suspense>
   );
 }

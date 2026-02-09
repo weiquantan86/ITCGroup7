@@ -4,6 +4,11 @@ export const profile: CharacterProfile = {
   id: "grant",
   label: "Grant",
   pathToken: "/grant/",
+  energy: {
+    passivePerSecond: 3,
+    hitGain: 8,
+    movingPerSecond: 2,
+  },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {

@@ -364,6 +364,7 @@ const createTrainingScene = (
   };
   const manaPadSize = 3.2;
   const hpPadSize = 3.2;
+  const energyPadSize = 3.2;
   const manaCenter = new THREE.Vector3(
     bounds.minX + 3.4,
     groundY + 0.03,
@@ -373,6 +374,11 @@ const createTrainingScene = (
     bounds.maxX - 3.4,
     groundY + 0.03,
     bounds.maxZ - 2.6
+  );
+  const energyCenter = new THREE.Vector3(
+    (manaCenter.x + hpCenter.x) / 2,
+    groundY + 0.03,
+    (manaCenter.z + hpCenter.z) / 2
   );
 
   const geometries = new Set<THREE.BufferGeometry>();
@@ -507,6 +513,12 @@ const createTrainingScene = (
     size: hpPadSize,
     color: 0x111827,
     emissive: 0xef4444,
+  });
+  const energyPad = createRecoveryPad({
+    center: energyCenter,
+    size: energyPadSize,
+    color: 0x052e16,
+    emissive: 0x22c55e,
   });
 
   const launcherHeightOffset = 1.2;
@@ -1154,6 +1166,8 @@ const createTrainingScene = (
     rightBorder,
     manaPad.pad,
     manaPad.frame,
+    energyPad.pad,
+    energyPad.frame,
     hpPad.pad,
     hpPad.frame,
     launcherBase,
@@ -1195,6 +1209,15 @@ const createTrainingScene = (
         maxX: hpCenter.x + hpPadSize / 2,
         minZ: hpCenter.z - hpPadSize / 2,
         maxZ: hpCenter.z + hpPadSize / 2,
+        cooldownMs: 120,
+      },
+      {
+        id: "training-energy-zone",
+        type: "energy",
+        minX: energyCenter.x - energyPadSize / 2,
+        maxX: energyCenter.x + energyPadSize / 2,
+        minZ: energyCenter.z - energyPadSize / 2,
+        maxZ: energyCenter.z + energyPadSize / 2,
         cooldownMs: 120,
       },
     ],

@@ -289,6 +289,9 @@ const createElectricAura = ({
   color = 0x22c55e,
   opacity = 0.72,
   jitter = 0.2,
+  lineWidth = 2.5,
+  thicknessLayers = 3,
+  thicknessOffset = 0.035,
 }: {
   radius: number;
   arcCount: number;
@@ -296,6 +299,9 @@ const createElectricAura = ({
   color?: number;
   opacity?: number;
   jitter?: number;
+  lineWidth?: number;
+  thicknessLayers?: number;
+  thicknessOffset?: number;
 }): ElectricAura => {
   const group = new THREE.Group();
   const material = new THREE.LineBasicMaterial({
@@ -304,6 +310,7 @@ const createElectricAura = ({
     opacity,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
+    linewidth: lineWidth,
   });
   const arcs: Array<{
     geometry: THREE.BufferGeometry;
@@ -317,11 +324,20 @@ const createElectricAura = ({
     const positions = new Float32Array(pointsPerArc * 3);
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const line = new THREE.Line(geometry, material);
-    line.rotation.y = (i / arcCount) * Math.PI * 2;
-    line.rotation.x = (Math.random() - 0.5) * 0.9;
-    line.rotation.z = (Math.random() - 0.5) * 0.9;
-    group.add(line);
+    const lineStack = new THREE.Group();
+    lineStack.rotation.y = (i / arcCount) * Math.PI * 2;
+    lineStack.rotation.x = (Math.random() - 0.5) * 0.9;
+    lineStack.rotation.z = (Math.random() - 0.5) * 0.9;
+    for (let layer = 0; layer < thicknessLayers; layer += 1) {
+      const line = new THREE.Line(geometry, material);
+      const center = (thicknessLayers - 1) / 2;
+      const offset = (layer - center) * thicknessOffset;
+      if (offset !== 0) {
+        line.position.set(offset, 0, -offset * 0.45);
+      }
+      lineStack.add(line);
+    }
+    group.add(lineStack);
     arcs.push({
       geometry,
       positions,
@@ -401,6 +417,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     expiresAt: 0,
     cooldownUntil: 0,
   };
+  const skillECooldownMs = 5000;
   const skillR = {
     active: false,
     expiresAt: 0,
@@ -427,14 +444,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
     count: 3,
     chargeMs: 2000,
     speed: 17,
-    distance: 20,
+    distance: 32,
     spreadRad: THREE.MathUtils.degToRad(18),
     lateralSpacing: 1.7,
     forwardSpawnOffset: 2.3,
     verticalSpawnOffset: 1.25,
-    radius: 1.45,
-    targetHitRadius: 1.7,
-    damage: 42,
+    radius: 2.8,
+    targetHitRadius: 3.3,
+    damageMultiplierFromEmpoweredBasic: 3,
   };
   const skillQChargeState = {
     active: false,
@@ -473,27 +490,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
     emissive: 0x22c55e,
     emissiveIntensity: 1.2,
   });
-  const skillQChargeShellGeometry = new THREE.CapsuleGeometry(0.92, 1.85, 6, 16);
-  const skillQChargeShellMaterial = new THREE.MeshBasicMaterial({
-    color: 0x22c55e,
-    transparent: true,
-    opacity: 0,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  const skillQChargeShell = new THREE.Mesh(
-    skillQChargeShellGeometry,
-    skillQChargeShellMaterial
-  );
-  skillQChargeShell.position.set(0, 1.15, 0);
-  skillQChargeShell.visible = false;
-  avatar.add(skillQChargeShell);
   const skillQChargeAura = createElectricAura({
     radius: 1.75,
-    arcCount: 16,
-    pointsPerArc: 18,
-    opacity: 0.62,
-    jitter: 0.28,
+    arcCount: 6,
+    pointsPerArc: 12,
+    opacity: 0.96,
+    jitter: 0.2,
+    lineWidth: 4,
+    thicknessLayers: 4,
+    thicknessOffset: 0.04,
   });
   skillQChargeAura.group.position.set(0, 1.15, 0);
   skillQChargeAura.setVisible(false);
@@ -511,10 +516,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
       mesh.receiveShadow = true;
       const aura = createElectricAura({
         radius: skillQVolley.radius * 1.06,
-        arcCount: 9,
-        pointsPerArc: 14,
-        opacity: 0.88,
-        jitter: 0.23,
+        arcCount: 4,
+        pointsPerArc: 10,
+        opacity: 0.98,
+        jitter: 0.18,
+        lineWidth: 3.5,
+        thicknessLayers: 3,
+        thicknessOffset: 0.035,
       });
       aura.setVisible(false);
       mesh.add(aura.group);
@@ -549,6 +557,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillQUp = new THREE.Vector3(0, 1, 0);
   let skillRSphereInFlight = false;
 
+  const resolveBaseProjectileDamage = (speed: number) =>
+    Math.max(8, Math.round(10 + speed * 0.6));
+
+  const resolveEmpoweredBasicAttackDamage = (speed: number) =>
+    resolveBaseProjectileDamage(speed) * 3;
+
   const acquireSkillQProjectile = () => {
     for (let i = 0; i < skillQProjectilePool.length; i += 1) {
       const entry = skillQProjectilePool[i];
@@ -559,10 +573,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
     mesh.receiveShadow = true;
     const aura = createElectricAura({
       radius: skillQVolley.radius * 1.06,
-      arcCount: 9,
-      pointsPerArc: 14,
-      opacity: 0.88,
-      jitter: 0.23,
+      arcCount: 4,
+      pointsPerArc: 10,
+      opacity: 0.98,
+      jitter: 0.18,
+      lineWidth: 3.5,
+      thicknessLayers: 3,
+      thicknessOffset: 0.035,
     });
     aura.setVisible(false);
     mesh.add(aura.group);
@@ -650,11 +667,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const setSkillQChargeFxActive = (active: boolean) => {
-    skillQChargeShell.visible = active;
     skillQChargeAura.setVisible(active);
     if (!active) {
-      skillQChargeShellMaterial.opacity = 0;
-      skillQChargeShell.scale.setScalar(1);
+      skillQChargeAura.group.scale.setScalar(1);
     }
   };
 
@@ -670,12 +685,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       1
     );
     skillQChargeAura.update(now);
-    skillQChargeShellMaterial.opacity =
-      0.12 +
-      progress * 0.13 +
-      Math.max(0, Math.sin(now * 0.018 + progress * Math.PI * 2)) * 0.12;
     const pulse = 1 + Math.sin(now * 0.02) * 0.05 + progress * 0.08;
-    skillQChargeShell.scale.setScalar(pulse);
+    skillQChargeAura.group.scale.setScalar(pulse);
   };
 
   const updateSkillRSphereTransform = (
@@ -755,6 +766,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       .addScaledVector(skillQBaseDirection, skillQVolley.forwardSpawnOffset);
     skillQOrigin.y += skillQVolley.verticalSpawnOffset;
     const lifetime = skillQVolley.distance / skillQVolley.speed;
+    const volleyDamage =
+      resolveEmpoweredBasicAttackDamage(skillQVolley.speed) *
+      skillQVolley.damageMultiplierFromEmpoweredBasic;
     const sideOffsets = [0, 1, -1];
 
     for (let i = 0; i < sideOffsets.length; i += 1) {
@@ -781,7 +795,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
         targetHitRadius: skillQVolley.targetHitRadius,
         speed: skillQVolley.speed,
         lifetime,
-        damage: skillQVolley.damage,
+        damage: volleyDamage,
+        energyGainOnHit: 8,
         splitOnImpact: false,
         lifecycle: {
           applyForces: () => {
@@ -837,6 +852,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       speed: skillRECombo.speed,
       lifetime,
       damage: skillRECombo.damage,
+      energyGainOnHit: 8,
       splitOnImpact: true,
       explosionRadius: skillRECombo.explosionRadius,
       explosionDamage: skillRECombo.explosionDamage,
@@ -854,7 +870,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       },
     });
     if (!bypassCooldown) {
-      skillE.cooldownUntil = now + 10000;
+      skillE.cooldownUntil = now + skillECooldownMs;
     }
     return true;
   };
@@ -900,7 +916,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       chargeConfig.maxLifetime,
       ratio
     );
-    const baseDamage = Math.max(8, Math.round(10 + speed * 0.6));
+    const baseDamage = resolveBaseProjectileDamage(speed);
     if (skillE.active) {
       fireProjectile({
         speed,
@@ -909,14 +925,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
         emissive: 0x22c55e,
         emissiveIntensity: 0.9,
         scale: 12.24,
-        damage: baseDamage * 3,
+        damage: resolveEmpoweredBasicAttackDamage(speed),
+        energyGainOnHit: 8,
         splitOnImpact: true,
         explosionRadius: 10.8,
         explosionDamage: baseDamage,
       });
       deactivateSkillE(true);
     } else {
-      fireProjectile({ speed, lifetime });
+      fireProjectile({ speed, lifetime, energyGainOnHit: 4 });
     }
     chargeState.releaseUntil = now + chargeConfig.releaseMs;
     hud.setVisible(true);
@@ -952,7 +969,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const getSkillCooldownDurationMs = (key: SkillKey) => {
     if (key !== "e") return null;
-    return 10000;
+    return skillECooldownMs;
   };
 
   const getProjectileBlockers = () =>
@@ -1177,9 +1194,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillRSphereMaterial.dispose();
       skillQChargeAura.group.removeFromParent();
       skillQChargeAura.dispose();
-      skillQChargeShell.removeFromParent();
-      skillQChargeShellGeometry.dispose();
-      skillQChargeShellMaterial.dispose();
       skillQProjectilePool.forEach((entry) => {
         entry.aura.dispose();
         entry.mesh.removeFromParent();

@@ -23,7 +23,7 @@ const entries: CharacterEntry[] = [
   { profile: felixProfile, createRuntime: createFelixRuntime },
   { profile: grantProfile, createRuntime: createGrantRuntime },
 ];
-const defaultStats: CharacterStats = { health: 100, mana: 100 };
+const defaultStats: CharacterStats = { health: 100, mana: 100, energy: 100 };
 const profiles: CharacterProfile[] = entries.map((entry) => entry.profile);
 
 export const resolveCharacterStats = (
