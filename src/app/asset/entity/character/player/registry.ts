@@ -12,6 +12,8 @@ import { profile as felixProfile } from "../felix/profile";
 import { createRuntime as createFelixRuntime } from "../felix/runtime";
 import { profile as grantProfile } from "../grant/profile";
 import { createRuntime as createGrantRuntime } from "../grant/runtime";
+import { profile as harperProfile } from "../harper/profile";
+import { createRuntime as createHarperRuntime } from "../harper/runtime";
 import type { CharacterEntry, CharacterProfile, CharacterStats } from "../types";
 
 const entries: CharacterEntry[] = [
@@ -22,6 +24,7 @@ const entries: CharacterEntry[] = [
   { profile: eliProfile, createRuntime: createEliRuntime },
   { profile: felixProfile, createRuntime: createFelixRuntime },
   { profile: grantProfile, createRuntime: createGrantRuntime },
+  { profile: harperProfile, createRuntime: createHarperRuntime },
 ];
 const defaultStats: CharacterStats = { health: 100, mana: 100, energy: 100 };
 const profiles: CharacterProfile[] = entries.map((entry) => entry.profile);
