@@ -28,10 +28,10 @@ async function initDB() {
     await pool.query(
       `
         INSERT INTO characters (name)
-        VALUES ($1), ($2), ($3), ($4), ($5), ($6), ($7)
+        VALUES ($1), ($2), ($3), ($4), ($5), ($6), ($7), ($8)
         ON CONFLICT DO NOTHING;
       `,
-      ['Adam', 'Baron', 'Carrot', 'Dakota', 'Eli', 'Felix', 'Grant']
+      ['Adam', 'Baron', 'Carrot', 'Dakota', 'Eli', 'Felix', 'Grant', 'Harper']
     );
     console.log('Seed characters inserted or already exist');
 
