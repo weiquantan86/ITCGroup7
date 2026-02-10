@@ -10,6 +10,9 @@ export const profile: CharacterProfile = {
     hitGain: 4,
     damageTakenRatio: 0,
   },
+  mana: {
+    passivePerSecond: 2,
+  },
   movement: {
     baseSpeed: 5,
     sprintMultiplier: 1.6,
@@ -21,7 +24,7 @@ export const profile: CharacterProfile = {
         id: "q",
         label: "Q",
         description: "...",
-        cost: 0,
+        cost: 100,
         cooldownMs: 30000,
       },
       e: {

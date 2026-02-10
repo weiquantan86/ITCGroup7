@@ -22,6 +22,9 @@ export const profile: CharacterProfile = {
   controls: {
     rightClick: "slash",
   },
+  camera: {
+    followHeadBone: true,
+  },
   slash: {
     enabled: true,
     color: 0x38bdf8,

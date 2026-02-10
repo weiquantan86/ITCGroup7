@@ -48,6 +48,9 @@ export interface Projectile extends LinearProjectileState {
   splitOnImpact: boolean;
   explosionRadius: number;
   explosionDamage: number;
+  explosionColor: number | null;
+  explosionEmissive: number | null;
+  explosionEmissiveIntensity: number | null;
   material: THREE.Material;
   ownsMaterial: boolean;
 }
@@ -59,4 +62,6 @@ export interface ProjectileExplosionFragment {
   life: number;
   maxLife: number;
   baseScale: number;
+  material: THREE.Material;
+  ownsMaterial: boolean;
 }

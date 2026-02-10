@@ -129,6 +129,7 @@ export const createPlayer = ({
   const projectiles: Projectile[] = [];
   const projectileLifecycleHooks = new Map<number, ProjectileLifecycleHooks>();
   const projectileRemovedReason = new Map<number, ProjectileRemoveReason>();
+  const projectileForcedRemoval = new Set<number>();
   const projectileExploded = new Set<number>();
   const projectileExplosionFragments: ProjectileExplosionFragment[] = [];
   const projectileColliders = resolvedWorld.projectileColliders ?? [];
@@ -269,9 +270,15 @@ export const createPlayer = ({
     hitGain: number;
     damageTakenRatio: number;
   };
+  type ManaConfigResolved = {
+    passivePerSecond: number;
+  };
   type MovementConfigResolved = {
     baseSpeed: number;
     sprintMultiplier: number;
+  };
+  type CameraConfigResolved = {
+    followHeadBone: boolean;
   };
   const resolveEnergyConfig = (
     profile?: CharacterProfile
@@ -299,10 +306,24 @@ export const createPlayer = ({
       profile?.movement?.sprintMultiplier ?? 1.6
     ),
   });
+  const resolveManaConfig = (
+    profile?: CharacterProfile
+  ): ManaConfigResolved => ({
+    passivePerSecond: Math.max(0, profile?.mana?.passivePerSecond ?? 0),
+  });
+  const resolveCameraConfig = (
+    profile?: CharacterProfile
+  ): CameraConfigResolved => ({
+    followHeadBone: Boolean(profile?.camera?.followHeadBone),
+  });
   let energyConfig: EnergyConfigResolved =
     resolveEnergyConfig(characterEntry.profile);
+  let manaConfig: ManaConfigResolved =
+    resolveManaConfig(characterEntry.profile);
   let movementConfig: MovementConfigResolved =
     resolveMovementConfig(characterEntry.profile);
+  let cameraConfig: CameraConfigResolved =
+    resolveCameraConfig(characterEntry.profile);
 
   const getRuntimeSkillHandler = (key: SkillKey) => {
     if (!characterRuntime) return null;
@@ -366,9 +387,6 @@ export const createPlayer = ({
   };
 
   const getSkillCost = (key: SkillKey) => {
-    if (characterEntry.profile.id === "adam" && key === "q") {
-      return 0;
-    }
     const configuredCost = characterEntry.profile.kit?.skills?.[key]?.cost;
     if (configuredCost == null) {
       // Q is energy-based globally; keep a small default cost when profiles omit it.
@@ -382,9 +400,6 @@ export const createPlayer = ({
 
   const hasEnoughSkillResource = (key: SkillKey) => {
     if (infiniteFire) return true;
-    if (characterEntry.profile.id === "adam" && key === "q") {
-      return currentStats.energy > 0;
-    }
     const cost = getSkillCost(key);
     if (cost <= 0) return true;
     if (getSkillResource(key) === "energy") {
@@ -402,14 +417,6 @@ export const createPlayer = ({
     } else {
       currentStats.mana = Math.max(0, currentStats.mana - cost);
     }
-    statsDirty = true;
-    syncStatsHud();
-  };
-
-  const consumeAllEnergy = () => {
-    if (infiniteFire) return;
-    if (currentStats.energy <= 0) return;
-    currentStats.energy = 0;
     statsDirty = true;
     syncStatsHud();
   };
@@ -433,9 +440,6 @@ export const createPlayer = ({
     if (!handler) return false;
     const didTrigger = handler();
     if (!didTrigger) return false;
-    if (characterEntry.profile.id === "adam" && key === "q") {
-      consumeAllEnergy();
-    }
     spendSkillCost(key);
     activateSkillCooldown(key, now);
     emitUiState(now);
@@ -461,11 +465,16 @@ export const createPlayer = ({
       }
       projectileLifecycleHooks.delete(projectile.id);
       projectileRemovedReason.delete(projectile.id);
+      projectileForcedRemoval.delete(projectile.id);
       projectileExploded.delete(projectile.id);
     }
     projectiles.length = 0;
     for (let i = 0; i < projectileExplosionFragments.length; i += 1) {
-      scene.remove(projectileExplosionFragments[i].mesh);
+      const fragment = projectileExplosionFragments[i];
+      scene.remove(fragment.mesh);
+      if (fragment.ownsMaterial) {
+        fragment.material.dispose();
+      }
     }
     projectileExplosionFragments.length = 0;
   };
@@ -636,7 +645,9 @@ export const createPlayer = ({
     maxStats = { ...resolved };
     currentStats = { ...resolved };
     energyConfig = resolveEnergyConfig(characterEntry.profile);
+    manaConfig = resolveManaConfig(characterEntry.profile);
     movementConfig = resolveMovementConfig(characterEntry.profile);
+    cameraConfig = resolveCameraConfig(characterEntry.profile);
     healthPool.reset(maxStats.health, maxStats.health);
     syncHealthFromPool();
     skillCooldownDurations = resolveSkillCooldownDurations(characterEntry.profile);
@@ -1035,6 +1046,9 @@ export const createPlayer = ({
       splitOnImpact: Boolean(options?.splitOnImpact),
       explosionRadius: Math.max(0, options?.explosionRadius ?? 0),
       explosionDamage: Math.max(0, options?.explosionDamage ?? 0),
+      explosionColor: options?.explosionColor ?? null,
+      explosionEmissive: options?.explosionEmissive ?? null,
+      explosionEmissiveIntensity: options?.explosionEmissiveIntensity ?? null,
       material,
       ownsMaterial: useCustomMaterial && !providedMesh,
     });
@@ -1076,12 +1090,22 @@ export const createPlayer = ({
     const velocityScale = Math.sqrt(visualFactor);
     const minScale = 0.72 * visualFactor;
     const maxScale = 1.08 * visualFactor;
+    const useCustomExplosionMaterial =
+      projectile.explosionColor != null ||
+      projectile.explosionEmissive != null ||
+      projectile.explosionEmissiveIntensity != null;
 
     for (let i = 0; i < fragmentCount; i += 1) {
-      const mesh = new THREE.Mesh(
-        projectileExplosionGeometry,
-        projectileExplosionMaterial
-      );
+      const fragmentMaterial = useCustomExplosionMaterial
+        ? new THREE.MeshStandardMaterial({
+            color: projectile.explosionColor ?? 0x86efac,
+            roughness: 0.22,
+            metalness: 0.18,
+            emissive: projectile.explosionEmissive ?? 0x22c55e,
+            emissiveIntensity: projectile.explosionEmissiveIntensity ?? 0.7,
+          })
+        : projectileExplosionMaterial;
+      const mesh = new THREE.Mesh(projectileExplosionGeometry, fragmentMaterial);
       const baseScale = THREE.MathUtils.lerp(minScale, maxScale, Math.random());
       mesh.scale.setScalar(baseScale);
       mesh.position.copy(explosionOrigin).add(
@@ -1110,6 +1134,8 @@ export const createPlayer = ({
         life: 0,
         maxLife: (0.55 + Math.random() * 0.2) * velocityScale,
         baseScale,
+        material: fragmentMaterial,
+        ownsMaterial: useCustomExplosionMaterial,
       });
     }
 
@@ -1156,6 +1182,9 @@ export const createPlayer = ({
       );
       if (fragment.life >= fragment.maxLife) {
         scene.remove(fragment.mesh);
+        if (fragment.ownsMaterial) {
+          fragment.material.dispose();
+        }
         projectileExplosionFragments.splice(i, 1);
       }
     }
@@ -1188,6 +1217,12 @@ export const createPlayer = ({
           velocity: projectile.velocity,
           delta: stepDelta,
           applyDefaultGravity,
+          removeProjectile: (reason) => {
+            if (reason) {
+              projectileRemovedReason.set(projectile.id, reason);
+            }
+            projectileForcedRemoval.add(projectile.id);
+          },
         });
       },
       onTravel: (
@@ -1201,6 +1236,7 @@ export const createPlayer = ({
         raycaster,
         remove
       ) => {
+        if (projectileForcedRemoval.has(projectile.id)) return;
         const reach = distance + projectile.radius;
         const attackHit = intersectAttackTargets(
           origin,
@@ -1272,6 +1308,9 @@ export const createPlayer = ({
         }
       },
       shouldExpire: (projectile) => {
+        if (projectileForcedRemoval.has(projectile.id)) {
+          return true;
+        }
         const shouldExpireByGround =
           projectile.mesh.position.y <=
           resolvedWorld.groundY + projectile.radius * 0.4;
@@ -1316,6 +1355,7 @@ export const createPlayer = ({
         }
         projectileLifecycleHooks.delete(projectile.id);
         projectileRemovedReason.delete(projectile.id);
+        projectileForcedRemoval.delete(projectile.id);
         projectileExploded.delete(projectile.id);
       },
     });
@@ -1460,7 +1500,7 @@ fireProjectile = (args?: FireProjectileArgs) => {
       lookPivot.rotation.x = headPitch * 0.35;
     }
 
-    if (characterEntry.profile.id === "baron" && headBone) {
+    if (cameraConfig.followHeadBone && headBone) {
       headBone.getWorldPosition(headWorldTarget);
       cameraTarget.copy(headWorldTarget);
     } else {
@@ -1538,12 +1578,10 @@ fireProjectile = (args?: FireProjectileArgs) => {
         statsDirty = true;
       }
     } else {
-      if (characterEntry.profile.id === "adam" && maxStats.mana > 0) {
-        const manaRegen = 2 * delta;
-        if (manaRegen > 0 && currentStats.mana < maxStats.mana) {
-          currentStats.mana = Math.min(maxStats.mana, currentStats.mana + manaRegen);
-          statsDirty = true;
-        }
+      const manaRegen = manaConfig.passivePerSecond * delta;
+      if (maxStats.mana > 0 && manaRegen > 0 && currentStats.mana < maxStats.mana) {
+        currentStats.mana = Math.min(maxStats.mana, currentStats.mana + manaRegen);
+        statsDirty = true;
       }
       if (maxStats.energy > 0) {
         const energyRegen =

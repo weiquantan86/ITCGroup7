@@ -538,6 +538,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
     right: new THREE.Quaternion(),
     left: new THREE.Quaternion(),
   };
+  const armNeutral = {
+    captured: false,
+    rightId: "",
+    leftId: "",
+    rightY: 0,
+    rightZ: 0,
+    leftY: 0,
+    leftZ: 0,
+  };
   const armReset = {
     pending: false,
   };
@@ -619,6 +628,38 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
     }
     return best;
+  };
+
+  const captureArmNeutralIfNeeded = (
+    rightArm: THREE.Object3D,
+    leftArm: THREE.Object3D
+  ) => {
+    const sameTargets =
+      armNeutral.rightId === rightArm.uuid && armNeutral.leftId === leftArm.uuid;
+    if (armNeutral.captured && sameTargets) return;
+    armNeutral.captured = true;
+    armNeutral.rightId = rightArm.uuid;
+    armNeutral.leftId = leftArm.uuid;
+    armNeutral.rightY = rightArm.rotation.y;
+    armNeutral.rightZ = rightArm.rotation.z;
+    armNeutral.leftY = leftArm.rotation.y;
+    armNeutral.leftZ = leftArm.rotation.z;
+  };
+
+  const restoreArmNeutralTwist = (
+    rightArm: THREE.Object3D,
+    leftArm: THREE.Object3D
+  ) => {
+    if (!armNeutral.captured) return;
+    const sameTargets =
+      armNeutral.rightId === rightArm.uuid && armNeutral.leftId === leftArm.uuid;
+    if (!sameTargets) return;
+    rightArm.rotation.y = armNeutral.rightY;
+    rightArm.rotation.z = armNeutral.rightZ;
+    if (leftArm !== rightArm) {
+      leftArm.rotation.y = armNeutral.leftY;
+      leftArm.rotation.z = armNeutral.leftZ;
+    }
   };
 
   const beginCharge = () => {
@@ -958,6 +999,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     armAnim.raise = 0;
     armReset.pending = false;
     armBase.captured = false;
+    armNeutral.captured = false;
+    armNeutral.rightId = "";
+    armNeutral.leftId = "";
     cancelCharge();
     deactivateSkillE(false);
     deactivateSkillR();
@@ -1053,13 +1097,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
           args.arms.find((arm) => arm !== leftArm) ??
           leftArm;
         if (rightArm && leftArm) {
-          if (armReset.pending && armBase.captured) {
-            const sameTargets =
-              armBase.rightId === rightArm.uuid && armBase.leftId === leftArm.uuid;
-            if (sameTargets) {
-              rightArm.quaternion.copy(armBase.right);
-              leftArm.quaternion.copy(armBase.left);
+          captureArmNeutralIfNeeded(rightArm, leftArm);
+
+          if (armReset.pending) {
+            if (armBase.captured) {
+              const sameTargets =
+                armBase.rightId === rightArm.uuid && armBase.leftId === leftArm.uuid;
+              if (sameTargets) {
+                rightArm.quaternion.copy(armBase.right);
+                leftArm.quaternion.copy(armBase.left);
+              }
             }
+            restoreArmNeutralTwist(rightArm, leftArm);
             armReset.pending = false;
             armBase.captured = false;
             return;
@@ -1167,6 +1216,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
                 leftArm.quaternion.copy(armBase.left);
               }
             }
+            restoreArmNeutralTwist(rightArm, leftArm);
             armBase.captured = false;
             return;
           }

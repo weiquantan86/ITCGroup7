@@ -61,9 +61,17 @@ export interface CharacterEnergyConfig {
   damageTakenRatio?: number;
 }
 
+export interface CharacterManaConfig {
+  passivePerSecond?: number;
+}
+
 export interface CharacterMovementConfig {
   baseSpeed?: number;
   sprintMultiplier?: number;
+}
+
+export interface CharacterCameraConfig {
+  followHeadBone?: boolean;
 }
 
 export interface SkillDefinition {
@@ -91,7 +99,9 @@ export interface CharacterProfile {
   pathToken: string;
   stats?: CharacterStats;
   energy?: CharacterEnergyConfig;
+  mana?: CharacterManaConfig;
   movement?: CharacterMovementConfig;
+  camera?: CharacterCameraConfig;
   kit?: CharacterKit;
   controls?: CharacterControls;
   slash?: SlashConfig;
@@ -128,6 +138,7 @@ export interface ProjectileLifecycleHooks {
     velocity: THREE.Vector3;
     delta: number;
     applyDefaultGravity: () => void;
+    removeProjectile: (reason?: ProjectileRemoveReason) => void;
   }) => void;
   onRemove?: (args: {
     reason: ProjectileRemoveReason;
@@ -155,6 +166,9 @@ export interface FireProjectileArgs {
   splitOnImpact?: boolean;
   explosionRadius?: number;
   explosionDamage?: number;
+  explosionColor?: number;
+  explosionEmissive?: number;
+  explosionEmissiveIntensity?: number;
   lifecycle?: ProjectileLifecycleHooks;
 }
 
