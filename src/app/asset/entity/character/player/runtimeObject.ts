@@ -14,6 +14,9 @@ type CharacterRuntimeObjectInit = {
   handleSkillE?: CharacterRuntime["handleSkillE"];
   handleSkillR?: CharacterRuntime["handleSkillR"];
   getProjectileBlockers?: CharacterRuntime["getProjectileBlockers"];
+  handleProjectileBlockHit?: CharacterRuntime["handleProjectileBlockHit"];
+  getMovementSpeedMultiplier?: CharacterRuntime["getMovementSpeedMultiplier"];
+  isBasicAttackLocked?: CharacterRuntime["isBasicAttackLocked"];
   isMovementLocked?: CharacterRuntime["isMovementLocked"];
   getSkillCooldownRemainingMs?: CharacterRuntime["getSkillCooldownRemainingMs"];
   getSkillCooldownDurationMs?: CharacterRuntime["getSkillCooldownDurationMs"];
@@ -34,6 +37,9 @@ export class CharacterRuntimeObject implements CharacterRuntime {
   readonly handleSkillE?: CharacterRuntime["handleSkillE"];
   readonly handleSkillR?: CharacterRuntime["handleSkillR"];
   readonly getProjectileBlockers?: CharacterRuntime["getProjectileBlockers"];
+  readonly handleProjectileBlockHit?: CharacterRuntime["handleProjectileBlockHit"];
+  readonly getMovementSpeedMultiplier?: CharacterRuntime["getMovementSpeedMultiplier"];
+  readonly isBasicAttackLocked?: CharacterRuntime["isBasicAttackLocked"];
   readonly isMovementLocked?: CharacterRuntime["isMovementLocked"];
   readonly getSkillCooldownRemainingMs?: CharacterRuntime["getSkillCooldownRemainingMs"];
   readonly getSkillCooldownDurationMs?: CharacterRuntime["getSkillCooldownDurationMs"];
@@ -53,6 +59,9 @@ export class CharacterRuntimeObject implements CharacterRuntime {
     this.handleSkillE = init.handleSkillE;
     this.handleSkillR = init.handleSkillR;
     this.getProjectileBlockers = init.getProjectileBlockers;
+    this.handleProjectileBlockHit = init.handleProjectileBlockHit;
+    this.getMovementSpeedMultiplier = init.getMovementSpeedMultiplier;
+    this.isBasicAttackLocked = init.isBasicAttackLocked;
     this.isMovementLocked = init.isMovementLocked;
     this.getSkillCooldownRemainingMs = init.getSkillCooldownRemainingMs;
     this.getSkillCooldownDurationMs = init.getSkillCooldownDurationMs;

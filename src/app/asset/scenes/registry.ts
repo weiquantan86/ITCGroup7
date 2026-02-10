@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { LinearProjectileUpdater } from "../object/projectile/linearUpdater";
+import { tryReflectLinearProjectile } from "../object/projectile/reflection";
 import type {
   PlayerAttackTarget,
   PlayerWorld,
@@ -922,6 +923,7 @@ const createTrainingScene = (
   const launcherOrigin = new THREE.Vector3();
   const launcherAimDirection = new THREE.Vector3();
   const launcherArrowForward = new THREE.Vector3(0, 0, 1);
+  const launcherReflectedDirection = new THREE.Vector3();
   const playerChest = new THREE.Vector3();
   let launcherCooldownUntil = 0;
 
@@ -1024,9 +1026,63 @@ const createTrainingScene = (
     }
   };
 
-  const isOnLauncherTriggerPad = (player: THREE.Object3D) =>
-    Math.abs(player.position.x - triggerPadCenter.x) <= triggerPadSize.width / 2 &&
-    Math.abs(player.position.z - triggerPadCenter.z) <= triggerPadSize.depth / 2;
+  const isObjectOnLauncherTriggerPad = (object: THREE.Object3D) =>
+    Math.abs(object.position.x - triggerPadCenter.x) <= triggerPadSize.width / 2 &&
+    Math.abs(object.position.z - triggerPadCenter.z) <= triggerPadSize.depth / 2;
+
+  const isOnLauncherTriggerPad = (
+    player: THREE.Object3D,
+    projectileBlockers: THREE.Object3D[]
+  ) => {
+    if (isObjectOnLauncherTriggerPad(player)) return true;
+    for (let i = 0; i < projectileBlockers.length; i += 1) {
+      const blocker = projectileBlockers[i];
+      if (!blocker.parent || !blocker.visible) continue;
+      const blockerUserData = blocker.userData as {
+        switchActivator?: boolean;
+      };
+      if (!blockerUserData.switchActivator) continue;
+      if (isObjectOnLauncherTriggerPad(blocker)) return true;
+    }
+    return false;
+  };
+
+  const tryReflectLauncherArrow = ({
+    arrow,
+    blockerHit,
+    now,
+    origin,
+    direction,
+    travelDistance,
+    nextPosition,
+  }: {
+    arrow: LauncherArrow;
+    blockerHit: THREE.Intersection;
+    now: number;
+    origin: THREE.Vector3;
+    direction: THREE.Vector3;
+    travelDistance: number;
+    nextPosition: THREE.Vector3;
+  }) => {
+    const reflected = tryReflectLinearProjectile({
+      blockerHit,
+      now,
+      origin,
+      direction,
+      travelDistance,
+      nextPosition,
+      velocity: arrow.velocity,
+      radius: arrow.radius,
+      outDirection: launcherReflectedDirection,
+    });
+    if (!reflected) return false;
+
+    arrow.mesh.quaternion.setFromUnitVectors(
+      launcherArrowForward,
+      launcherReflectedDirection
+    );
+    return true;
+  };
 
   const updateLauncherArrows = (
     now: number,
@@ -1045,10 +1101,10 @@ const createTrainingScene = (
       getObject: (arrow) => arrow.mesh,
       onTravel: (
         arrow,
-        _travelNow,
+        travelNow,
         _travelDelta,
         origin,
-        _nextPosition,
+        nextPosition,
         direction,
         distance,
         raycaster,
@@ -1058,7 +1114,17 @@ const createTrainingScene = (
         raycaster.set(origin, direction);
         raycaster.far = distance + arrow.radius;
         const hits = raycaster.intersectObjects(projectileBlockers, true);
-        if (hits.length) {
+        if (!hits.length) return;
+        const reflected = tryReflectLauncherArrow({
+          arrow,
+          blockerHit: hits[0],
+          now: travelNow,
+          origin,
+          direction,
+          travelDistance: distance,
+          nextPosition,
+        });
+        if (!reflected) {
           remove();
         }
       },
@@ -1096,7 +1162,7 @@ const createTrainingScene = (
     updateTargetDebrisPieces(delta);
     updateTesterExplosionPieces(delta);
 
-    if (isOnLauncherTriggerPad(player) && now >= launcherCooldownUntil) {
+    if (isOnLauncherTriggerPad(player, projectileBlockers) && now >= launcherCooldownUntil) {
       spawnLauncherArrow(player, now);
     }
 

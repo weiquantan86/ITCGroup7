@@ -1,4 +1,5 @@
 import type * as THREE from "three";
+import type { Projectile as RuntimeProjectile } from "../../object/projectile/types";
 
 export type ThreeModule = typeof import("three");
 
@@ -78,7 +79,7 @@ export interface SkillDefinition {
   id: string;
   label: string;
   description?: string;
-  cost?: number;
+  cost?: number | "all";
   cooldownMs?: number;
 }
 
@@ -172,6 +173,23 @@ export interface FireProjectileArgs {
   lifecycle?: ProjectileLifecycleHooks;
 }
 
+export interface MeleeAttackArgs {
+  damage: number;
+  maxDistance: number;
+  hitRadius?: number;
+  maxHits?: number;
+}
+
+export interface ProjectileBlockHitArgs {
+  now: number;
+  projectile: RuntimeProjectile;
+  blockerHit: THREE.Intersection;
+  origin: THREE.Vector3;
+  direction: THREE.Vector3;
+  travelDistance: number;
+  nextPosition: THREE.Vector3;
+}
+
 export interface CharacterRuntime {
   setProfile: (nextProfile: CharacterProfile) => void;
   triggerSlash: (facing: CharacterFacing) => void;
@@ -183,6 +201,9 @@ export interface CharacterRuntime {
   handleSkillE?: () => boolean;
   handleSkillR?: () => boolean;
   getProjectileBlockers?: () => THREE.Object3D[];
+  handleProjectileBlockHit?: (args: ProjectileBlockHitArgs) => boolean;
+  getMovementSpeedMultiplier?: () => number;
+  isBasicAttackLocked?: () => boolean;
   isMovementLocked?: () => boolean;
   getSkillCooldownRemainingMs?: (key: SkillKey) => number | null;
   getSkillCooldownDurationMs?: (key: SkillKey) => number | null;
@@ -198,6 +219,9 @@ export interface CharacterRuntimeFactory {
     mount?: HTMLElement;
     noCooldown?: boolean;
     fireProjectile?: (args?: FireProjectileArgs) => void;
+    performMeleeAttack?: (args: MeleeAttackArgs) => number;
+    applyEnergy?: (amount: number) => number;
+    getCurrentStats?: () => CharacterStats;
   }): CharacterRuntime;
 }
 

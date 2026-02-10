@@ -14,9 +14,9 @@ export const profile: CharacterProfile = {
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {
-      q: { id: "q", label: "Q", description: "..." },
-      e: { id: "e", label: "E", description: "..." },
-      r: { id: "r", label: "R", description: "..." },
+      q: { id: "q", label: "Q", description: "...", cost: "all", cooldownMs: 30000 },
+      e: { id: "e", label: "E", description: "...", cooldownMs: 5000 },
+      r: { id: "r", label: "R", description: "...", cost: 35, cooldownMs: 10000 },
     },
   },
   controls: {

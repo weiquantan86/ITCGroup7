@@ -18,6 +18,10 @@ export class LinearProjectileUpdater {
   ) {
     for (let i = projectiles.length - 1; i >= 0; i -= 1) {
       const projectile = projectiles[i];
+      if (!projectile) {
+        // External systems may clear/splice the array during callbacks.
+        continue;
+      }
       const object = hooks.getObject(projectile);
       hooks.applyForces?.(projectile, delta);
 
