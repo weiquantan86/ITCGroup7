@@ -1,6 +1,21 @@
 ﻿import bcrypt from 'bcrypt';
 import pool from './client.ts';
 
+const DEFAULT_CHARACTER_NAME = 'Adam';
+
+async function assignDefaultCharacter(userId: number) {
+  await pool.query(
+    `
+      INSERT INTO user_characters (user_id, character_id)
+      SELECT $1, c.id
+      FROM characters c
+      WHERE c.name = $2
+      ON CONFLICT DO NOTHING;
+    `,
+    [userId, DEFAULT_CHARACTER_NAME]
+  );
+}
+
 async function initDB() {
   try {
     await pool.query(`
@@ -97,16 +112,7 @@ async function initDB() {
       );
       
       // Only insert Adam as the default character
-      await pool.query(
-        `
-          INSERT INTO user_characters (user_id, character_id)
-          SELECT $1, c.id
-          FROM characters c
-          WHERE c.name = 'Adam'
-          ON CONFLICT DO NOTHING;
-        `,
-        [userId]
-      );
+      await assignDefaultCharacter(userId);
       console.log("Seed user_characters reset: Sarcus only owns Adam");
     }
   } catch (err) {
