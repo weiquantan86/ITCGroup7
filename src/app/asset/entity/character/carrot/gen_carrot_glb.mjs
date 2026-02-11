@@ -70,28 +70,14 @@ const eyeMat = new THREE.MeshBasicMaterial({
   opacity: 0.98,
   side: THREE.DoubleSide,
 });
-const outlineBaseMat = new THREE.LineBasicMaterial({
-  color: 0xaab6c8,
-  transparent: true,
-  opacity: 0.9,
-});
 
 const createOutlinedMesh = (
   geometry,
   material,
-  { name = "", outlineThreshold = 20, outlineOpacity = 0.9 } = {}
+  { name = "" } = {}
 ) => {
   const mesh = new THREE.Mesh(geometry, material);
   if (name) mesh.name = name;
-
-  const edges = new THREE.EdgesGeometry(geometry, outlineThreshold);
-  const edgeMat = outlineBaseMat.clone();
-  edgeMat.opacity = outlineOpacity;
-  edgeMat.depthWrite = false;
-
-  const lines = new THREE.LineSegments(edges, edgeMat);
-  lines.renderOrder = 10;
-  mesh.add(lines);
 
   return mesh;
 };
@@ -144,19 +130,16 @@ const headBall = createOutlinedMesh(
 headBall.scale.set(1.0, 1.22, 1.0);
 head.add(headBall);
 
-// Half-sphere face dome.
-const faceDome = createOutlinedMesh(
-  new THREE.SphereGeometry(0.56, 28, 18, 0, Math.PI * 2, 0, Math.PI / 2),
-  bodyMatAlt,
-  { name: "faceDome", outlineThreshold: 26, outlineOpacity: 0.75 }
-);
-faceDome.rotation.x = -Math.PI / 2;
-faceDome.position.set(0, -0.08, 0.56);
-headBall.add(faceDome);
+// Face mount only (no face shell mesh) to avoid angle-dependent artifact planes.
+const faceMount = new THREE.Group();
+faceMount.name = "faceMount";
+faceMount.rotation.x = -Math.PI / 2;
+faceMount.position.set(0, -0.18, 0.56);
+headBall.add(faceMount);
 
 const eyesGroup = new THREE.Group();
 eyesGroup.name = "eyesGroup";
-faceDome.add(eyesGroup);
+faceMount.add(eyesGroup);
 
 // Eye sockets (half-spheres) + inward-slanted slit eyes.
 const eyeSocketGeo = new THREE.SphereGeometry(0.23, 18, 14, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -175,50 +158,38 @@ const eyeSocketR = createOutlinedMesh(eyeSocketGeo, bodyMat, {
   socket.scale.set(1, 1, 0.6);
 });
 
-eyeSocketL.position.set(-0.21, -0.01, 0.13);
-eyeSocketR.position.set(0.21, -0.01, 0.13);
+eyeSocketL.position.set(-0.25, -0.02, 0.13);
+eyeSocketR.position.set(0.25, -0.02, 0.13);
 
 eyeSocketL.rotation.z = THREE.MathUtils.degToRad(26);
 eyeSocketR.rotation.z = THREE.MathUtils.degToRad(-26);
 
-const slitEyeGeo = createSlitEyeGeometry(0.32, 0.14);
-const eyeL = new THREE.Mesh(slitEyeGeo, eyeMat);
-const eyeR = new THREE.Mesh(slitEyeGeo, eyeMat);
-eyeL.name = "eyeL";
-eyeR.name = "eyeR";
-eyeL.position.set(-0.26, 0.05, 0.18);
-eyeR.position.set(0.26, 0.05, 0.18);
-// Slant toward the center.
-eyeL.rotation.x = THREE.MathUtils.degToRad(86);
-eyeR.rotation.x = THREE.MathUtils.degToRad(-86);
-eyeR.scale.x = -1;
-
-faceDome.add(eyeSocketL, eyeSocketR, eyeL, eyeR);
+faceMount.add(eyeSocketL, eyeSocketR);
 
 // Hat (visor + low pyramid roof) attached to the sphere head.
 const hat = new THREE.Group();
 hat.name = "hat";
-hat.position.set(0, 0.52, 0);
+hat.position.set(0, 0.42, 0);
 headBall.add(hat);
 
 const visor = createOutlinedMesh(
-  new THREE.BoxGeometry(1.45, 0.36, 0.78),
+  new THREE.BoxGeometry(1.45, 0.36, 1.4),
   bodyMatAlt,
   { name: "visor" }
 );
-visor.position.set(0, -0.08, 0.22);
+visor.position.set(0, -0.08, 0.01);
 hat.add(visor);
 
 const roof = createOutlinedMesh(
-  new THREE.ConeGeometry(0.92, 0.62, 4),
+  new THREE.ConeGeometry(0.98, 0.6, 4),
   bodyMat,
   { name: "roof" }
 );
 // Align the pyramid base edges with the visor.
 roof.rotation.y = Math.PI / 4;
-roof.position.set(0, 0.26, 0.02);
+roof.position.set(0, 0.36, 0.02);
 // Preserve width/depth, lower height only.
-roof.scale.set(1.0, 0.55, 1.05);
+roof.scale.set(1.0, 0.85, 1.05);
 hat.add(roof);
 
 // Horns: sit on the upper slanted sides of the pyramid.
@@ -233,10 +204,10 @@ const hornR = createOutlinedMesh(hornGeo, bodyMatAlt, {
   outlineThreshold: 26,
   outlineOpacity: 0.85,
 });
-hornL.position.set(-0.38, 0.2, 0.14);
-hornR.position.set(0.38, 0.2, 0.14);
+hornL.position.set(-0.48, 0.2, 0.14);
+hornR.position.set(0.48, 0.2, 0.14);
 hornL.rotation.set(-0.25, 0.35, Math.PI * 0.62);
-hornR.rotation.set(-0.25, -0.35, -Math.PI * 0.62);
+hornR.rotation.set(0.25, -0.35, -Math.PI * 0.62);
 roof.add(hornL, hornR);
 
 // Legs/feet (named legs for runtime animation).
@@ -274,16 +245,16 @@ armRight.name = "armRight";
 armRight.position.set(1.5, 1.08, 0.18);
 
 const palm = createOutlinedMesh(
-  new THREE.SphereGeometry(0.58, 28, 20),
+  new THREE.SphereGeometry(0.38, 28, 20),
   bodyMatAlt,
   { name: "palm" }
 );
-palm.scale.set(1.12, 1.28, 1.08);
+palm.scale.set(1.12, 1.28, 0.7);
 armRight.add(palm);
 
 const fingerGeo = new THREE.BoxGeometry(0.12, 0.8, 0.14);
 const fingerAngles = [105, 65, 30, -5, -40, -80];
-const fingerDist = [0.84, 0.82, 0.8, 0.78, 0.82, 0.72];
+const fingerDist = [0.4, 0.4, 0.38, 0.38, 0.42, 0.42];
 const fingerLen = [1.2, 1.1, 1.05, 1.0, 1.1, 0.9];
 
 fingerAngles.forEach((deg, i) => {

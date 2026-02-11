@@ -32,9 +32,7 @@ export default function Login() {
     await handleLogin(identifier, password);
   };
 
-  const handleAutoLogin = async () => {
-    const autoIdentifier = 'Sarcus';
-    const autoPassword = '123456';
+  const handleAutoLogin = async (autoIdentifier: string, autoPassword: string) => {
     setIdentifier(autoIdentifier);
     setPassword(autoPassword);
     await handleLogin(autoIdentifier, autoPassword);
@@ -49,8 +47,19 @@ export default function Login() {
         <button type="submit">Login</button>
       </form>
       <div className="auto-login">
-        <button type="button" className="auto-login-button" onClick={handleAutoLogin}>
+        <button
+          type="button"
+          className="auto-login-button"
+          onClick={() => handleAutoLogin('Sarcus', '123456')}
+        >
           Auto Login (Sarcus)
+        </button>
+        <button
+          type="button"
+          className="auto-login-button"
+          onClick={() => handleAutoLogin('weiquan', 'weiquan')}
+        >
+          Auto Login (weiquan)
         </button>
       </div>
       <p className="message">{message}</p>
