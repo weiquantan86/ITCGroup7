@@ -785,6 +785,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillRDanceWaveRight = new THREE.Vector3();
   const skillRDanceWaveUp = new THREE.Vector3(0, 1, 0);
   const skillRDanceWaveFacing = new THREE.Quaternion();
+  const skillRReflectFacing = new THREE.Quaternion();
+  const skillRReflectForward = new THREE.Vector3();
+  const skillRReflectIncoming = new THREE.Vector3();
   const mergedProjectileBlockers: THREE.Object3D[] = [];
   const primaryReflectVolumeGeometry = new THREE.BoxGeometry(1, 1, 1);
   const primaryReflectVolumeMaterial = new THREE.MeshBasicMaterial({
@@ -830,6 +833,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     reflectSpeedMultiplier: 1.28,
     reflectRadius: 2.45,
     reflectCenterY: 1.2,
+    reflectFrontDotMax: 0,
     waveMinSpeed: 7.8,
     waveMaxSpeed: 11.6,
     waveLifeMs: 460,
@@ -855,6 +859,25 @@ export const createRuntime: CharacterRuntimeFactory = ({
     wanderRadius: 8.6,
     chargeYOffset: 1.55,
     eThrowOriginYOffset: 1.15,
+    preparingCrouchDepthMin: 0.22,
+    preparingCrouchDepthMax: 0.5,
+    preparingLeanMin: 0,
+    preparingLeanMax: 0,
+    preparingLegBendMin: 0.04,
+    preparingLegBendMax: 0.22,
+    preparingLegSpreadMin: 0.16,
+    preparingLegSpreadMax: 0.34,
+    preparingLegTwistMin: 0.02,
+    preparingLegTwistMax: 0.1,
+    preparingBodySquashMin: 0.94,
+    preparingBodySquashMax: 0.84,
+    preparingBodyWidenMin: 1.02,
+    preparingBodyWidenMax: 1.12,
+    preparingHandLiftYMin: 0.06,
+    preparingHandLiftYMax: 0.2,
+    preparingHandForwardMin: 0.02,
+    preparingHandForwardMax: 0.1,
+    preparingHeldScaleBoost: 1.4,
   };
   const cloneState = {
     active: false,
@@ -1163,15 +1186,59 @@ export const createRuntime: CharacterRuntimeFactory = ({
       return { legLeft, legRight };
     }
 
+    const scoreLegCandidate = (
+      leg: THREE.Object3D,
+      side: "left" | "right"
+    ) => {
+      const name = (leg.name || "").toLowerCase();
+      let score = 0;
+      if (name.includes(side)) score += 10;
+      if (name.includes("leg")) score += 6;
+      if (name.includes("thigh") || name.includes("upper")) score += 4;
+      if (name.includes("hip")) score += 1;
+      if (
+        name.includes("lower") ||
+        name.includes("calf") ||
+        name.includes("knee") ||
+        name.includes("foot") ||
+        name.includes("toe") ||
+        name.includes("ankle") ||
+        name.includes("end")
+      ) {
+        score -= 8;
+      }
+      if (name === `leg${side}` || name === `${side}leg`) score += 6;
+      return score;
+    };
+
+    const leftCandidates: THREE.Object3D[] = [];
+    const rightCandidates: THREE.Object3D[] = [];
     model.traverse((child: THREE.Object3D) => {
       const name = (child.name || "").toLowerCase();
-      if (!legLeft && (name === "legleft" || (name.includes("left") && name.includes("leg")))) {
-        legLeft = child;
-      }
-      if (!legRight && (name === "legright" || (name.includes("right") && name.includes("leg")))) {
-        legRight = child;
-      }
+      if (!name.includes("leg") && !name.includes("thigh")) return;
+      if (name.includes("left")) leftCandidates.push(child);
+      if (name.includes("right")) rightCandidates.push(child);
     });
+
+    const pickBestLeg = (
+      candidates: THREE.Object3D[],
+      side: "left" | "right"
+    ) => {
+      let best: THREE.Object3D | null = null;
+      let bestScore = -Infinity;
+      for (let i = 0; i < candidates.length; i += 1) {
+        const candidate = candidates[i];
+        const score = scoreLegCandidate(candidate, side);
+        if (score > bestScore) {
+          best = candidate;
+          bestScore = score;
+        }
+      }
+      return best;
+    };
+
+    legLeft = pickBestLeg(leftCandidates, "left");
+    legRight = pickBestLeg(rightCandidates, "right");
 
     return { legLeft, legRight };
   };
@@ -1540,6 +1607,69 @@ export const createRuntime: CharacterRuntimeFactory = ({
         targetYaw,
         preparingThrow ? 0.38 : 0.22
       );
+      const crouchDepth = preparingThrow
+        ? THREE.MathUtils.lerp(
+            cloneConfig.preparingCrouchDepthMin,
+            cloneConfig.preparingCrouchDepthMax,
+            eChargeRatio
+          )
+        : 0;
+      const leanForward = preparingThrow
+        ? THREE.MathUtils.lerp(
+            cloneConfig.preparingLeanMin,
+            cloneConfig.preparingLeanMax,
+            eChargeRatio
+          )
+        : 0;
+      const legBend = preparingThrow
+        ? THREE.MathUtils.lerp(
+            cloneConfig.preparingLegBendMin,
+            cloneConfig.preparingLegBendMax,
+            eChargeRatio
+          )
+        : 0;
+      const legSpread = preparingThrow
+        ? THREE.MathUtils.lerp(
+            cloneConfig.preparingLegSpreadMin,
+            cloneConfig.preparingLegSpreadMax,
+            eChargeRatio
+          )
+        : 0;
+      const legTwist = preparingThrow
+        ? THREE.MathUtils.lerp(
+            cloneConfig.preparingLegTwistMin,
+            cloneConfig.preparingLegTwistMax,
+            eChargeRatio
+          )
+        : 0;
+      const handLiftY = preparingThrow
+        ? THREE.MathUtils.lerp(
+            cloneConfig.preparingHandLiftYMin,
+            cloneConfig.preparingHandLiftYMax,
+            eChargeRatio
+          )
+        : 0;
+      const handForward = preparingThrow
+        ? THREE.MathUtils.lerp(
+            cloneConfig.preparingHandForwardMin,
+            cloneConfig.preparingHandForwardMax,
+            eChargeRatio
+          )
+        : 0;
+      const bodySquash = preparingThrow
+        ? THREE.MathUtils.lerp(
+            cloneConfig.preparingBodySquashMin,
+            cloneConfig.preparingBodySquashMax,
+            eChargeRatio
+          )
+        : 1;
+      const bodyWiden = preparingThrow
+        ? THREE.MathUtils.lerp(
+            cloneConfig.preparingBodyWidenMin,
+            cloneConfig.preparingBodyWidenMax,
+            eChargeRatio
+          )
+        : 1;
 
       if (clone.model) {
         profile.animateModel?.({
@@ -1552,30 +1682,77 @@ export const createRuntime: CharacterRuntimeFactory = ({
         clone.walkPhase += deltaSeconds * (isCloneMoving ? 4.2 + clone.speed * 0.3 : 1.6);
         clone.model.position.y = THREE.MathUtils.lerp(
           clone.model.position.y,
-          isCloneMoving ? Math.sin(clone.walkPhase + i * 0.45) * 0.055 : 0,
-          isCloneMoving ? 0.24 : 0.16
+          isCloneMoving ? Math.sin(clone.walkPhase + i * 0.45) * 0.055 : -crouchDepth,
+          isCloneMoving ? 0.24 : preparingThrow ? 0.28 : 0.16
+        );
+        clone.model.rotation.x = THREE.MathUtils.lerp(
+          clone.model.rotation.x,
+          preparingThrow ? leanForward : 0,
+          preparingThrow ? 0.3 : 0.16
+        );
+        clone.model.rotation.z = THREE.MathUtils.lerp(
+          clone.model.rotation.z,
+          0,
+          preparingThrow ? 0.28 : 0.14
+        );
+        clone.model.scale.x = THREE.MathUtils.lerp(
+          clone.model.scale.x,
+          bodyWiden,
+          preparingThrow ? 0.26 : 0.14
+        );
+        clone.model.scale.y = THREE.MathUtils.lerp(
+          clone.model.scale.y,
+          bodySquash,
+          preparingThrow ? 0.26 : 0.14
+        );
+        clone.model.scale.z = THREE.MathUtils.lerp(
+          clone.model.scale.z,
+          bodyWiden,
+          preparingThrow ? 0.26 : 0.14
         );
       }
 
       if (clone.legLeft && clone.legRight) {
         const stride = isCloneMoving ? Math.sin(clone.walkPhase) * 0.52 : 0;
+        const baseLegAngle = preparingThrow ? -0.2 - legBend : -0.16;
+        const legStanceLerp = preparingThrow ? 0.34 : 0.18;
         clone.legLeft.rotation.x = THREE.MathUtils.lerp(
           clone.legLeft.rotation.x,
-          -0.16 + stride,
-          0.28
+          baseLegAngle + stride,
+          preparingThrow ? 0.36 : 0.26
         );
         clone.legRight.rotation.x = THREE.MathUtils.lerp(
           clone.legRight.rotation.x,
-          -0.16 - stride,
-          0.28
+          baseLegAngle - stride,
+          preparingThrow ? 0.36 : 0.26
+        );
+        clone.legLeft.rotation.z = THREE.MathUtils.lerp(
+          clone.legLeft.rotation.z,
+          preparingThrow ? legSpread : 0,
+          legStanceLerp
+        );
+        clone.legRight.rotation.z = THREE.MathUtils.lerp(
+          clone.legRight.rotation.z,
+          preparingThrow ? -legSpread : 0,
+          legStanceLerp
+        );
+        clone.legLeft.rotation.y = THREE.MathUtils.lerp(
+          clone.legLeft.rotation.y,
+          preparingThrow ? legTwist : 0,
+          legStanceLerp
+        );
+        clone.legRight.rotation.y = THREE.MathUtils.lerp(
+          clone.legRight.rotation.y,
+          preparingThrow ? -legTwist : 0,
+          legStanceLerp
         );
       }
 
       if (clone.throwArm && clone.throwArmBase) {
         if (preparingThrow) {
-          const chargeTilt = THREE.MathUtils.lerp(0.35, 1.1, eChargeRatio);
-          const chargeTwist = THREE.MathUtils.lerp(0.1, 0.62, eChargeRatio);
-          const chargeRoll = THREE.MathUtils.lerp(-0.08, -0.52, eChargeRatio);
+          const chargeTilt = THREE.MathUtils.lerp(0.7, 1.45, eChargeRatio);
+          const chargeTwist = THREE.MathUtils.lerp(0.18, 0.8, eChargeRatio);
+          const chargeRoll = THREE.MathUtils.lerp(-0.12, -0.62, eChargeRatio);
           cloneArmQuatX.setFromAxisAngle(axisX, -chargeTilt);
           cloneArmQuatY.setFromAxisAngle(axisY, chargeTwist);
           cloneArmQuatZ.setFromAxisAngle(axisZ, chargeRoll);
@@ -1602,8 +1779,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       const held = clone.heldShuriken;
       held.group.visible = preparingThrow;
       if (preparingThrow) {
+        held.group.position.set(0.04, -0.95 + handLiftY, 0.18 + handForward);
         const pulse = 0.92 + Math.sin(now * 0.02 + i * 0.65) * 0.11;
-        const chargeScale = 1.02 + eChargeRatio * 1.1;
+        const chargeScale =
+          (1.02 + eChargeRatio * 1.1) * cloneConfig.preparingHeldScaleBoost;
         held.group.scale.setScalar(0.52 * chargeScale * pulse);
         held.group.rotation.y += deltaSeconds * (3.7 + i * 0.18);
         held.blade.rotation.z += deltaSeconds * (5.3 + i * 0.26);
@@ -1611,6 +1790,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         held.auraMaterial.opacity = 0.42 + eChargeRatio * 0.5;
         held.bladeMaterial.emissiveIntensity = 1.2 + eChargeRatio * 1.0;
       } else {
+        held.group.position.set(0.04, -0.95, 0.18);
         held.group.scale.setScalar(0.52);
         held.group.rotation.set(Math.PI * 0.52, 0.2, Math.PI * 0.22);
         held.blade.rotation.set(0, 0, 0);
@@ -2226,6 +2406,29 @@ export const createRuntime: CharacterRuntimeFactory = ({
         isDescendantOf(object, skillRReflectVolume)
     );
 
+  const isSkillRFrontReflectionHit = (incomingDirection: THREE.Vector3) => {
+    avatar.getWorldQuaternion(skillRReflectFacing);
+    skillRReflectForward.set(0, 0, 1).applyQuaternion(skillRReflectFacing);
+    skillRReflectForward.y = 0;
+    if (skillRReflectForward.lengthSq() < 0.000001) {
+      skillRReflectForward.set(0, 0, 1);
+    } else {
+      skillRReflectForward.normalize();
+    }
+
+    skillRReflectIncoming.copy(incomingDirection);
+    skillRReflectIncoming.y = 0;
+    if (skillRReflectIncoming.lengthSq() < 0.000001) {
+      return false;
+    }
+    skillRReflectIncoming.normalize();
+
+    // Incoming direction must be in the front hemisphere (dot <= 0) to be reflected.
+    return (
+      skillRReflectIncoming.dot(skillRReflectForward) <= skillRConfig.reflectFrontDotMax
+    );
+  };
+
   const handleProjectileBlockHit: NonNullable<
     CharacterRuntime["handleProjectileBlockHit"]
   > = ({
@@ -2237,10 +2440,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     travelDistance,
     nextPosition,
   }) => {
-    const shouldTryReflect =
-      isPrimarySwingBlocker(blockerHit.object) ||
-      isSkillRReflectBlocker(blockerHit.object);
-    if (shouldTryReflect) {
+    if (isPrimarySwingBlocker(blockerHit.object)) {
       const reflected = tryReflectLinearProjectile({
         blockerHit,
         now,
@@ -2254,6 +2454,27 @@ export const createRuntime: CharacterRuntimeFactory = ({
       if (reflected) {
         return true;
       }
+    }
+
+    if (isSkillRReflectBlocker(blockerHit.object)) {
+      if (!isSkillRFrontReflectionHit(direction)) {
+        // Rear-side hits are ignored so R only reflects projectiles from the front.
+        return true;
+      }
+      const reflected = tryReflectLinearProjectile({
+        blockerHit,
+        now,
+        origin,
+        direction,
+        travelDistance,
+        nextPosition,
+        velocity: projectile.velocity,
+        radius: projectile.radius,
+      });
+      if (reflected) {
+        return true;
+      }
+      return true;
     }
 
     return (

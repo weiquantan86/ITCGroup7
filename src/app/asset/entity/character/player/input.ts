@@ -63,7 +63,16 @@ export const bindPlayerInput = ({
       if (mount?.requestPointerLock) {
         if (document.pointerLockElement !== mount && !isPointerLockRequested) {
           isPointerLockRequested = true;
-          mount.requestPointerLock();
+          try {
+            const lockRequest = mount.requestPointerLock() as void | Promise<void>;
+            if (lockRequest instanceof Promise) {
+              lockRequest.catch(() => {
+                isPointerLockRequested = false;
+              });
+            }
+          } catch {
+            isPointerLockRequested = false;
+          }
         }
       }
       onPrimaryDown();
