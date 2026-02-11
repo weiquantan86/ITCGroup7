@@ -90,27 +90,24 @@ async function initDB() {
     );
     if (userResult.rows.length > 0) {
       const userId = userResult.rows[0].id;
+      // Clear existing user characters
       await pool.query(
-        `
-          DELETE FROM user_characters uc
-          USING characters c
-          WHERE uc.user_id = $1
-            AND uc.character_id = c.id
-            AND c.name = $2;
-        `,
-        [userId, "Grant"]
+        "DELETE FROM user_characters WHERE user_id = $1",
+        [userId]
       );
+      
+      // Only insert Adam as the default character
       await pool.query(
         `
           INSERT INTO user_characters (user_id, character_id)
           SELECT $1, c.id
           FROM characters c
-          WHERE c.name <> $2
+          WHERE c.name = 'Adam'
           ON CONFLICT DO NOTHING;
         `,
-        [userId, "Grant"]
+        [userId]
       );
-      console.log("Seed user_characters inserted for Sarcus");
+      console.log("Seed user_characters reset: Sarcus only owns Adam");
     }
   } catch (err) {
     console.error('Error creating table:', err);
