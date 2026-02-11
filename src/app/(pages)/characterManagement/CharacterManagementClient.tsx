@@ -234,6 +234,15 @@ export default function CharacterManagementClient({
         ref={selectorPanelRef}
         className="rounded-[22px] border border-slate-200/20 bg-[#0f151f]/90 p-5 shadow-[0_0_20px_rgba(90,140,220,0.14)]"
       >
+        <div className="flex items-center justify-between gap-3 mb-2">
+            <h2 className="text-lg font-semibold text-slate-200 ml-2">Unlocked Agents</h2>
+            <a 
+                href="/gacha"
+                className="px-4 py-1.5 rounded-full bg-sky-500/20 text-sky-300 text-sm font-semibold border border-sky-500/30 hover:bg-sky-500/30 transition-colors"
+            >
+                Recruit New Agents
+            </a>
+        </div>
         <div className="flex items-center gap-3">
           <div
             ref={trackRef}
