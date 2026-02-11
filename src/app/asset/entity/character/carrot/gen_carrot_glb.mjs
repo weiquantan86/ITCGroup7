@@ -151,7 +151,7 @@ const faceDome = createOutlinedMesh(
   { name: "faceDome", outlineThreshold: 26, outlineOpacity: 0.75 }
 );
 faceDome.rotation.x = -Math.PI / 2;
-faceDome.position.set(0, 0.08, 0.56);
+faceDome.position.set(0, -0.08, 0.56);
 headBall.add(faceDome);
 
 const eyesGroup = new THREE.Group();
@@ -198,7 +198,7 @@ faceDome.add(eyeSocketL, eyeSocketR, eyeL, eyeR);
 // Hat (visor + low pyramid roof) attached to the sphere head.
 const hat = new THREE.Group();
 hat.name = "hat";
-hat.position.set(0, 0.62, 0);
+hat.position.set(0, 0.52, 0);
 headBall.add(hat);
 
 const visor = createOutlinedMesh(
