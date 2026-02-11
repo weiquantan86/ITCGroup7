@@ -381,6 +381,7 @@ export const createPlayer = ({
           ? performMeleeAttack
           : undefined,
       applyEnergy: statsState.applyEnergy,
+      applyMana: statsState.applyMana,
       getCurrentStats: () => statsState.currentStats,
       noCooldown: infiniteFire,
     });
@@ -402,18 +403,6 @@ export const createPlayer = ({
     });
   };
 
-  const performSlashAttackHit = (damage: number, maxDistance: number) => {
-    const hitCount = performMeleeAttack({
-      damage,
-      maxDistance,
-      hitRadius: 0.35,
-      maxHits: 1,
-    });
-    if (hitCount <= 0) return false;
-    statsState.applyEnergy(statsState.energyConfig.hitGain);
-    return true;
-  };
-
   const triggerPrimaryAttack = () => {
     if (!characterRuntime) return;
     if (isRuntimeBasicAttackLocked()) return;
@@ -424,9 +413,6 @@ export const createPlayer = ({
       aimWorld: attackAimPoint,
       aimOriginWorld: attackAimOrigin,
     });
-    if (characterEntry.profile.id === "baron") {
-      performSlashAttackHit(18, 8);
-    }
   };
 
   const inputBindings = bindPlayerInput({

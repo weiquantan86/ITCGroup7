@@ -684,6 +684,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   fireProjectile,
   performMeleeAttack,
   applyEnergy,
+  applyMana,
   getCurrentStats,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
@@ -696,6 +697,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     minHoldMs: 180,
     releaseMs: 210,
   };
+  const manaGainOnReflectOrBasicDamage = 5;
   const primarySwingConfig = {
     durationMs: 240,
     minDamage: 20,
@@ -943,6 +945,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillESideOffsets = [-1, 0, 1];
   const skillEVolley = {
     active: false,
+    cloneBoosted: false,
     firedCount: 0,
     nextShotAt: 0,
     origin: new THREE.Vector3(),
@@ -1317,7 +1320,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
     return fallbackMesh;
   };
 
-  const clearClone = (clone: BaronClone) => {
+  const clearClone = (clone: BaronClone, spawnSmoke: boolean) => {
+    if (spawnSmoke && clone.root.parent && clone.root.visible) {
+      clone.root.updateMatrixWorld(true);
+      clone.root.getWorldPosition(cloneScratchTemp);
+      spawnCloneSmokeBurst(cloneScratchTemp, 6);
+    }
     clone.root.removeFromParent();
     for (let i = 0; i < clone.materials.length; i += 1) {
       clone.materials[i].dispose();
@@ -1329,9 +1337,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     clone.geometries.length = 0;
   };
 
-  const clearAllClones = () => {
+  const clearAllClones = (spawnSmoke: boolean = false) => {
     for (let i = 0; i < cloneState.clones.length; i += 1) {
-      clearClone(cloneState.clones[i]);
+      clearClone(cloneState.clones[i], spawnSmoke);
     }
     cloneState.clones.length = 0;
     cloneState.active = false;
@@ -1378,7 +1386,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let runtimeAvatarModelRef: THREE.Object3D | null = null;
 
   const spawnClones = (now: number) => {
-    clearAllClones();
+    clearAllClones(true);
     const host = avatar.parent ?? avatar;
     if (cloneAnchor.parent !== host) {
       cloneAnchor.removeFromParent();
@@ -1483,7 +1491,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   ) => {
     if (!cloneState.active) return;
     if (now >= cloneState.endsAt) {
-      clearAllClones();
+      clearAllClones(true);
       return;
     }
 
@@ -1853,11 +1861,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const reflectProjectileByPrimarySwing: ProjectileReflector = () => {
     if (skillRState.active) {
       applyEnergy?.(skillRConfig.energyGainOnReflect);
+      applyMana?.(manaGainOnReflectOrBasicDamage);
       return {
         speedMultiplier: skillRConfig.reflectSpeedMultiplier,
       };
     }
     applyEnergy?.(primarySwingConfig.energyGainOnReflect);
+    applyMana?.(manaGainOnReflectOrBasicDamage);
     return {
       speedMultiplier: primarySwingState.reflectSpeedMultiplier,
     };
@@ -1869,6 +1879,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   skillRReflectUserData.projectileReflector = () => {
     if (!skillRState.active) return false;
     applyEnergy?.(skillRConfig.energyGainOnReflect);
+    applyMana?.(manaGainOnReflectOrBasicDamage);
     return {
       speedMultiplier: skillRConfig.reflectSpeedMultiplier,
     };
@@ -2424,7 +2435,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const fireSkillEShuriken = (shotIndex: number) => {
     if (!fireProjectile) return;
 
-    const cloneBuffActive = isCloneShurikenBuffActive();
+    const cloneBuffActive = skillEVolley.cloneBoosted;
     const scaleMultiplier = cloneBuffActive ? 2 : 1;
     const damageMultiplier = cloneBuffActive ? 1.5 : 1;
     const side =
@@ -2466,7 +2477,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const toFocus = new THREE.Vector3();
     const trailHead = new THREE.Vector3();
     const launchAt = performance.now();
-    const canExplode = shotIndex === Math.floor(skillEConfig.shotCount / 2);
     let convergeRemovalRequested = false;
     let explodeOnRemove = false;
 
@@ -2492,12 +2502,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
       targetHitRadius: skillEVolley.targetHitRadius * scaleMultiplier,
       damage: Math.round(skillEConfig.damage * damageMultiplier),
       energyGainOnHit: 4,
-      splitOnImpact: canExplode,
-      explosionRadius: canExplode ? skillEVolley.explosionRadius : 0,
-      explosionDamage: canExplode ? skillEVolley.explosionDamage : 0,
-      explosionColor: canExplode ? 0x60a5fa : undefined,
-      explosionEmissive: canExplode ? 0x2563eb : undefined,
-      explosionEmissiveIntensity: canExplode ? 1.05 : undefined,
+      splitOnImpact: true,
+      explosionRadius: skillEVolley.explosionRadius,
+      explosionDamage: skillEVolley.explosionDamage,
+      explosionColor: 0x60a5fa,
+      explosionEmissive: 0x2563eb,
+      explosionEmissiveIntensity: 1.05,
       lifecycle: {
         applyForces: ({ velocity, delta, removeProjectile }) => {
           if (velocity.lengthSq() < 0.000001) return;
@@ -2518,9 +2528,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
           if (distanceToFocus <= snapDistance) {
             if (!convergeRemovalRequested) {
               convergeRemovalRequested = true;
-              if (canExplode) {
-                explodeOnRemove = true;
-              }
+              explodeOnRemove = true;
               removeProjectile("expired");
             }
             return;
@@ -2567,7 +2575,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
           pushShurikenTrailPoint(entry, trailHead);
         },
         onRemove: ({ reason, triggerExplosion }) => {
-          if (canExplode && reason !== "impact" && (explodeOnRemove || reason === "expired")) {
+          if (reason !== "impact" && (explodeOnRemove || reason === "expired")) {
             entry.mesh.position.copy(focusPoint);
             triggerExplosion();
           }
@@ -2589,6 +2597,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const fireCloneSynchronizedShurikens = (ratio: number) => {
     if (!fireProjectile) return;
     if (!cloneState.active || !cloneState.clones.length) return;
+    let didFireCloneShuriken = false;
 
     const distanceScale = THREE.MathUtils.lerp(
       skillEChargeConfig.minDistanceScale,
@@ -2620,10 +2629,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
       entry.spinPhase = Math.random() * Math.PI * 2;
       entry.spinRate = 12.5 + Math.random() * 4;
 
+      clone.root.getWorldPosition(cloneScratchTemp);
       clone.heldShuriken.group.getWorldPosition(skillEShotOrigin);
       if (!Number.isFinite(skillEShotOrigin.x + skillEShotOrigin.y + skillEShotOrigin.z)) {
-        clone.root.getWorldPosition(skillEShotOrigin);
-        skillEShotOrigin.y += cloneConfig.eThrowOriginYOffset;
+        skillEShotOrigin.copy(cloneScratchTemp);
+      }
+      // Clamp launch height so clone shurikens do not spawn near/under ground on some arm poses.
+      const minSpawnY = cloneScratchTemp.y + cloneConfig.eThrowOriginYOffset;
+      if (skillEShotOrigin.y < minSpawnY) {
+        skillEShotOrigin.y = minSpawnY;
       }
       cloneScratchDirection.copy(cloneScratchTarget).sub(skillEShotOrigin);
       if (cloneScratchDirection.lengthSq() < 0.000001) {
@@ -2656,7 +2670,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
         targetHitRadius: shotHitRadius,
         damage: shotDamage,
         energyGainOnHit: 0,
-        splitOnImpact: false,
+        splitOnImpact: true,
+        explosionRadius: skillEVolley.explosionRadius,
+        explosionDamage: skillEVolley.explosionDamage,
+        explosionColor: 0x60a5fa,
+        explosionEmissive: 0x2563eb,
+        explosionEmissiveIntensity: 1.05,
         lifecycle: {
           applyForces: ({ velocity, delta }) => {
             if (velocity.lengthSq() < 0.000001) return;
@@ -2671,7 +2690,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
             trailHead.copy(entry.mesh.position).addScaledVector(velocity, delta);
             pushShurikenTrailPoint(entry, trailHead);
           },
-          onRemove: () => {
+          onRemove: ({ reason, triggerExplosion }) => {
+            if (reason === "expired") {
+              triggerExplosion();
+            }
             entry.trail.visible = false;
             entry.trail.removeFromParent();
             resetShurikenTrail(entry, entry.mesh.position);
@@ -2685,6 +2707,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
           },
         },
       });
+      didFireCloneShuriken = true;
+    }
+
+    // Consumes clones on synchronized throw.
+    if (didFireCloneShuriken) {
+      clearAllClones(true);
     }
   };
 
@@ -2700,6 +2728,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
     if (skillEVolley.firedCount >= skillEConfig.shotCount) {
       skillEVolley.active = false;
+      skillEVolley.cloneBoosted = false;
     }
   };
 
@@ -2751,6 +2780,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     skillEVolley.active = true;
+    skillEVolley.cloneBoosted = isCloneShurikenBuffActive();
     skillEVolley.firedCount = 0;
     skillEVolley.nextShotAt = now;
     fireCloneSynchronizedShurikens(ratio);
@@ -2772,6 +2802,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const resetSkillEVolleyState = () => {
     skillEVolley.active = false;
+    skillEVolley.cloneBoosted = false;
     skillEVolley.firedCount = 0;
     skillEVolley.nextShotAt = 0;
     skillEVolley.origin.set(0, 0, 0);
@@ -2790,9 +2821,26 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillEVolley.explosionDamage = skillEConfig.explosionDamage;
   };
 
+  const applyBasicSlashHit = () => {
+    const hitCount =
+      performMeleeAttack?.({
+        damage: 18,
+        maxDistance: 8,
+        hitRadius: 0.35,
+        maxHits: 1,
+      }) ?? 0;
+    if (hitCount <= 0) return;
+    const energyGainOnHit = Math.max(0, profile.energy?.hitGain ?? 0);
+    if (energyGainOnHit > 0) {
+      applyEnergy?.(energyGainOnHit);
+    }
+    applyMana?.(manaGainOnReflectOrBasicDamage);
+  };
+
   const handleRightClick: CharacterRuntime["handleRightClick"] = (facing) => {
     if (skillRState.active) return;
     baseRuntime.handleRightClick(facing);
+    applyBasicSlashHit();
   };
 
   const getMovementSpeedMultiplier = () =>

@@ -5,7 +5,10 @@ export const profile: CharacterProfile = {
   label: "Baron",
   pathToken: "/baron/",
   energy: {
-    movingPerSecond: 10,
+    movingPerSecond: 0,
+  },
+  mana: {
+    passivePerSecond: 0.5,
   },
   movement: {
     baseSpeed: 5,
@@ -15,7 +18,7 @@ export const profile: CharacterProfile = {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {
       q: { id: "q", label: "Q", description: "...", cost: "all", cooldownMs: 30000 },
-      e: { id: "e", label: "E", description: "...", cooldownMs: 5000 },
+      e: { id: "e", label: "E", description: "...", cost: 20, cooldownMs: 5000 },
       r: { id: "r", label: "R", description: "...", cost: 35, cooldownMs: 10000 },
     },
   },

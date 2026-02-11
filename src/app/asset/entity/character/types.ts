@@ -221,6 +221,7 @@ export interface CharacterRuntimeFactory {
     fireProjectile?: (args?: FireProjectileArgs) => void;
     performMeleeAttack?: (args: MeleeAttackArgs) => number;
     applyEnergy?: (amount: number) => number;
+    applyMana?: (amount: number) => number;
     getCurrentStats?: () => CharacterStats;
   }): CharacterRuntime;
 }

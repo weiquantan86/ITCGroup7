@@ -152,6 +152,18 @@ export const createPlayerStatsState = ({
     return gained;
   };
 
+  const applyMana = (amount: number) => {
+    if (infiniteFire) return 0;
+    if (maxStats.mana <= 0 || amount <= 0) return 0;
+    const next = Math.min(maxStats.mana, currentStats.mana + amount);
+    const gained = next - currentStats.mana;
+    if (gained > 0) {
+      currentStats.mana = next;
+      markDirty();
+    }
+    return gained;
+  };
+
   const consumeAllEnergy = () => {
     if (infiniteFire) return 0;
     if (currentStats.energy <= 0) return 0;
@@ -369,6 +381,7 @@ export const createPlayerStatsState = ({
     setCurrentStats,
     resetCurrentToMax,
     applyEnergy,
+    applyMana,
     consumeAllEnergy,
     hasEnoughSkillResource,
     spendSkillCost,
