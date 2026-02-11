@@ -198,7 +198,7 @@ faceDome.add(eyeSocketL, eyeSocketR, eyeL, eyeR);
 // Hat (visor + low pyramid roof) attached to the sphere head.
 const hat = new THREE.Group();
 hat.name = "hat";
-hat.position.set(0, 0.92, 0);
+hat.position.set(0, 0.62, 0);
 headBall.add(hat);
 
 const visor = createOutlinedMesh(
@@ -271,7 +271,7 @@ root.add(legWedgeL, legWedgeR);
 // Big right hand (bigger and closer; still slightly detached).
 const armRight = new THREE.Group();
 armRight.name = "armRight";
-armRight.position.set(1.2, 1.08, 0.18);
+armRight.position.set(1.5, 1.08, 0.18);
 
 const palm = createOutlinedMesh(
   new THREE.SphereGeometry(0.58, 28, 20),
