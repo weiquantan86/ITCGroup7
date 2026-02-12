@@ -854,8 +854,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     speedRatio: 1 / 3,
     minTurnIntervalMs: 420,
     maxTurnIntervalMs: 1350,
-    spawnRadiusMin: 1.25,
-    spawnRadiusMax: 2.65,
+    spawnRadiusMin: 2.1,
+    spawnRadiusMax: 4.2,
     wanderRadius: 8.6,
     chargeYOffset: 1.55,
     eThrowOriginYOffset: 1.15,
@@ -1554,7 +1554,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     now: number,
     deltaSeconds: number,
     eChargeActive: boolean,
-    eChargeRatio: number
+    eChargeRatio: number,
+    hostIsMoving: boolean,
+    hostIsSprinting: boolean
   ) => {
     if (!cloneState.active) return;
     if (now >= cloneState.endsAt) {
@@ -1580,7 +1582,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     for (let i = 0; i < cloneState.clones.length; i += 1) {
       const clone = cloneState.clones[i];
-      const isCloneMoving = !preparingThrow;
+      const mimicMovingDuringCharge = preparingThrow && hostIsMoving;
+      const useChargeStance = preparingThrow && !mimicMovingDuringCharge;
+      const isCloneMoving = !preparingThrow || mimicMovingDuringCharge;
       if (isCloneMoving) {
         updateCloneDirection(clone, now);
         clone.root.position.addScaledVector(clone.direction, clone.speed * deltaSeconds);
@@ -1605,37 +1609,37 @@ export const createRuntime: CharacterRuntimeFactory = ({
       clone.root.rotation.y = THREE.MathUtils.lerp(
         clone.root.rotation.y,
         targetYaw,
-        preparingThrow ? 0.38 : 0.22
+        useChargeStance ? 0.38 : 0.22
       );
-      const crouchDepth = preparingThrow
+      const crouchDepth = useChargeStance
         ? THREE.MathUtils.lerp(
             cloneConfig.preparingCrouchDepthMin,
             cloneConfig.preparingCrouchDepthMax,
             eChargeRatio
           )
         : 0;
-      const leanForward = preparingThrow
+      const leanForward = useChargeStance
         ? THREE.MathUtils.lerp(
             cloneConfig.preparingLeanMin,
             cloneConfig.preparingLeanMax,
             eChargeRatio
           )
         : 0;
-      const legBend = preparingThrow
+      const legBend = useChargeStance
         ? THREE.MathUtils.lerp(
             cloneConfig.preparingLegBendMin,
             cloneConfig.preparingLegBendMax,
             eChargeRatio
           )
         : 0;
-      const legSpread = preparingThrow
+      const legSpread = useChargeStance
         ? THREE.MathUtils.lerp(
             cloneConfig.preparingLegSpreadMin,
             cloneConfig.preparingLegSpreadMax,
             eChargeRatio
           )
         : 0;
-      const legTwist = preparingThrow
+      const legTwist = useChargeStance
         ? THREE.MathUtils.lerp(
             cloneConfig.preparingLegTwistMin,
             cloneConfig.preparingLegTwistMax,
@@ -1656,14 +1660,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
             eChargeRatio
           )
         : 0;
-      const bodySquash = preparingThrow
+      const bodySquash = useChargeStance
         ? THREE.MathUtils.lerp(
             cloneConfig.preparingBodySquashMin,
             cloneConfig.preparingBodySquashMax,
             eChargeRatio
           )
         : 1;
-      const bodyWiden = preparingThrow
+      const bodyWiden = useChargeStance
         ? THREE.MathUtils.lerp(
             cloneConfig.preparingBodyWidenMin,
             cloneConfig.preparingBodyWidenMax,
@@ -1675,7 +1679,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         profile.animateModel?.({
           avatarModel: clone.model,
           isMoving: isCloneMoving,
-          isSprinting: false,
+          isSprinting: mimicMovingDuringCharge && hostIsSprinting,
           now,
           THREE,
         });
@@ -1683,67 +1687,69 @@ export const createRuntime: CharacterRuntimeFactory = ({
         clone.model.position.y = THREE.MathUtils.lerp(
           clone.model.position.y,
           isCloneMoving ? Math.sin(clone.walkPhase + i * 0.45) * 0.055 : -crouchDepth,
-          isCloneMoving ? 0.24 : preparingThrow ? 0.28 : 0.16
+          isCloneMoving ? 0.24 : useChargeStance ? 0.28 : 0.16
         );
-        clone.model.rotation.x = THREE.MathUtils.lerp(
-          clone.model.rotation.x,
-          preparingThrow ? leanForward : 0,
-          preparingThrow ? 0.3 : 0.16
-        );
+        if (useChargeStance) {
+          clone.model.rotation.x = THREE.MathUtils.lerp(
+            clone.model.rotation.x,
+            leanForward,
+            0.3
+          );
+        }
         clone.model.rotation.z = THREE.MathUtils.lerp(
           clone.model.rotation.z,
           0,
-          preparingThrow ? 0.28 : 0.14
+          useChargeStance ? 0.28 : 0.14
         );
         clone.model.scale.x = THREE.MathUtils.lerp(
           clone.model.scale.x,
           bodyWiden,
-          preparingThrow ? 0.26 : 0.14
+          useChargeStance ? 0.26 : 0.14
         );
         clone.model.scale.y = THREE.MathUtils.lerp(
           clone.model.scale.y,
           bodySquash,
-          preparingThrow ? 0.26 : 0.14
+          useChargeStance ? 0.26 : 0.14
         );
         clone.model.scale.z = THREE.MathUtils.lerp(
           clone.model.scale.z,
           bodyWiden,
-          preparingThrow ? 0.26 : 0.14
+          useChargeStance ? 0.26 : 0.14
         );
       }
 
       if (clone.legLeft && clone.legRight) {
         const stride = isCloneMoving ? Math.sin(clone.walkPhase) * 0.52 : 0;
-        const baseLegAngle = preparingThrow ? -0.2 - legBend : -0.16;
-        const legStanceLerp = preparingThrow ? 0.34 : 0.18;
+        const baseLegAngle = useChargeStance ? -0.2 - legBend : -0.16;
+        const legStanceLerp = useChargeStance ? 0.34 : 0.18;
         clone.legLeft.rotation.x = THREE.MathUtils.lerp(
           clone.legLeft.rotation.x,
           baseLegAngle + stride,
-          preparingThrow ? 0.36 : 0.26
+          useChargeStance ? 0.36 : 0.26
         );
         clone.legRight.rotation.x = THREE.MathUtils.lerp(
           clone.legRight.rotation.x,
           baseLegAngle - stride,
-          preparingThrow ? 0.36 : 0.26
+          useChargeStance ? 0.36 : 0.26
         );
         clone.legLeft.rotation.z = THREE.MathUtils.lerp(
           clone.legLeft.rotation.z,
-          preparingThrow ? legSpread : 0,
+          useChargeStance ? legSpread : 0,
           legStanceLerp
         );
         clone.legRight.rotation.z = THREE.MathUtils.lerp(
           clone.legRight.rotation.z,
-          preparingThrow ? -legSpread : 0,
+          useChargeStance ? -legSpread : 0,
           legStanceLerp
         );
         clone.legLeft.rotation.y = THREE.MathUtils.lerp(
           clone.legLeft.rotation.y,
-          preparingThrow ? legTwist : 0,
+          useChargeStance ? legTwist : 0,
           legStanceLerp
         );
         clone.legRight.rotation.y = THREE.MathUtils.lerp(
           clone.legRight.rotation.y,
-          preparingThrow ? -legTwist : 0,
+          useChargeStance ? -legTwist : 0,
           legStanceLerp
         );
       }
@@ -3272,7 +3278,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
         args.now,
         deltaSeconds,
         skillEChargeState.isCharging,
-        skillEChargeState.ratio
+        skillEChargeState.ratio,
+        args.isMoving,
+        Boolean(args.isSprinting)
       );
       updateCloneSmoke(deltaSeconds);
       applySkillRDanceBodyMotion(

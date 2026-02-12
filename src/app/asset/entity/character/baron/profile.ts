@@ -54,7 +54,7 @@ export const profile: CharacterProfile = {
     });
   },
   animateModel: ({ avatarModel, isMoving, isSprinting, THREE }) => {
-    const tiltTarget = isSprinting ? -0.62 : isMoving ? -0.28 : 0;
+    const tiltTarget = isSprinting ? 0.72 : isMoving ? 0.38 : 0;
     avatarModel.rotation.x = THREE.MathUtils.lerp(
       avatarModel.rotation.x,
       tiltTarget,

@@ -25,7 +25,7 @@ export const profile: CharacterProfile = {
   },
   slash: {
     enabled: true,
-    color: 0xf97316,
+    color: 0x6d28d9,
     effect: {
       shape: "cube",
       size: 0.45,

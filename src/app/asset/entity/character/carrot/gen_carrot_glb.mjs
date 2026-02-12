@@ -50,25 +50,66 @@ mkdirSync(dirname(outPath), { recursive: true });
 
 const scene = new THREE.Scene();
 
+const palette = {
+  obsidian: 0x07080d,
+  charcoal: 0x151922,
+  graphite: 0x232732,
+  violet: 0x5b3a89,
+  violetGlow: 0x211235,
+  hornViolet: 0x311255,
+  hornGlow: 0x190a2f,
+  eyeGray: 0x767c89,
+  eyePurple: 0x724ab5,
+};
+
 const bodyMat = new THREE.MeshStandardMaterial({
-  color: 0x0b0c10,
-  roughness: 0.92,
-  metalness: 0.04,
-  emissive: 0x05060a,
+  color: palette.obsidian,
+  roughness: 0.9,
+  metalness: 0.07,
+  emissive: palette.violetGlow,
   emissiveIntensity: 0.22,
 });
 const bodyMatAlt = new THREE.MeshStandardMaterial({
-  color: 0x11141c,
-  roughness: 0.9,
-  metalness: 0.05,
-  emissive: 0x05060a,
+  color: palette.charcoal,
+  roughness: 0.86,
+  metalness: 0.11,
+  emissive: palette.violetGlow,
   emissiveIntensity: 0.18,
 });
-const eyeMat = new THREE.MeshBasicMaterial({
-  color: 0xe9eef7,
-  transparent: true,
-  opacity: 0.98,
-  side: THREE.DoubleSide,
+const accentMat = new THREE.MeshStandardMaterial({
+  color: palette.graphite,
+  roughness: 0.82,
+  metalness: 0.16,
+  emissive: palette.violet,
+  emissiveIntensity: 0.26,
+});
+const hatMat = new THREE.MeshStandardMaterial({
+  color: 0x06070a,
+  roughness: 0.9,
+  metalness: 0.08,
+  emissive: 0x020205,
+  emissiveIntensity: 0.08,
+});
+const hornMat = new THREE.MeshStandardMaterial({
+  color: palette.hornViolet,
+  roughness: 0.3,
+  metalness: 0.78,
+  emissive: palette.hornGlow,
+  emissiveIntensity: 0.18,
+});
+const eyeGrayMat = new THREE.MeshStandardMaterial({
+  color: palette.eyeGray,
+  roughness: 0.78,
+  metalness: 0.08,
+  emissive: 0x171b24,
+  emissiveIntensity: 0.14,
+});
+const eyePurpleMat = new THREE.MeshStandardMaterial({
+  color: palette.eyePurple,
+  roughness: 0.74,
+  metalness: 0.1,
+  emissive: 0x2a1644,
+  emissiveIntensity: 0.2,
 });
 
 const createOutlinedMesh = (
@@ -141,30 +182,30 @@ const eyesGroup = new THREE.Group();
 eyesGroup.name = "eyesGroup";
 faceMount.add(eyesGroup);
 
-// Eye sockets (half-spheres) + inward-slanted slit eyes.
-const eyeSocketGeo = new THREE.SphereGeometry(0.23, 18, 14, 0, Math.PI * 2, 0, Math.PI / 2);
-const eyeSocketL = createOutlinedMesh(eyeSocketGeo, bodyMat, {
-  name: "eyeSocketL",
+// Eyes (half-spheres) + inward-slanted slit eyes.
+const eyeGeo = new THREE.SphereGeometry(0.23, 18, 14, 0, Math.PI * 2, 0, Math.PI / 2);
+const eyeL = createOutlinedMesh(eyeGeo, eyeGrayMat, {
+  name: "eyeL",
   outlineThreshold: 30,
   outlineOpacity: 0.55,
 });
-const eyeSocketR = createOutlinedMesh(eyeSocketGeo, bodyMat, {
-  name: "eyeSocketR",
+const eyeR = createOutlinedMesh(eyeGeo, eyePurpleMat, {
+  name: "eyeR",
   outlineThreshold: 30,
   outlineOpacity: 0.55,
 });
-[eyeSocketL, eyeSocketR].forEach((socket) => {
-  socket.rotation.x = -Math.PI / 2;
-  socket.scale.set(1, 1, 0.6);
+[eyeL, eyeR].forEach((eye) => {
+  eye.rotation.x = -Math.PI / 2;
+  eye.scale.set(1, 1, 0.6);
 });
 
-eyeSocketL.position.set(-0.25, -0.02, 0.13);
-eyeSocketR.position.set(0.25, -0.02, 0.13);
+eyeL.position.set(-0.25, -0.02, 0.13);
+eyeR.position.set(0.25, -0.02, 0.13);
 
-eyeSocketL.rotation.z = THREE.MathUtils.degToRad(26);
-eyeSocketR.rotation.z = THREE.MathUtils.degToRad(-26);
+eyeL.rotation.z = THREE.MathUtils.degToRad(26);
+eyeR.rotation.z = THREE.MathUtils.degToRad(-26);
 
-faceMount.add(eyeSocketL, eyeSocketR);
+faceMount.add(eyeL, eyeR);
 
 // Hat (visor + low pyramid roof) attached to the sphere head.
 const hat = new THREE.Group();
@@ -174,7 +215,7 @@ headBall.add(hat);
 
 const visor = createOutlinedMesh(
   new THREE.BoxGeometry(1.45, 0.36, 1.4),
-  bodyMatAlt,
+  hatMat,
   { name: "visor" }
 );
 visor.position.set(0, -0.08, 0.01);
@@ -182,7 +223,7 @@ hat.add(visor);
 
 const roof = createOutlinedMesh(
   new THREE.ConeGeometry(0.98, 0.6, 4),
-  bodyMat,
+  hatMat,
   { name: "roof" }
 );
 // Align the pyramid base edges with the visor.
@@ -193,21 +234,21 @@ roof.scale.set(1.0, 0.85, 1.05);
 hat.add(roof);
 
 // Horns: sit on the upper slanted sides of the pyramid.
-const hornGeo = new THREE.ConeGeometry(0.11, 0.62, 3);
-const hornL = createOutlinedMesh(hornGeo, bodyMatAlt, {
+const hornGeo = new THREE.ConeGeometry(0.275, 0.8, 4);
+const hornL = createOutlinedMesh(hornGeo, hornMat, {
   name: "hornL",
   outlineThreshold: 26,
   outlineOpacity: 0.85,
 });
-const hornR = createOutlinedMesh(hornGeo, bodyMatAlt, {
+const hornR = createOutlinedMesh(hornGeo, hornMat, {
   name: "hornR",
   outlineThreshold: 26,
   outlineOpacity: 0.85,
 });
-hornL.position.set(-0.48, 0.2, 0.14);
-hornR.position.set(0.48, 0.2, 0.14);
-hornL.rotation.set(-0.25, 0.35, Math.PI * 0.62);
-hornR.rotation.set(0.25, -0.35, -Math.PI * 0.62);
+hornL.position.set(-0.4, 0.2, -0.37);
+hornR.position.set(0.4, 0.2, 0.37);
+hornL.rotation.set(-0.7, 0, 0.5);
+hornR.rotation.set(0.7, 0, -0.5);
 roof.add(hornL, hornR);
 
 // Legs/feet (named legs for runtime animation).
@@ -231,8 +272,8 @@ root.add(legLeft, legRight);
 
 // Small inner wedges (pelvis hints).
 const wedgeGeo = createTrianglePlate(0.25, 0.22, 0.12);
-const legWedgeL = createOutlinedMesh(wedgeGeo, bodyMatAlt, { name: "legWedgeL" });
-const legWedgeR = createOutlinedMesh(wedgeGeo, bodyMatAlt, { name: "legWedgeR" });
+const legWedgeL = createOutlinedMesh(wedgeGeo, accentMat, { name: "legWedgeL" });
+const legWedgeR = createOutlinedMesh(wedgeGeo, accentMat, { name: "legWedgeR" });
 legWedgeL.position.set(-0.3, 0.46, 0.02);
 legWedgeR.position.set(0.3, 0.46, 0.02);
 legWedgeL.rotation.y = Math.PI;
