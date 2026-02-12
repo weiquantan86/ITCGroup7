@@ -60,6 +60,7 @@ const palette = {
   hornGlow: 0x190a2f,
   eyeGray: 0x767c89,
   eyePurple: 0x724ab5,
+  eyeCorePurpleDeep: 0x3b1367,
 };
 
 const bodyMat = new THREE.MeshStandardMaterial({
@@ -86,21 +87,28 @@ const accentMat = new THREE.MeshStandardMaterial({
 const hatMat = new THREE.MeshStandardMaterial({
   color: 0x06070a,
   roughness: 0.9,
-  metalness: 0.08,
+  metalness: 0.58,
   emissive: 0x020205,
   emissiveIntensity: 0.08,
+});
+const roofMat = new THREE.MeshStandardMaterial({
+  color: 0x08090d,
+  roughness: 0.48,
+  metalness: 0.42,
+  emissive: 0x06070b,
+  emissiveIntensity: 0.1,
 });
 const hornMat = new THREE.MeshStandardMaterial({
   color: palette.hornViolet,
   roughness: 0.3,
-  metalness: 0.78,
+  metalness: 0.68,
   emissive: palette.hornGlow,
   emissiveIntensity: 0.18,
 });
 const eyeGrayMat = new THREE.MeshStandardMaterial({
   color: palette.eyeGray,
   roughness: 0.78,
-  metalness: 0.08,
+  metalness: 0.48,
   emissive: 0x171b24,
   emissiveIntensity: 0.14,
 });
@@ -110,6 +118,13 @@ const eyePurpleMat = new THREE.MeshStandardMaterial({
   metalness: 0.1,
   emissive: 0x2a1644,
   emissiveIntensity: 0.2,
+});
+const eyeCoreDeepPurpleMat = new THREE.MeshStandardMaterial({
+  color: palette.eyeCorePurpleDeep,
+  roughness: 0.68,
+  metalness: 0.12,
+  emissive: 0x17072a,
+  emissiveIntensity: 0.24,
 });
 
 const createOutlinedMesh = (
@@ -164,7 +179,7 @@ head.position.set(0, 1.05, 0);
 root.add(head);
 
 const headBall = createOutlinedMesh(
-  new THREE.SphereGeometry(0.72, 32, 24),
+  new THREE.SphereGeometry(0.71, 32, 24),
   bodyMat,
   { name: "headBall" }
 );
@@ -223,7 +238,7 @@ hat.add(visor);
 
 const roof = createOutlinedMesh(
   new THREE.ConeGeometry(0.98, 0.6, 4),
-  hatMat,
+  roofMat,
   { name: "roof" }
 );
 // Align the pyramid base edges with the visor.
@@ -286,29 +301,93 @@ armRight.name = "armRight";
 armRight.position.set(1.5, 1.08, 0.18);
 
 const palm = createOutlinedMesh(
-  new THREE.SphereGeometry(0.38, 28, 20),
+  new THREE.CylinderGeometry(0.54, 0.54, 0.22, 8),
   bodyMatAlt,
   { name: "palm" }
 );
-palm.scale.set(1.12, 1.28, 0.7);
+palm.rotation.x = Math.PI / 2;
+palm.scale.set(1.0, 1.08, 0.9);
 armRight.add(palm);
 
-const fingerGeo = new THREE.BoxGeometry(0.12, 0.8, 0.14);
-const fingerAngles = [105, 65, 30, -5, -40, -80];
-const fingerDist = [0.4, 0.4, 0.38, 0.38, 0.42, 0.42];
-const fingerLen = [1.2, 1.1, 1.05, 1.0, 1.1, 0.9];
+const magicEyeGroup = new THREE.Group();
+magicEyeGroup.name = "magicEye group";
+magicEyeGroup.position.set(0, 0, 0);
+palm.add(magicEyeGroup);
+
+const magicEye = createOutlinedMesh(
+  new THREE.SphereGeometry(0.24, 20, 16),
+  eyePurpleMat,
+  { name: "magicEye" }
+);
+magicEye.scale.set(0.8, 0.5, 1.4);
+magicEye.position.set(0, 0.075, 0);
+magicEye.rotation.set(0, 0.3, 0);
+magicEyeGroup.add(magicEye);
+
+const magicEyeCore = createOutlinedMesh(
+  new THREE.SphereGeometry(0.175, 20, 16),
+  eyeCoreDeepPurpleMat,
+  { name: "magicEyeCore" }
+);
+magicEyeCore.position.set(0, 0.075, 0);
+magicEyeGroup.add(magicEyeCore);
+
+const fingerBaseGeo = new THREE.BoxGeometry(0.148, 0.54, 0.175);
+const fingerJointGeo = new THREE.SphereGeometry(0.058, 12, 9);
+const fingerTipGeo = new THREE.CylinderGeometry(0.046, 0.08, 0.42, 8);
+// 5 fingers mapped to 5 sides of the octagon palm.
+const fingerAngles = [112.5, 67.5, 22.5, -22.5, -67.5];
+const fingerDist = [0.35, 0.34, 0.33, 0.34, 0.35];
+const fingerBaseLen = [1.0, 0.95, 0.9, 0.95, 0.9];
+const fingerTipLen = [0.9, 0.86, 0.82, 0.86, 0.82];
+const fingerTipCurl = [-0.24, -0.28, -0.34, -0.28, -0.22];
+const fingerBaseLength = 0.54;
+const fingerTipLength = 0.42;
+const fingerJointRadius = 0.058;
 
 fingerAngles.forEach((deg, i) => {
-  const f = createOutlinedMesh(fingerGeo, bodyMat, {
-    name: `finger${i + 1}`,
+  const t = THREE.MathUtils.degToRad(deg);
+
+  const fingerRoot = new THREE.Group();
+  fingerRoot.name = `fingerRoot${i + 1}`;
+  fingerRoot.position.set(Math.cos(t) * fingerDist[i], Math.sin(t) * fingerDist[i], 0.02);
+  fingerRoot.rotation.z = t - Math.PI / 2;
+  armRight.add(fingerRoot);
+
+  const fingerA = createOutlinedMesh(fingerBaseGeo, bodyMat, {
+    name: `finger${i + 1}A`,
     outlineThreshold: 28,
     outlineOpacity: 0.85,
   });
-  f.scale.set(1, fingerLen[i], 1);
-  const t = THREE.MathUtils.degToRad(deg);
-  f.position.set(Math.cos(t) * fingerDist[i], Math.sin(t) * fingerDist[i], 0.02);
-  f.rotation.z = t - Math.PI / 2;
-  armRight.add(f);
+  fingerA.scale.set(1, fingerBaseLen[i], 1);
+  const fingerALength = fingerBaseLength * fingerBaseLen[i];
+  fingerA.position.y = fingerALength * 0.5;
+  fingerRoot.add(fingerA);
+
+  const fingerJoint = createOutlinedMesh(fingerJointGeo, bodyMatAlt, {
+    name: `finger${i + 1}Joint`,
+    outlineThreshold: 28,
+    outlineOpacity: 0.85,
+  });
+  const jointY = fingerALength + fingerJointRadius * 0.2;
+  fingerJoint.position.y = jointY;
+  fingerRoot.add(fingerJoint);
+
+  const fingerTipPivot = new THREE.Group();
+  fingerTipPivot.name = `finger${i + 1}Bpivot`;
+  fingerTipPivot.position.y = jointY;
+  fingerTipPivot.rotation.z = fingerTipCurl[i];
+  fingerRoot.add(fingerTipPivot);
+
+  const fingerB = createOutlinedMesh(fingerTipGeo, bodyMat, {
+    name: `finger${i + 1}B`,
+    outlineThreshold: 28,
+    outlineOpacity: 0.85,
+  });
+  fingerB.scale.set(1, fingerTipLen[i], 1);
+  const fingerBLength = fingerTipLength * fingerTipLen[i];
+  fingerB.position.y = fingerJointRadius * 0.32 + fingerBLength * 0.5;
+  fingerTipPivot.add(fingerB);
 });
 
 root.add(armRight);
