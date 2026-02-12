@@ -54,6 +54,7 @@ const palette = {
   obsidian: 0x07080d,
   charcoal: 0x151922,
   graphite: 0x232732,
+  footBrown: 0x5a381d,
   violet: 0x5b3a89,
   violetGlow: 0x211235,
   hornViolet: 0x311255,
@@ -83,6 +84,13 @@ const accentMat = new THREE.MeshStandardMaterial({
   metalness: 0.16,
   emissive: palette.violet,
   emissiveIntensity: 0.26,
+});
+const footMat = new THREE.MeshStandardMaterial({
+  color: palette.footBrown,
+  roughness: 0.9,
+  metalness: 0.06,
+  emissive: 0x1f1208,
+  emissiveIntensity: 0.05,
 });
 const hatMat = new THREE.MeshStandardMaterial({
   color: 0x06070a,
@@ -268,18 +276,18 @@ roof.add(hornL, hornR);
 
 // Legs/feet (named legs for runtime animation).
 const footGeo = new THREE.BoxGeometry(0.62, 0.22, 0.52);
-const footL = createOutlinedMesh(footGeo, bodyMatAlt, { name: "footL" });
-const footR = createOutlinedMesh(footGeo, bodyMatAlt, { name: "footR" });
+const footL = createOutlinedMesh(footGeo, footMat, { name: "footL" });
+const footR = createOutlinedMesh(footGeo, footMat, { name: "footR" });
 
 const legLeft = new THREE.Group();
 legLeft.name = "legLeft";
-legLeft.position.set(-0.4, 0.15, 0);
+legLeft.position.set(-0.4, 0.11, 0);
 footL.position.set(0, 0, 0);
 legLeft.add(footL);
 
 const legRight = new THREE.Group();
 legRight.name = "legRight";
-legRight.position.set(0.4, 0.15, 0);
+legRight.position.set(0.4, 0.11, 0);
 footR.position.set(0, 0, 0);
 legRight.add(footR);
 

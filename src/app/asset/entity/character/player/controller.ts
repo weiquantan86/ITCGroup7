@@ -93,13 +93,6 @@ export const createPlayer = ({
     sensitivity: 0.002,
   };
 
-  const attackAimOrigin = new THREE.Vector3();
-  const attackAimDirection = new THREE.Vector3();
-  const attackAimPoint = new THREE.Vector3();
-  const attackAimOffset = new THREE.Vector3(0, -0.2, 0);
-  const attackAimForwardOffset = 0.4;
-  const attackAimDistance = 30;
-
   const gravity = -18;
   const jumpVelocity = 6.5;
   const headLayer = 1;
@@ -246,29 +239,25 @@ export const createPlayer = ({
     isMounted: () => isMounted,
   });
 
-  const updateAttackAim = () => {
-    camera.getWorldPosition(attackAimOrigin);
-    camera.getWorldDirection(attackAimDirection);
-    attackAimOrigin.add(attackAimOffset);
-    attackAimOrigin.addScaledVector(attackAimDirection, attackAimForwardOffset);
-    attackAimPoint
-      .copy(attackAimOrigin)
-      .addScaledVector(attackAimDirection, attackAimDistance);
-  };
-
   const performMeleeAttack = ({
     damage,
     maxDistance,
     hitRadius = 0.45,
     maxHits = 1,
+    origin,
+    direction,
   }: MeleeAttackArgs) => {
     if (damage <= 0 || maxDistance <= 0) return 0;
-    updateAttackAim();
+    const aim = projectileSystem.resolveCameraAim({ camera });
+    const resolvedOrigin = origin ?? aim.origin;
+    const resolvedDirection = direction ?? aim.direction;
+    if (resolvedDirection.lengthSq() < 0.000001) return 0;
+    const normalizedDirection = resolvedDirection.clone().normalize();
     return attackResolver.performMeleeAttack({
       now: performance.now(),
       source: "slash",
-      origin: attackAimOrigin,
-      direction: attackAimDirection,
+      origin: resolvedOrigin.clone(),
+      direction: normalizedDirection,
       damage,
       maxDistance,
       hitRadius,
@@ -276,13 +265,8 @@ export const createPlayer = ({
     });
   };
 
-  let fireProjectile: (args?: FireProjectileArgs) => void = () => {};
-  fireProjectile = (args?: FireProjectileArgs) => {
-    const useOverrideAim = Boolean(args?.origin && args?.direction);
-    if (!useOverrideAim) {
-      updateAttackAim();
-    }
-    projectileSystem.fire(attackAimOrigin, attackAimDirection, args);
+  const fireProjectile = (args?: FireProjectileArgs) => {
+    projectileSystem.fireWithCameraAim({ camera, args });
   };
 
   const skillState = createPlayerSkillState({
@@ -376,10 +360,7 @@ export const createPlayer = ({
       avatar,
       mount,
       fireProjectile,
-      performMeleeAttack:
-        characterEntry.profile.id === "baron"
-          ? performMeleeAttack
-          : undefined,
+      performMeleeAttack,
       applyEnergy: statsState.applyEnergy,
       applyMana: statsState.applyMana,
       getCurrentStats: () => statsState.currentStats,
@@ -406,12 +387,12 @@ export const createPlayer = ({
   const triggerPrimaryAttack = () => {
     if (!characterRuntime) return;
     if (isRuntimeBasicAttackLocked()) return;
-    updateAttackAim();
+    const aim = projectileSystem.resolveCameraAim({ camera });
     characterRuntime.handleRightClick({
       yaw: lookState.yaw,
       pitch: lookState.pitch,
-      aimWorld: attackAimPoint,
-      aimOriginWorld: attackAimOrigin,
+      aimWorld: aim.point,
+      aimOriginWorld: aim.origin,
     });
   };
 

@@ -835,6 +835,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       entry.aura.setVisible(true);
       entry.aura.update(now);
       fireProjectile({
+        projectileType: "abilityOrb",
         origin: skillQShotOrigin,
         direction: skillQShotDirection,
         mesh: entry.mesh,
@@ -894,6 +895,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     const lifetime = skillRECombo.distance / skillRECombo.speed;
     fireProjectile({
+      projectileType: "abilityOrb",
       origin: skillRSphereLaunchOrigin,
       mesh: skillRSphere,
       radius: skillRSphereConfig.radius,
@@ -967,6 +969,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const baseDamage = resolveBaseProjectileDamage(speed);
     if (skillE.active) {
       fireProjectile({
+        projectileType: "abilityOrb",
         speed,
         lifetime,
         color: 0x22c55e,
@@ -981,7 +984,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
       });
       deactivateSkillE(true);
     } else {
-      fireProjectile({ speed, lifetime, energyGainOnHit: 4 });
+      fireProjectile({
+        projectileType: "abilityOrb",
+        speed,
+        lifetime,
+        energyGainOnHit: 4,
+      });
     }
     chargeState.releaseUntil = now + chargeConfig.releaseMs;
     hud.setVisible(true);

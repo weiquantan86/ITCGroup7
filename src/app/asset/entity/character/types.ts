@@ -151,6 +151,7 @@ export interface ProjectileLifecycleHooks {
 }
 
 export interface FireProjectileArgs {
+  projectileType?: string;
   speed?: number;
   lifetime?: number;
   origin?: THREE.Vector3;
@@ -170,6 +171,13 @@ export interface FireProjectileArgs {
   explosionColor?: number;
   explosionEmissive?: number;
   explosionEmissiveIntensity?: number;
+  gravity?: number;
+  grantEnergyOnTargetHit?: boolean;
+  explodeOnTargetHit?: boolean;
+  explodeOnWorldHit?: boolean;
+  explodeOnExpire?: boolean;
+  removeOnTargetHit?: boolean;
+  removeOnWorldHit?: boolean;
   lifecycle?: ProjectileLifecycleHooks;
 }
 
@@ -178,6 +186,8 @@ export interface MeleeAttackArgs {
   maxDistance: number;
   hitRadius?: number;
   maxHits?: number;
+  origin?: THREE.Vector3;
+  direction?: THREE.Vector3;
 }
 
 export interface ProjectileBlockHitArgs {

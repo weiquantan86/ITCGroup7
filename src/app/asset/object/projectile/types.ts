@@ -41,6 +41,14 @@ export interface LinearProjectileHooks<
 
 export interface Projectile extends LinearProjectileState {
   id: number;
+  projectileType: string;
+  gravity: number;
+  grantEnergyOnTargetHit: boolean;
+  explodeOnTargetHit: boolean;
+  explodeOnWorldHit: boolean;
+  explodeOnExpire: boolean;
+  removeOnTargetHit: boolean;
+  removeOnWorldHit: boolean;
   mesh: THREE.Mesh;
   targetHitRadius: number;
   damage: number;

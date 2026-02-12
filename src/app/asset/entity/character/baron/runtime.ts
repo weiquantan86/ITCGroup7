@@ -2720,6 +2720,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetShurikenTrail(entry, skillEShotOrigin);
 
     fireProjectile({
+      projectileType: "shuriken",
       mesh: entry.mesh,
       origin: skillEShotOrigin,
       direction: skillEShotDirection,
@@ -2888,6 +2889,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       const currentDirection = new THREE.Vector3();
       const trailHead = new THREE.Vector3();
       fireProjectile({
+        projectileType: "shuriken",
         mesh: entry.mesh,
         origin: skillEShotOrigin,
         direction: cloneScratchDirection,
