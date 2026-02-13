@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { createCharacterRuntime } from "../player/runtimeBase";
 import { CharacterRuntimeObject } from "../player/runtimeObject";
 import type { CharacterRuntimeFactory } from "../types";
+import { createCarrotPhantomModifier } from "./phantomModifier";
 import { profile } from "./profile";
 
 type PunchPhase = "idle" | "charging" | "outbound" | "inbound" | "failedReturn";
@@ -126,6 +127,8 @@ const createCarrotChargeHud = (mount?: HTMLElement): ChargeHud => {
 
 export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
+  fireProjectile,
+  applyHealth,
   performMeleeAttack,
   applyEnergy,
   mount,
@@ -189,6 +192,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const punchAimDirection = new THREE.Vector3();
   const punchAimParentQuaternion = new THREE.Quaternion();
   const punchAimAvatarQuaternion = new THREE.Quaternion();
+  const phantomModifier = createCarrotPhantomModifier({
+    avatar,
+    fireProjectile,
+    applyHealth,
+    applyEnergy,
+  });
 
   const resetChargeHud = () => {
     chargeHud.setVisible(false);
@@ -557,6 +566,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const resetState = () => {
     clearPunchState();
     restoreIdlePose();
+    phantomModifier.reset();
     baseRuntime.resetState?.();
   };
 
@@ -571,7 +581,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     handlePrimaryUp: releaseCharge,
     handlePrimaryCancel: cancelCharge,
     handleSkillQ: baseRuntime.handleSkillQ,
-    handleSkillE: baseRuntime.handleSkillE,
+    handleSkillE: phantomModifier.handleSkillE,
     handleSkillR: baseRuntime.handleSkillR,
     getProjectileBlockers: baseRuntime.getProjectileBlockers,
     handleProjectileBlockHit: baseRuntime.handleProjectileBlockHit,
@@ -580,6 +590,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     isMovementLocked: baseRuntime.isMovementLocked,
     getSkillCooldownRemainingMs: baseRuntime.getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs: baseRuntime.getSkillCooldownDurationMs,
+    beforeSkillUse: phantomModifier.beforeSkillUse,
+    beforeDamage: phantomModifier.beforeDamage,
+    onTick: phantomModifier.onTick,
     resetState,
     update: (args) => {
       baseRuntime.update(args);

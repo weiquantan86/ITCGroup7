@@ -132,6 +132,13 @@ export interface CharacterRuntimeUpdate {
   avatarModel: THREE.Object3D | null;
 }
 
+export interface CharacterRuntimeTickArgs {
+  now: number;
+  delta: number;
+  isMoving: boolean;
+  isSprinting: boolean;
+}
+
 export type ProjectileRemoveReason = "impact" | "expired" | "cleared";
 
 export interface ProjectileLifecycleHooks {
@@ -200,6 +207,17 @@ export interface ProjectileBlockHitArgs {
   nextPosition: THREE.Vector3;
 }
 
+export interface SkillUseModifier {
+  allow?: boolean;
+  ignoreCooldown?: boolean;
+  ignoreResource?: boolean;
+  ignoreCostAndCooldown?: boolean;
+}
+
+export interface IncomingDamageModifier {
+  amount: number;
+}
+
 export interface CharacterRuntime {
   setProfile: (nextProfile: CharacterProfile) => void;
   triggerSlash: (facing: CharacterFacing) => void;
@@ -217,6 +235,15 @@ export interface CharacterRuntime {
   isMovementLocked?: () => boolean;
   getSkillCooldownRemainingMs?: (key: SkillKey) => number | null;
   getSkillCooldownDurationMs?: (key: SkillKey) => number | null;
+  beforeSkillUse?: (args: {
+    key: SkillKey;
+    now: number;
+  }) => SkillUseModifier | void;
+  beforeDamage?: (args: {
+    amount: number;
+    now: number;
+  }) => IncomingDamageModifier | number | void;
+  onTick?: (args: CharacterRuntimeTickArgs) => void;
   resetState?: () => void;
   update: (args: CharacterRuntimeUpdate) => void;
   dispose: () => void;
@@ -230,6 +257,7 @@ export interface CharacterRuntimeFactory {
     noCooldown?: boolean;
     fireProjectile?: (args?: FireProjectileArgs) => void;
     performMeleeAttack?: (args: MeleeAttackArgs) => number;
+    applyHealth?: (amount: number) => number;
     applyEnergy?: (amount: number) => number;
     applyMana?: (amount: number) => number;
     getCurrentStats?: () => CharacterStats;

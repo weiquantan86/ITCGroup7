@@ -16,7 +16,14 @@ export const profile: CharacterProfile = {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {
       q: { id: "q", label: "Q", description: "..." },
-      e: { id: "e", label: "E", description: "..." },
+      e: {
+        id: "e",
+        label: "E",
+        description:
+          "Cost 20 mana. Enter a 0.3s phasing state; getting hit triggers a 3s deep phase with full damage immunity. Recast during deep phase to fire 5 energy bolts. If deep phase ends naturally, recover 15 HP and 20 EN.",
+        cost: 20,
+        cooldownMs: 7000,
+      },
       r: { id: "r", label: "R", description: "..." },
     },
   },

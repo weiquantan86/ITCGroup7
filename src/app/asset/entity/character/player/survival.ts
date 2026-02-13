@@ -22,6 +22,10 @@ type CreatePlayerSurvivalStateArgs = {
   worldPlayerDeath?: (
     args: PlayerDeathArgs
   ) => PlayerDeathResolution | void;
+  beforeDamage?: (args: {
+    amount: number;
+    now: number;
+  }) => { amount: number } | number | void;
 };
 
 export const createPlayerSurvivalState = ({
@@ -35,6 +39,7 @@ export const createPlayerSurvivalState = ({
   syncHealthFromPool,
   onResetPlayer,
   worldPlayerDeath,
+  beforeDamage,
 }: CreatePlayerSurvivalStateArgs) => {
   const recoveryZoneLastTriggered = new Map<string, number>();
   let respawnProtectionUntil = 0;
@@ -61,8 +66,17 @@ export const createPlayerSurvivalState = ({
   const applyDamageToPlayer = (amount: number) => {
     const now = performance.now();
     if (now < respawnProtectionUntil) return 0;
+    const damageModifier = beforeDamage?.({ amount, now });
+    let modifiedAmount = amount;
+    if (typeof damageModifier === "number") {
+      modifiedAmount = damageModifier;
+    } else if (damageModifier) {
+      modifiedAmount = damageModifier.amount;
+    }
+    const resolvedAmount = Math.max(0, modifiedAmount);
+    if (resolvedAmount <= 0) return 0;
 
-    const applied = healthPool.takeDamage(amount);
+    const applied = healthPool.takeDamage(resolvedAmount);
     if (applied > 0) {
       syncHealthFromPool();
       statsState.applyEnergy(applied * statsState.energyConfig.damageTakenRatio);
@@ -139,4 +153,3 @@ export const createPlayerSurvivalState = ({
     setRespawnProtection,
   };
 };
-

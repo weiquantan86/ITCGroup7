@@ -217,6 +217,15 @@ export const createPlayer = ({
     statsState.setHealth(healthPool.current);
   };
 
+  const applyHealth = (amount: number) => {
+    if (amount <= 0) return 0;
+    const recovered = healthPool.heal(amount);
+    if (recovered <= 0) return 0;
+    syncHealthFromPool();
+    statsState.syncHud();
+    return recovered;
+  };
+
   const projectileSystem = createProjectileSystem({
     scene,
     groundY: resolvedWorld.groundY,
@@ -338,6 +347,8 @@ export const createPlayer = ({
     syncHealthFromPool,
     onResetPlayer: resetPlayerState,
     worldPlayerDeath,
+    beforeDamage: ({ amount, now }) =>
+      characterRuntime?.beforeDamage?.({ amount, now }) ?? amount,
   });
 
   const loadCharacter = (path?: string) => {
@@ -361,6 +372,7 @@ export const createPlayer = ({
       mount,
       fireProjectile,
       performMeleeAttack,
+      applyHealth,
       applyEnergy: statsState.applyEnergy,
       applyMana: statsState.applyMana,
       getCurrentStats: () => statsState.currentStats,

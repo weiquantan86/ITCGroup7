@@ -1,6 +1,7 @@
 import type {
   CharacterProfile,
   CharacterRuntime,
+  SkillUseModifier,
   SkillKey,
 } from "../types";
 import type { createPlayerStatsState } from "./statsState";
@@ -37,22 +38,42 @@ export const createPlayerSkillState = ({
   emitUiState,
 }: CreatePlayerSkillStateArgs) => {
   const tryUseSkill = (key: SkillKey, now: number) => {
-    if (!infiniteFire && getSkillCooldownRemainingMs(now, key) > 0) {
+    const runtime = getCurrentRuntime();
+    const skillModifierResult = runtime?.beforeSkillUse?.({ key, now });
+    const skillModifier: SkillUseModifier =
+      skillModifierResult && typeof skillModifierResult === "object"
+        ? skillModifierResult
+        : {};
+    const allowSkill = skillModifier?.allow ?? true;
+    if (!allowSkill) return false;
+    const ignoreCostAndCooldown = Boolean(skillModifier?.ignoreCostAndCooldown);
+    const ignoreCooldown =
+      Boolean(skillModifier?.ignoreCooldown) || ignoreCostAndCooldown;
+    const ignoreResource =
+      Boolean(skillModifier?.ignoreResource) || ignoreCostAndCooldown;
+
+    if (
+      !ignoreCooldown &&
+      !infiniteFire &&
+      getSkillCooldownRemainingMs(now, key) > 0
+    ) {
       return false;
     }
     const profile = getCurrentProfile();
-    if (!statsState.hasEnoughSkillResource(key, profile)) {
+    if (!ignoreResource && !statsState.hasEnoughSkillResource(key, profile)) {
       return false;
     }
 
-    const handler = getRuntimeSkillHandler(getCurrentRuntime(), key);
+    const handler = getRuntimeSkillHandler(runtime, key);
     if (!handler) return false;
 
     const didTrigger = handler();
     if (!didTrigger) return false;
 
-    statsState.spendSkillCost(key, profile);
-    statsState.activateSkillCooldown(key, now, isRuntimeCooldownManaged(key));
+    if (!ignoreCostAndCooldown) {
+      statsState.spendSkillCost(key, profile);
+      statsState.activateSkillCooldown(key, now, isRuntimeCooldownManaged(key));
+    }
     emitUiState(now);
     return true;
   };
@@ -61,4 +82,3 @@ export const createPlayerSkillState = ({
     tryUseSkill,
   };
 };
-

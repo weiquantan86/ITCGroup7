@@ -20,6 +20,9 @@ type CharacterRuntimeObjectInit = {
   isMovementLocked?: CharacterRuntime["isMovementLocked"];
   getSkillCooldownRemainingMs?: CharacterRuntime["getSkillCooldownRemainingMs"];
   getSkillCooldownDurationMs?: CharacterRuntime["getSkillCooldownDurationMs"];
+  beforeSkillUse?: CharacterRuntime["beforeSkillUse"];
+  beforeDamage?: CharacterRuntime["beforeDamage"];
+  onTick?: CharacterRuntime["onTick"];
   resetState?: CharacterRuntime["resetState"];
 };
 
@@ -43,6 +46,9 @@ export class CharacterRuntimeObject implements CharacterRuntime {
   readonly isMovementLocked?: CharacterRuntime["isMovementLocked"];
   readonly getSkillCooldownRemainingMs?: CharacterRuntime["getSkillCooldownRemainingMs"];
   readonly getSkillCooldownDurationMs?: CharacterRuntime["getSkillCooldownDurationMs"];
+  readonly beforeSkillUse?: CharacterRuntime["beforeSkillUse"];
+  readonly beforeDamage?: CharacterRuntime["beforeDamage"];
+  readonly onTick?: CharacterRuntime["onTick"];
   readonly resetState?: CharacterRuntime["resetState"];
 
   constructor(init: CharacterRuntimeObjectInit) {
@@ -65,6 +71,9 @@ export class CharacterRuntimeObject implements CharacterRuntime {
     this.isMovementLocked = init.isMovementLocked;
     this.getSkillCooldownRemainingMs = init.getSkillCooldownRemainingMs;
     this.getSkillCooldownDurationMs = init.getSkillCooldownDurationMs;
+    this.beforeSkillUse = init.beforeSkillUse;
+    this.beforeDamage = init.beforeDamage;
+    this.onTick = init.onTick;
     this.resetState = init.resetState;
   }
 }

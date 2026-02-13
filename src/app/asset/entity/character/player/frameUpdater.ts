@@ -165,6 +165,12 @@ export const createPlayerFrameUpdater = ({
       legRight: visualState.legRight,
       avatarModel: visualState.avatarModel,
     });
+    runtime?.onTick?.({
+      now,
+      delta,
+      isMoving,
+      isSprinting,
+    });
 
     const runtimeProjectileBlockers = getProjectileBlockers();
     projectileSystemBlockers.length = 0;
