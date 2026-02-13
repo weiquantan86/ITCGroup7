@@ -285,8 +285,18 @@ export const createProjectileSystem = ({
         }
         lifecycle.applyForces({
           velocity: projectile.velocity,
+          position: projectile.mesh.position,
           delta: stepDelta,
           applyDefaultGravity,
+          findNearestTarget: ({ center, radius }) => {
+            const hit = attackResolver.findNearestInRadius(center, radius);
+            if (!hit) return null;
+            return {
+              targetId: hit.target.id,
+              point: hit.point.clone(),
+              distance: hit.distance,
+            };
+          },
           removeProjectile: (reason) => {
             if (reason) {
               projectileRemovedReason.set(projectile.id, reason);

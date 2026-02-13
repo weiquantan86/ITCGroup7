@@ -18,6 +18,16 @@ type PerformMeleeAttackArgs = {
   maxHits?: number;
 };
 
+type PerformMeleeContactAttackArgs = {
+  now: number;
+  source: PlayerAttackSource;
+  center: THREE.Vector3;
+  direction: THREE.Vector3;
+  damage: number;
+  radius: number;
+  maxHits?: number;
+};
+
 type ApplyExplosionDamageArgs = {
   now: number;
   center: THREE.Vector3;
@@ -160,6 +170,40 @@ export class AttackTargetResolver {
     return rayHit ?? radiusHit;
   }
 
+  findNearestInRadius(
+    center: THREE.Vector3,
+    radius: number
+  ): AttackTargetHit | null {
+    if (!this.attackTargets.length) return null;
+    if (radius <= 0) return null;
+    const radiusSq = radius * radius;
+    let nearest: AttackTargetHit | null = null;
+
+    for (let i = 0; i < this.attackTargets.length; i += 1) {
+      const target = this.attackTargets[i];
+      if (target.isActive && !target.isActive()) continue;
+
+      target.object.updateMatrixWorld(true);
+      this.attackTargetBounds.setFromObject(target.object);
+      if (this.attackTargetBounds.isEmpty()) continue;
+      this.attackTargetBounds.getBoundingSphere(this.attackTargetSphere);
+
+      const distSq = center.distanceToSquared(this.attackTargetSphere.center);
+      const combined = radius + this.attackTargetSphere.radius;
+      if (distSq > combined * combined) continue;
+      const dist = Math.sqrt(distSq);
+      if (!nearest || dist < nearest.distance) {
+        nearest = {
+          target,
+          point: this.attackTargetSphere.center.clone(),
+          distance: dist,
+        };
+      }
+    }
+
+    return nearest;
+  }
+
   performMeleeAttack({
     now,
     source,
@@ -229,6 +273,65 @@ export class AttackTargetResolver {
         damage: resolvedDamage,
         point: hit.point.clone(),
         direction: direction.clone(),
+      });
+      hitCount += 1;
+    }
+    return hitCount;
+  }
+
+  performMeleeContactAttack({
+    now,
+    source,
+    center,
+    direction,
+    damage,
+    radius,
+    maxHits = 1,
+  }: PerformMeleeContactAttackArgs) {
+    if (!this.attackTargets.length) return 0;
+    if (damage <= 0 || radius <= 0) return 0;
+
+    const resolvedDamage = Math.max(1, Math.round(damage));
+    const resolvedRadius = Math.max(0.05, radius);
+    const resolvedMaxHits = Math.max(1, Math.floor(maxHits));
+    const resolvedDirection =
+      direction.lengthSq() > 0.000001
+        ? direction.clone().normalize()
+        : new THREE.Vector3(0, 0, 1);
+    const hits: AttackTargetHit[] = [];
+
+    for (let i = 0; i < this.attackTargets.length; i += 1) {
+      const target = this.attackTargets[i];
+      if (target.isActive && !target.isActive()) continue;
+
+      target.object.updateMatrixWorld(true);
+      this.attackTargetBounds.setFromObject(target.object);
+      if (this.attackTargetBounds.isEmpty()) continue;
+      this.attackTargetBounds.getBoundingSphere(this.attackTargetSphere);
+
+      const combinedRadius = resolvedRadius + this.attackTargetSphere.radius;
+      const distSq = center.distanceToSquared(this.attackTargetSphere.center);
+      if (distSq > combinedRadius * combinedRadius) continue;
+
+      hits.push({
+        target,
+        point: this.attackTargetSphere.center.clone(),
+        distance: Math.sqrt(distSq),
+      });
+    }
+
+    if (!hits.length) return 0;
+    hits.sort((a, b) => a.distance - b.distance);
+
+    let hitCount = 0;
+    for (let i = 0; i < hits.length && hitCount < resolvedMaxHits; i += 1) {
+      const hit = hits[i];
+      hit.target.onHit({
+        now,
+        source,
+        damage: resolvedDamage,
+        point: hit.point.clone(),
+        direction: resolvedDirection.clone(),
       });
       hitCount += 1;
     }

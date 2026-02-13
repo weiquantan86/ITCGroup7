@@ -5,7 +5,13 @@ import type { CharacterRuntimeFactory } from "../general/types";
 import { createCarrotPhantomModifier } from "./phantomModifier";
 import { profile } from "./profile";
 
-type PunchPhase = "idle" | "charging" | "outbound" | "inbound" | "failedReturn";
+type PunchPhase =
+  | "idle"
+  | "charging"
+  | "outbound"
+  | "inbound"
+  | "failedReturn"
+  | "skillRSweep";
 
 type FingerRootState = {
   node: THREE.Object3D;
@@ -24,6 +30,16 @@ type ChargeHud = {
   setRatio: (ratio: number) => void;
   dispose: () => void;
 };
+
+type SkillRTornadoParticleState = {
+  mesh: THREE.Mesh;
+  swirlOffset: number;
+  swirlSpeed: number;
+  riseOffset: number;
+  radiusScale: number;
+};
+
+type SkillRTornadoVariant = "default" | "deep";
 
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
 const easeInOutCubic = (value: number) =>
@@ -149,6 +165,29 @@ export const createRuntime: CharacterRuntimeFactory = ({
     minDamage: 11,
     maxDamage: 29,
     hitRadius: 0.52,
+    handContactRadius: 0.64,
+  };
+  const skillRConfig = {
+    forwardSpawnOffset: 1.25,
+    verticalSpawnOffset: 1.4,
+    speed: 12.9,
+    lifetime: 2.8,
+    damage: 34,
+    radius: 1.02,
+    targetHitRadius: 2.25,
+    explosionRadius: 5.4,
+    explosionDamage: 22,
+    sweepForwardMs: 150,
+    sweepReturnMs: 180,
+    sweepOffsetX: -0.58,
+    sweepOffsetY: 0.08,
+    sweepOffsetZ: 0.46,
+    sweepYaw: -1.12,
+    sweepPitch: -0.2,
+    deepSpreadYawOffsets: [-0.24, 0, 0.24],
+    deepLaneOffsets: [-1.35, 0, 1.35],
+    deepScaleMultiplier: 1.38,
+    deepCollisionScale: 1.22,
   };
 
   const punchState = {
@@ -178,6 +217,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     chargeQuaternion: new THREE.Quaternion(),
     outboundPosition: new THREE.Vector3(),
     outboundQuaternion: new THREE.Quaternion(),
+    skillRSweepFromPosition: new THREE.Vector3(),
+    skillRSweepFromQuaternion: new THREE.Quaternion(),
+    skillRSweepOutPosition: new THREE.Vector3(),
+    skillRSweepOutQuaternion: new THREE.Quaternion(),
     failedFromPosition: new THREE.Vector3(),
     failedFromQuaternion: new THREE.Quaternion(),
     fingerRoots: [] as FingerRootState[],
@@ -188,6 +231,59 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const axisY = new THREE.Vector3(0, 1, 0);
   const tempQuatX = new THREE.Quaternion();
   const tempQuatY = new THREE.Quaternion();
+  const skillRSpawnOrigin = new THREE.Vector3();
+  const skillRDirection = new THREE.Vector3();
+  const skillRRight = new THREE.Vector3();
+  const skillRShotOrigin = new THREE.Vector3();
+  const skillRShotDirection = new THREE.Vector3();
+  const runtimeAimDirection = new THREE.Vector3(0, 0, 1);
+  let hasRuntimeAimDirection = false;
+  const skillRTornadoBaseScale = new THREE.Vector3(1.92, 1.86, 1.92);
+  const skillRTornadoParticleCount = 34;
+  const skillRTornadoGeometry = new THREE.ConeGeometry(1.12, 3.8, 24, 5, true);
+  const skillRTornadoMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xe5e7eb,
+    emissiveIntensity: 0.72,
+    transparent: true,
+    opacity: 0.68,
+    roughness: 0.32,
+    metalness: 0.03,
+    side: THREE.DoubleSide,
+  });
+  const skillRTornadoDeepMaterial = new THREE.MeshStandardMaterial({
+    color: 0xc4b5fd,
+    emissive: 0x6d28d9,
+    emissiveIntensity: 1.1,
+    transparent: true,
+    opacity: 0.72,
+    roughness: 0.26,
+    metalness: 0.08,
+    side: THREE.DoubleSide,
+  });
+  const skillRTornadoParticleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+  const skillRTornadoParticleMaterial = new THREE.MeshStandardMaterial({
+    color: 0xf8fafc,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.82,
+    transparent: true,
+    opacity: 0.84,
+    roughness: 0.12,
+    metalness: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const skillRTornadoDeepParticleMaterial = new THREE.MeshStandardMaterial({
+    color: 0xe9d5ff,
+    emissive: 0xa855f7,
+    emissiveIntensity: 1.18,
+    transparent: true,
+    opacity: 0.9,
+    roughness: 0.08,
+    metalness: 0.05,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
   const punchAimOrigin = new THREE.Vector3();
   const punchAimDirection = new THREE.Vector3();
   const punchAimParentQuaternion = new THREE.Quaternion();
@@ -348,6 +444,28 @@ export const createRuntime: CharacterRuntimeFactory = ({
     punchState.phaseStartedAt = now;
   };
 
+  const beginSkillRSweep = (now: number) => {
+    const arm = armRig.arm;
+    if (!arm) return;
+
+    armRig.skillRSweepFromPosition.copy(arm.position);
+    armRig.skillRSweepFromQuaternion.copy(arm.quaternion);
+    armRig.skillRSweepOutPosition.copy(arm.position);
+    armRig.skillRSweepOutPosition.x += skillRConfig.sweepOffsetX;
+    armRig.skillRSweepOutPosition.y += skillRConfig.sweepOffsetY;
+    armRig.skillRSweepOutPosition.z += skillRConfig.sweepOffsetZ;
+
+    tempQuatY.setFromAxisAngle(axisY, skillRConfig.sweepYaw);
+    tempQuatX.setFromAxisAngle(axisX, skillRConfig.sweepPitch);
+    armRig.skillRSweepOutQuaternion
+      .copy(arm.quaternion)
+      .multiply(tempQuatY)
+      .multiply(tempQuatX);
+
+    punchState.phase = "skillRSweep";
+    punchState.phaseStartedAt = now;
+  };
+
   const resolvePunchMeleeAim = () => {
     const arm = armRig.arm;
     if (arm) {
@@ -392,25 +510,250 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const applyPunchMeleeHit = (
     ratio: number,
-    distance: number,
     origin: THREE.Vector3,
     direction: THREE.Vector3
   ) => {
-    if (!performMeleeAttack) return;
+    if (!performMeleeAttack) return 0;
     const damage = Math.round(
       THREE.MathUtils.lerp(punchConfig.minDamage, punchConfig.maxDamage, ratio)
     );
     const hitCount = performMeleeAttack({
       damage,
-      maxDistance: distance,
+      maxDistance: 0.1,
       hitRadius: punchConfig.hitRadius,
       maxHits: 1,
       origin,
       direction,
+      contactCenter: origin,
+      contactRadius: punchConfig.handContactRadius,
     });
     if (hitCount > 0) {
       applyEnergy?.(5 * hitCount);
     }
+    return hitCount;
+  };
+
+  const resolveSkillRDirection = () => {
+    if (hasRuntimeAimDirection) {
+      skillRDirection.copy(runtimeAimDirection);
+    } else {
+      avatar.updateMatrixWorld(true);
+      avatar.getWorldQuaternion(punchAimAvatarQuaternion);
+      skillRDirection.set(0, 0, 1).applyQuaternion(punchAimAvatarQuaternion);
+    }
+
+    skillRDirection.y = 0;
+    if (skillRDirection.lengthSq() < 0.000001) {
+      avatar.updateMatrixWorld(true);
+      avatar.getWorldQuaternion(punchAimAvatarQuaternion);
+      skillRDirection.set(0, 0, 1).applyQuaternion(punchAimAvatarQuaternion);
+      skillRDirection.y = 0;
+    }
+
+    if (skillRDirection.lengthSq() < 0.000001) {
+      skillRDirection.set(0, 0, 1);
+    } else {
+      skillRDirection.normalize();
+    }
+    return skillRDirection;
+  };
+
+  const updateSkillRTornadoParticles = (
+    particles: SkillRTornadoParticleState[],
+    spinPhase: number,
+    flowPhase: number
+  ) => {
+    const swirlDirection = -1;
+    const flowDirection = -1;
+    for (let i = 0; i < particles.length; i += 1) {
+      const particle = particles[i];
+      const rawRise = (flowPhase * 0.22 + particle.riseOffset) % 1;
+      const rise = flowDirection > 0 ? rawRise : 1 - rawRise;
+      const radius = (0.24 + rise * 1.18) * particle.radiusScale;
+      const angle =
+        swirlDirection *
+        (spinPhase * particle.swirlSpeed + particle.swirlOffset + rise * Math.PI * 6);
+      const wobble = Math.sin(spinPhase * 1.6 + particle.swirlOffset * 2.2) * 0.05;
+      particle.mesh.position.set(
+        Math.cos(angle) * radius,
+        THREE.MathUtils.lerp(-1.8, 1.9, rise) + wobble,
+        Math.sin(angle) * radius
+      );
+      const shimmer = 0.72 + 0.28 * Math.sin(spinPhase * 2.1 + particle.swirlOffset * 3);
+      const size = THREE.MathUtils.lerp(0.2, 0.44, rise) * shimmer;
+      particle.mesh.scale.setScalar(size);
+    }
+  };
+
+  const createSkillRTornadoMesh = ({
+    variant = "default",
+    scaleMultiplier = 1,
+  }: {
+    variant?: SkillRTornadoVariant;
+    scaleMultiplier?: number;
+  } = {}) => {
+    const isDeepVariant = variant === "deep";
+    const resolvedScaleMultiplier = Math.max(0.2, scaleMultiplier);
+    const resolvedBaseScale = skillRTornadoBaseScale
+      .clone()
+      .multiplyScalar(resolvedScaleMultiplier);
+    const mesh = new THREE.Mesh(
+      skillRTornadoGeometry,
+      isDeepVariant ? skillRTornadoDeepMaterial : skillRTornadoMaterial
+    );
+    mesh.scale.copy(resolvedBaseScale);
+    mesh.rotation.x = Math.PI;
+    mesh.rotation.y = Math.random() * Math.PI * 2;
+    const particles: SkillRTornadoParticleState[] = [];
+
+    for (let i = 0; i < skillRTornadoParticleCount; i += 1) {
+      const particle = new THREE.Mesh(
+        skillRTornadoParticleGeometry,
+        isDeepVariant
+          ? skillRTornadoDeepParticleMaterial
+          : skillRTornadoParticleMaterial
+      );
+      particle.castShadow = false;
+      particle.receiveShadow = false;
+      mesh.add(particle);
+      particles.push({
+        mesh: particle,
+        swirlOffset: (i / skillRTornadoParticleCount) * Math.PI * 2 + Math.random() * 0.45,
+        swirlSpeed: THREE.MathUtils.lerp(3.8, 6.4, Math.random()),
+        riseOffset: Math.random(),
+        radiusScale: THREE.MathUtils.lerp(0.78, 1.22, Math.random()),
+      });
+    }
+
+    return {
+      mesh,
+      particles,
+      baseScale: resolvedBaseScale,
+    };
+  };
+
+  const spawnSkillRTornadoProjectile = ({
+    origin,
+    direction,
+    variant = "default",
+    scaleMultiplier = 1,
+    collisionScale = 1,
+  }: {
+    origin: THREE.Vector3;
+    direction: THREE.Vector3;
+    variant?: SkillRTornadoVariant;
+    scaleMultiplier?: number;
+    collisionScale?: number;
+  }) => {
+    if (!fireProjectile) return;
+    const isDeepVariant = variant === "deep";
+    const resolvedCollisionScale = Math.max(0.2, collisionScale);
+    const tornadoBuild = createSkillRTornadoMesh({
+      variant,
+      scaleMultiplier,
+    });
+    const tornadoMesh = tornadoBuild.mesh;
+    const tornadoParticles = tornadoBuild.particles;
+    const tornadoBaseScale = tornadoBuild.baseScale;
+    let spinPhase = Math.random() * Math.PI * 2;
+    let flowPhase = Math.random() * Math.PI * 2;
+    updateSkillRTornadoParticles(tornadoParticles, spinPhase, flowPhase);
+
+    fireProjectile({
+      projectileType: "abilityOrb",
+      origin: origin.clone(),
+      direction: direction.clone(),
+      mesh: tornadoMesh,
+      speed: skillRConfig.speed,
+      lifetime: skillRConfig.lifetime,
+      damage: skillRConfig.damage,
+      radius: skillRConfig.radius * resolvedCollisionScale,
+      targetHitRadius: skillRConfig.targetHitRadius * resolvedCollisionScale,
+      gravity: 0,
+      splitOnImpact: true,
+      explosionRadius: skillRConfig.explosionRadius * resolvedCollisionScale,
+      explosionDamage: skillRConfig.explosionDamage,
+      explosionColor: isDeepVariant ? 0xe9d5ff : 0xf8fafc,
+      explosionEmissive: isDeepVariant ? 0x9333ea : 0xffffff,
+      explosionEmissiveIntensity: isDeepVariant ? 1.34 : 1.08,
+      explodeOnExpire: true,
+      energyGainOnHit: 0,
+      lifecycle: {
+        applyForces: ({ delta, velocity }) => {
+          flowPhase += delta * (isDeepVariant ? 2.35 : 2);
+          spinPhase += delta * 8.5;
+          tornadoMesh.rotation.y += delta * 7.8;
+          tornadoMesh.rotation.z = Math.sin(spinPhase * 0.7) * (isDeepVariant ? 0.16 : 0.12);
+          const pulse = 1 + Math.sin(spinPhase * 1.9) * (isDeepVariant ? 0.13 : 0.1);
+          tornadoMesh.scale.set(
+            tornadoBaseScale.x * pulse,
+            tornadoBaseScale.y,
+            tornadoBaseScale.z * pulse
+          );
+          updateSkillRTornadoParticles(tornadoParticles, spinPhase, flowPhase);
+          velocity.y = THREE.MathUtils.lerp(velocity.y, 0, Math.min(1, delta * 7));
+        },
+        onRemove: () => {
+          tornadoMesh.rotation.set(Math.PI, 0, 0);
+          tornadoMesh.scale.copy(tornadoBaseScale);
+        },
+      },
+    });
+  };
+
+  const handleSkillR = () => {
+    if (!fireProjectile) return false;
+    if (punchState.phase !== "idle") return false;
+    const now = performance.now();
+
+    avatar.updateMatrixWorld(true);
+    avatar.getWorldPosition(skillRSpawnOrigin);
+    const direction = resolveSkillRDirection();
+
+    skillRSpawnOrigin.addScaledVector(direction, skillRConfig.forwardSpawnOffset);
+    skillRSpawnOrigin.y += skillRConfig.verticalSpawnOffset;
+
+    if (phantomModifier.isDeepPhaseActive(now)) {
+      skillRRight.crossVectors(axisY, direction);
+      if (skillRRight.lengthSq() < 0.000001) {
+        skillRRight.set(1, 0, 0);
+      } else {
+        skillRRight.normalize();
+      }
+
+      const castCount = Math.min(
+        skillRConfig.deepSpreadYawOffsets.length,
+        skillRConfig.deepLaneOffsets.length
+      );
+      for (let i = 0; i < castCount; i += 1) {
+        const yawOffset = skillRConfig.deepSpreadYawOffsets[i] ?? 0;
+        const laneOffset = skillRConfig.deepLaneOffsets[i] ?? 0;
+
+        skillRShotDirection.copy(direction).applyAxisAngle(axisY, yawOffset);
+        if (skillRShotDirection.lengthSq() < 0.000001) {
+          skillRShotDirection.copy(direction);
+        } else {
+          skillRShotDirection.normalize();
+        }
+        skillRShotOrigin.copy(skillRSpawnOrigin).addScaledVector(skillRRight, laneOffset);
+
+        spawnSkillRTornadoProjectile({
+          origin: skillRShotOrigin,
+          direction: skillRShotDirection,
+          variant: "deep",
+          scaleMultiplier: skillRConfig.deepScaleMultiplier,
+          collisionScale: skillRConfig.deepCollisionScale,
+        });
+      }
+    } else {
+      spawnSkillRTornadoProjectile({
+        origin: skillRSpawnOrigin,
+        direction,
+        variant: "default",
+      });
+    }
+    beginSkillRSweep(now);
+    return true;
   };
 
   const beginCharge = () => {
@@ -472,6 +815,56 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const arm = armRig.arm;
     if (!arm) return;
 
+    if (punchState.phase === "skillRSweep") {
+      const forwardDurationMs = skillRConfig.sweepForwardMs;
+      const returnDurationMs = skillRConfig.sweepReturnMs;
+      const elapsed = now - punchState.phaseStartedAt;
+
+      if (elapsed <= forwardDurationMs) {
+        const progress = THREE.MathUtils.clamp(elapsed / forwardDurationMs, 0, 1);
+        const eased = easeOutCubic(progress);
+        arm.position.lerpVectors(
+          armRig.skillRSweepFromPosition,
+          armRig.skillRSweepOutPosition,
+          eased
+        );
+        arm.quaternion.slerpQuaternions(
+          armRig.skillRSweepFromQuaternion,
+          armRig.skillRSweepOutQuaternion,
+          eased
+        );
+        applyFistCurl(THREE.MathUtils.lerp(0.35, 0.75, eased));
+        return;
+      }
+
+      const returnProgress = THREE.MathUtils.clamp(
+        (elapsed - forwardDurationMs) / returnDurationMs,
+        0,
+        1
+      );
+      const eased = easeInOutCubic(returnProgress);
+      arm.position.lerpVectors(
+        armRig.skillRSweepOutPosition,
+        armRig.skillRSweepFromPosition,
+        eased
+      );
+      arm.quaternion.slerpQuaternions(
+        armRig.skillRSweepOutQuaternion,
+        armRig.skillRSweepFromQuaternion,
+        eased
+      );
+      applyFistCurl(THREE.MathUtils.lerp(0.75, 0, eased));
+
+      if (returnProgress >= 1) {
+        arm.position.copy(armRig.skillRSweepFromPosition);
+        arm.quaternion.copy(armRig.skillRSweepFromQuaternion);
+        resetFingerPose();
+        punchState.currentCurl = 0;
+        clearPunchState();
+      }
+      return;
+    }
+
     if (punchState.phase === "charging") {
       if (punchState.pendingCapture) {
         if (!captureArmChargePose()) return;
@@ -503,15 +896,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
       arm.quaternion.slerpQuaternions(armRig.chargeQuaternion, armRig.outboundQuaternion, eased);
       applyFistCurl(1);
 
-      if (punchState.hitPending && progress >= 0.2) {
+      if (punchState.hitPending && progress >= 0.08) {
         const aim = resolvePunchMeleeAim();
-        applyPunchMeleeHit(
+        const hitCount = applyPunchMeleeHit(
           punchState.chargeRatio,
-          punchState.attackDistance,
           aim.origin,
           aim.direction
         );
-        punchState.hitPending = false;
+        if (hitCount > 0 || progress >= 0.95) {
+          punchState.hitPending = false;
+        }
       }
 
       if (progress >= 1) {
@@ -582,7 +976,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     handlePrimaryCancel: cancelCharge,
     handleSkillQ: baseRuntime.handleSkillQ,
     handleSkillE: phantomModifier.handleSkillE,
-    handleSkillR: baseRuntime.handleSkillR,
+    handleSkillR,
     getProjectileBlockers: baseRuntime.getProjectileBlockers,
     handleProjectileBlockHit: baseRuntime.handleProjectileBlockHit,
     getMovementSpeedMultiplier: baseRuntime.getMovementSpeedMultiplier,
@@ -599,6 +993,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
         args.aimDirectionWorld,
         args.aimOriginWorld
       );
+      if (args.aimDirectionWorld && args.aimDirectionWorld.lengthSq() > 0.000001) {
+        runtimeAimDirection.copy(args.aimDirectionWorld).normalize();
+        hasRuntimeAimDirection = true;
+      }
       baseRuntime.update(args);
       attachArm(args.arms);
       if (armRig.arm && punchState.phase === "idle" && !args.isMoving) {
@@ -618,6 +1016,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
       resetState();
       phantomModifier.dispose();
       chargeHud.dispose();
+      skillRTornadoGeometry.dispose();
+      skillRTornadoMaterial.dispose();
+      skillRTornadoDeepMaterial.dispose();
+      skillRTornadoParticleGeometry.dispose();
+      skillRTornadoParticleMaterial.dispose();
+      skillRTornadoDeepParticleMaterial.dispose();
       baseRuntime.dispose();
     },
     isFacingLocked: baseRuntime.isFacingLocked,

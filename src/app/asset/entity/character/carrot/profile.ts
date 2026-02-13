@@ -29,7 +29,14 @@ export const profile: CharacterProfile = {
         cost: 20,
         cooldownMs: 7000,
       },
-      r: { id: "r", label: "R", description: "..." },
+      r: {
+        id: "r",
+        label: "R",
+        description:
+          "Cost 30 mana. Release a massive tornado forward that detonates on impact. While in deep phantom, cast R to summon three larger purple tornadoes.",
+        cost: 30,
+        cooldownMs: 12000,
+      },
     },
   },
   controls: {

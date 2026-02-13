@@ -255,13 +255,29 @@ export const createPlayer = ({
     maxHits = 1,
     origin,
     direction,
+    contactCenter,
+    contactRadius = 0,
   }: MeleeAttackArgs) => {
-    if (damage <= 0 || maxDistance <= 0) return 0;
+    if (damage <= 0) return 0;
     const aim = projectileSystem.resolveCameraAim({ camera });
     const resolvedOrigin = origin ?? aim.origin;
     const resolvedDirection = direction ?? aim.direction;
     if (resolvedDirection.lengthSq() < 0.000001) return 0;
     const normalizedDirection = resolvedDirection.clone().normalize();
+    const resolvedContactRadius = Math.max(0, contactRadius);
+    if (resolvedContactRadius > 0) {
+      const resolvedContactCenter = contactCenter ?? resolvedOrigin;
+      return attackResolver.performMeleeContactAttack({
+        now: performance.now(),
+        source: "slash",
+        center: resolvedContactCenter.clone(),
+        direction: normalizedDirection,
+        damage,
+        radius: resolvedContactRadius,
+        maxHits,
+      });
+    }
+    if (maxDistance <= 0) return 0;
     return attackResolver.performMeleeAttack({
       now: performance.now(),
       source: "slash",

@@ -148,8 +148,17 @@ export type ProjectileRemoveReason = "impact" | "expired" | "cleared";
 export interface ProjectileLifecycleHooks {
   applyForces?: (args: {
     velocity: THREE.Vector3;
+    position: THREE.Vector3;
     delta: number;
     applyDefaultGravity: () => void;
+    findNearestTarget?: (args: {
+      center: THREE.Vector3;
+      radius: number;
+    }) => {
+      targetId: string;
+      point: THREE.Vector3;
+      distance: number;
+    } | null;
     removeProjectile: (reason?: ProjectileRemoveReason) => void;
   }) => void;
   onRemove?: (args: {
@@ -199,6 +208,8 @@ export interface MeleeAttackArgs {
   maxHits?: number;
   origin?: THREE.Vector3;
   direction?: THREE.Vector3;
+  contactCenter?: THREE.Vector3;
+  contactRadius?: number;
 }
 
 export interface ProjectileBlockHitArgs {

@@ -77,14 +77,11 @@ export const createCarrotPhantomModifier = ({
     deepVolleyOrbLocalZ: 0.42,
     deepVolleyOrbLocalXOffsets: [-6, -3, 0, 3, 6],
     deepVolleyAimDistance: 50,
-    deepVolleyHomingDurationSec: 1.1,
-    deepVolleyHomingTurnRate: 2.1,
-    deepVolleyHomingMaxBlend: 0.1,
-    deepVolleyProjectileSpeed: 17.5,
-    deepVolleyProjectileLifetime: 1.8,
-    deepVolleyProjectileDamage: 30,
-    deepVolleyProjectileScale: 6,
-    deepVolleyProjectileRadius: 0.72,
+    deepVolleyHomingDurationSec: 1.45,
+    deepVolleyHomingTurnRate: 4.8,
+    deepVolleyHomingMaxBlend: 0.22,
+    deepVolleyHomingTargetScanRadius: 15,
+    deepVolleyHomingTargetHeightBias: 0.25,
     recoverHp: 15,
     recoverEnergy: 20,
     volleyYawOffsets: [-0.28, -0.14, 0, 0.14, 0.28],
@@ -804,32 +801,39 @@ export const createCarrotPhantomModifier = ({
     }
     const homingTargetPoint = deepVolleyAimPoint.clone();
     const homingEstimatedPosition = deepVolleyShotOrigin.clone();
+    const homingRuntimeTargetPoint = new THREE.Vector3();
     const homingDesiredDirection = new THREE.Vector3();
     const homingCurrentDirection = new THREE.Vector3();
+    let hasRuntimeTarget = false;
     let homingElapsed = 0;
 
     fireProjectile({
+      projectileType: "carrotDeepPhantomOrb",
       origin: deepVolleyShotOrigin.clone(),
       direction: phantomDirection.clone(),
-      speed: phantomConfig.deepVolleyProjectileSpeed,
-      lifetime: phantomConfig.deepVolleyProjectileLifetime,
-      gravity: 0,
-      color: 0x22093f,
-      emissive: 0x27125a,
-      emissiveIntensity: 1.12,
-      scale: phantomConfig.deepVolleyProjectileScale,
-      radius: phantomConfig.deepVolleyProjectileRadius,
-      damage: phantomConfig.deepVolleyProjectileDamage,
       lifecycle: {
-        applyForces: ({ velocity, delta }) => {
+        applyForces: ({ velocity, position, delta, findNearestTarget }) => {
           homingElapsed += delta;
           const speed = velocity.length();
           if (speed <= 0.000001) {
             return;
           }
+          homingEstimatedPosition.copy(position);
           if (homingElapsed <= phantomConfig.deepVolleyHomingDurationSec) {
+            if (findNearestTarget) {
+              const nearest = findNearestTarget({
+                center: homingEstimatedPosition,
+                radius: phantomConfig.deepVolleyHomingTargetScanRadius,
+              });
+              if (nearest) {
+                homingRuntimeTargetPoint.copy(nearest.point);
+                homingRuntimeTargetPoint.y +=
+                  phantomConfig.deepVolleyHomingTargetHeightBias;
+                hasRuntimeTarget = true;
+              }
+            }
             homingDesiredDirection
-              .copy(homingTargetPoint)
+              .copy(hasRuntimeTarget ? homingRuntimeTargetPoint : homingTargetPoint)
               .sub(homingEstimatedPosition);
             if (homingDesiredDirection.lengthSq() > 0.000001) {
               homingDesiredDirection.normalize();
@@ -845,7 +849,6 @@ export const createCarrotPhantomModifier = ({
               }
             }
           }
-          homingEstimatedPosition.addScaledVector(velocity, delta);
         },
       },
     });
@@ -1006,6 +1009,11 @@ export const createCarrotPhantomModifier = ({
     updateVisuals(now);
   };
 
+  const isDeepPhaseActive = (now = performance.now()) => {
+    updatePhantomPhase(now);
+    return isDeepActive(now);
+  };
+
   const reset = () => {
     phantomState.phase = "idle";
     phantomState.endsAt = 0;
@@ -1036,6 +1044,7 @@ export const createCarrotPhantomModifier = ({
     beforeSkillUse,
     beforeDamage,
     onTick,
+    isDeepPhaseActive,
     setAimDirectionWorld,
     reset,
     dispose,
