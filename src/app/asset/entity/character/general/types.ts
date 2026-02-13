@@ -1,5 +1,5 @@
 import type * as THREE from "three";
-import type { Projectile as RuntimeProjectile } from "../../object/projectile/types";
+import type { Projectile as RuntimeProjectile } from "../../../object/projectile/types";
 
 export type ThreeModule = typeof import("three");
 
@@ -73,6 +73,9 @@ export interface CharacterMovementConfig {
 
 export interface CharacterCameraConfig {
   followHeadBone?: boolean;
+  miniBehindDistance?: number;
+  miniUpDistance?: number;
+  miniLookUpOffset?: number;
 }
 
 export interface SkillDefinition {
@@ -125,6 +128,7 @@ export interface CharacterRuntimeUpdate {
   now: number;
   isMoving: boolean;
   isSprinting?: boolean;
+  aimOriginWorld?: THREE.Vector3;
   aimDirectionWorld?: THREE.Vector3;
   arms: THREE.Object3D[];
   legLeft: THREE.Object3D | null;
@@ -268,3 +272,4 @@ export interface CharacterEntry {
   profile: CharacterProfile;
   createRuntime: CharacterRuntimeFactory;
 }
+

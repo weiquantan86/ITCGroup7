@@ -13,6 +13,9 @@ type UpdatePlayerCameraRigArgs = {
   eyeHeight: number;
   lookState: PlayerLookState;
   followHeadBone: boolean;
+  miniBehindDistance: number;
+  miniUpDistance: number;
+  miniLookUpOffset: number;
   headBone: THREE.Object3D | null;
 };
 
@@ -63,6 +66,9 @@ export const createPlayerCameraRig = ({
     eyeHeight,
     lookState,
     followHeadBone,
+    miniBehindDistance,
+    miniUpDistance,
+    miniLookUpOffset,
     headBone,
   }: UpdatePlayerCameraRigArgs) => {
     if (followHeadBone && headBone) {
@@ -86,11 +92,11 @@ export const createPlayerCameraRig = ({
 
     miniTarget.set(
       avatar.position.x,
-      avatar.position.y + eyeHeight * 0.6,
+      avatar.position.y + eyeHeight * 0.6 + miniLookUpOffset,
       avatar.position.z
     );
-    const behindDistance = 3.9;
-    const upDistance = 2.4;
+    const behindDistance = Math.max(1, miniBehindDistance);
+    const upDistance = Math.max(0.2, miniUpDistance);
     miniOffset.set(
       -Math.sin(lookState.yaw) * behindDistance,
       upDistance,

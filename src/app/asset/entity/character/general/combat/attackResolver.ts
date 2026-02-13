@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { PlayerAttackSource, PlayerAttackTarget } from "./types";
+import type { PlayerAttackSource, PlayerAttackTarget } from "../engine/types";
 
 export type AttackTargetHit = {
   target: PlayerAttackTarget;
@@ -269,3 +269,4 @@ export class AttackTargetResolver {
     }
   }
 }
+

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { PlayerLookState } from "./input";
+import type { PlayerLookState } from "../engine/input";
 
 type ResolveInputDirectionArgs = {
   pressedKeys: Set<string>;
@@ -54,3 +54,4 @@ export const clampToBounds = (
     z: THREE.MathUtils.clamp(z, bounds.minZ, bounds.maxZ),
   };
 };
+

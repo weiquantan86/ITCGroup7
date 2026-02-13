@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { Projectile as CharacterProjectile } from "../../../object/projectile/types";
+import type { Projectile as CharacterProjectile } from "../../../../object/projectile/types";
 import type { CharacterStats, SkillKey } from "../types";
 
 export type RecoveryZoneType = "health" | "mana" | "energy" | "both";
@@ -98,3 +98,5 @@ export interface PlayerController {
 }
 
 export type Projectile = CharacterProjectile;
+
+

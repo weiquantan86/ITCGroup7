@@ -1,11 +1,11 @@
 import type * as THREE from "three";
-import type { HpPool } from "../../hpPool";
-import type { createPlayerStatsState } from "./statsState";
+import type { HpPool } from "../../../hpPool";
+import type { createPlayerStatsState } from "../player/statsState";
 import type {
   PlayerDeathArgs,
   PlayerDeathResolution,
   RecoveryZone,
-} from "./types";
+} from "../engine/types";
 
 type PlayerStatsState = ReturnType<typeof createPlayerStatsState>;
 
@@ -153,3 +153,5 @@ export const createPlayerSurvivalState = ({
     setRespawnProtection,
   };
 };
+
+

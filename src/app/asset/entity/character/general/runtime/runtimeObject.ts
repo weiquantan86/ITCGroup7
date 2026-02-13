@@ -77,3 +77,5 @@ export class CharacterRuntimeObject implements CharacterRuntime {
     this.resetState = init.resetState;
   }
 }
+
+

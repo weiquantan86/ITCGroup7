@@ -1,16 +1,16 @@
 import * as THREE from "three";
-import { LinearProjectileUpdater } from "../../../object/projectile/linearUpdater";
-import { getProjectileTypeDefinition } from "../../../object/projectile/projectile/registry";
-import { createProjectileFxSystem } from "../../../object/projectile/projectile/shared/fxSystem";
-import { createProjectileMeshFactory } from "../../../object/projectile/projectile/shared/meshFactory";
-import type { ProjectileVisualOptions } from "../../../object/projectile/projectile/types";
+import { LinearProjectileUpdater } from "../../../../object/projectile/linearUpdater";
+import { getProjectileTypeDefinition } from "../../../../object/projectile/projectile/registry";
+import { createProjectileFxSystem } from "../../../../object/projectile/projectile/shared/fxSystem";
+import { createProjectileMeshFactory } from "../../../../object/projectile/projectile/shared/meshFactory";
+import type { ProjectileVisualOptions } from "../../../../object/projectile/projectile/types";
 import type {
   FireProjectileArgs,
   ProjectileBlockHitArgs,
   ProjectileLifecycleHooks,
   ProjectileRemoveReason,
 } from "../types";
-import type { Projectile } from "./types";
+import type { Projectile } from "../engine/types";
 import type { AttackTargetResolver } from "./attackResolver";
 
 type CreateProjectileSystemArgs = {
@@ -601,3 +601,6 @@ export const createProjectileSystem = ({
     dispose,
   };
 };
+
+
+

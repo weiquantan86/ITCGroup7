@@ -1,13 +1,13 @@
 import * as THREE from "three";
-import { clampToBounds, resolveInputDirection } from "./movement";
+import { clampToBounds, resolveInputDirection } from "../player/movement";
 import type { PlayerLookState } from "./input";
 import type { CharacterRuntime, CharacterStats } from "../types";
 import type { CharacterVisualState } from "./characterLoader";
 import type { PlayerWorldTickArgs } from "./types";
-import type { createPlayerStatsState } from "./statsState";
+import type { createPlayerStatsState } from "../player/statsState";
 import type { createPlayerCameraRig } from "./cameraRig";
-import type { createProjectileSystem } from "./projectileSystem";
-import type { createPlayerSurvivalState } from "./survival";
+import type { createProjectileSystem } from "../combat/projectileSystem";
+import type { createPlayerSurvivalState } from "../combat/survival";
 
 type PlayerStatsState = ReturnType<typeof createPlayerStatsState>;
 type PlayerCameraRig = ReturnType<typeof createPlayerCameraRig>;
@@ -76,6 +76,7 @@ export const createPlayerFrameUpdater = ({
     energy: 0,
   };
   const projectileSystemBlockers: THREE.Object3D[] = [];
+  const cameraAimOriginWorld = new THREE.Vector3();
 
   const getMovementSpeedMultiplier = (runtime: CharacterRuntime | null) => {
     const multiplier = runtime?.getMovementSpeedMultiplier?.();
@@ -152,6 +153,9 @@ export const createPlayerFrameUpdater = ({
       eyeHeight: visualState.eyeHeight,
       lookState,
       followHeadBone: statsState.cameraConfig.followHeadBone,
+      miniBehindDistance: statsState.cameraConfig.miniBehindDistance,
+      miniUpDistance: statsState.cameraConfig.miniUpDistance,
+      miniLookUpOffset: statsState.cameraConfig.miniLookUpOffset,
       headBone: visualState.headBone,
     });
 
@@ -159,6 +163,7 @@ export const createPlayerFrameUpdater = ({
       now,
       isMoving,
       isSprinting,
+      aimOriginWorld: camera.getWorldPosition(cameraAimOriginWorld),
       aimDirectionWorld: cameraLookDir,
       arms: visualState.arms,
       legLeft: visualState.legLeft,
@@ -231,3 +236,6 @@ export const createPlayerFrameUpdater = ({
     isGrounded: () => isGrounded,
   };
 };
+
+
+

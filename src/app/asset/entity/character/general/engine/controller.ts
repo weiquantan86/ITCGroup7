@@ -1,15 +1,15 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { HpPool } from "../../hpPool";
-import { getCharacterEntry } from "./registry";
+import { HpPool } from "../../../hpPool";
+import { getCharacterEntry } from "../player/registry";
 import { bindPlayerInput } from "./input";
 import { createStatusHud } from "./statusHud";
-import { AttackTargetResolver } from "./attackResolver";
+import { AttackTargetResolver } from "../combat/attackResolver";
 import { createPlayerCameraRig } from "./cameraRig";
-import { createProjectileSystem } from "./projectileSystem";
-import { createPlayerStatsState } from "./statsState";
-import { createPlayerSkillState } from "./skills";
-import { createPlayerSurvivalState } from "./survival";
+import { createProjectileSystem } from "../combat/projectileSystem";
+import { createPlayerStatsState } from "../player/statsState";
+import { createPlayerSkillState } from "../combat/skills";
+import { createPlayerSurvivalState } from "../combat/survival";
 import {
   createCharacterLoader,
   type CharacterVisualState,
@@ -214,7 +214,7 @@ export const createPlayer = ({
   };
 
   const syncHealthFromPool = () => {
-    statsState.setHealth(healthPool.current);
+    statsState.syncHealth(healthPool.current);
   };
 
   const applyHealth = (amount: number) => {
@@ -490,3 +490,6 @@ export const createPlayer = ({
     dispose,
   };
 };
+
+
+

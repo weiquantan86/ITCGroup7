@@ -1,12 +1,12 @@
 import * as THREE from "three";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { createCharacterRuntime } from "../player/runtimeBase";
-import { CharacterRuntimeObject } from "../player/runtimeObject";
+import { createCharacterRuntime } from "../general/runtime/runtimeBase";
+import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
 import {
   tryReflectLinearProjectile,
   type ProjectileReflector,
 } from "../../../object/projectile/reflection";
-import type { CharacterRuntime, CharacterRuntimeFactory } from "../types";
+import type { CharacterRuntime, CharacterRuntimeFactory } from "../general/types";
 import { profile } from "./profile";
 
 type ChargeHud = {
@@ -3532,4 +3532,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     isFacingLocked: baseRuntime.isFacingLocked,
   });
 };
+
+
+
 

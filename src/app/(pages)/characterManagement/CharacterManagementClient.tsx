@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import CharacterScene from "./characterScene/CharacterScene";
-import { characterProfiles } from "../../asset/entity/character/player/registry";
+import { characterProfiles } from "../../asset/entity/character/general/player/registry";
 
 type CharacterCard = {
   id: string;
@@ -298,3 +298,4 @@ export default function CharacterManagementClient({
     </section>
   );
 }
+

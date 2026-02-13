@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { PlayerUiState } from "../../entity/character/player";
-import { characterProfiles } from "../../entity/character/player/registry";
+import type { PlayerUiState } from "../../entity/character/general/player";
+import { characterProfiles } from "../../entity/character/general/player/registry";
 import SceneLauncher from "../SceneLauncher";
 import type { SceneUiState } from "../registry";
 
@@ -168,3 +168,4 @@ export default function TrainingScenePage({
     </div>
   );
 }
+

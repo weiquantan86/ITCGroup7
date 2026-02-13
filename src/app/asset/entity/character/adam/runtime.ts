@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { createCharacterRuntime } from "../player/runtimeBase";
-import { CharacterRuntimeObject } from "../player/runtimeObject";
-import type { CharacterRuntimeFactory, SkillKey } from "../types";
+import { createCharacterRuntime } from "../general/runtime/runtimeBase";
+import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
+import type { CharacterRuntimeFactory, SkillKey } from "../general/types";
 import { profile } from "./profile";
 
 type ChargeHud = {
@@ -1291,4 +1291,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     isFacingLocked: baseRuntime.isFacingLocked,
   });
 };
+
+
+
 

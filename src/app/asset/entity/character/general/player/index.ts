@@ -1,4 +1,4 @@
-export { createPlayer } from "./controller";
+export { createPlayer } from "../engine/controller";
 export type {
   RecoveryZoneType,
   RecoveryZone,
@@ -12,4 +12,5 @@ export type {
   PlayerUiState,
   PlayerController,
   Projectile,
-} from "./types";
+} from "../engine/types";
+

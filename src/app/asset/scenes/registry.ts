@@ -6,7 +6,7 @@ import type {
   PlayerAttackTarget,
   PlayerWorld,
   PlayerWorldTickArgs,
-} from "../entity/character/player";
+} from "../entity/character/general/player";
 import { Monster } from "../entity/monster/general";
 
 export interface SceneSetupResult {
@@ -352,8 +352,8 @@ const createTrainingScene = (
   scene: THREE.Scene,
   context?: SceneSetupContext
 ): SceneSetupResult => {
-  scene.background = new THREE.Color(0x03050a);
-  scene.fog = new THREE.Fog(0x03050a, 14, 40);
+  scene.background = new THREE.Color(0x111a2e);
+  scene.fog = new THREE.Fog(0x111a2e, 18, 58);
 
   const groundY = -1.4;
   const arenaSize = { width: 40, depth: 46 };
@@ -417,12 +417,31 @@ const createTrainingScene = (
   const trainingGroup = new THREE.Group();
   scene.add(trainingGroup);
 
+  const trainingAmbientLight = new THREE.AmbientLight(0xf1f5ff, 0.36);
+  const trainingHemisphereLight = new THREE.HemisphereLight(
+    0xf8fafc,
+    0x1e293b,
+    0.62
+  );
+  const trainingKeyLight = new THREE.DirectionalLight(0xffffff, 0.86);
+  trainingKeyLight.position.set(-9, 12, 7);
+  const trainingFillLight = new THREE.DirectionalLight(0xbfdbfe, 0.5);
+  trainingFillLight.position.set(11, 8, -8);
+  trainingGroup.add(
+    trainingAmbientLight,
+    trainingHemisphereLight,
+    trainingKeyLight,
+    trainingFillLight
+  );
+
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(arenaSize.width, arenaSize.depth),
     new THREE.MeshStandardMaterial({
-      color: 0x04070f,
-      roughness: 0.93,
-      metalness: 0.07,
+      color: 0x1b263c,
+      roughness: 0.88,
+      metalness: 0.1,
+      emissive: 0x111827,
+      emissiveIntensity: 0.12,
     })
   );
   floor.rotation.x = -Math.PI / 2;
@@ -432,11 +451,11 @@ const createTrainingScene = (
   trackMesh(floor);
 
   const borderMaterial = new THREE.MeshStandardMaterial({
-    color: 0x64748b,
+    color: 0x94a3b8,
     roughness: 0.45,
     metalness: 0.35,
-    emissive: 0x0f172a,
-    emissiveIntensity: 0.2,
+    emissive: 0x1e293b,
+    emissiveIntensity: 0.24,
   });
   const horizontalBorderGeometry = new THREE.BoxGeometry(
     arenaSize.width,
@@ -1331,3 +1350,4 @@ const sceneRegistry: Record<string, SceneDefinition> = {
 
 export const getSceneDefinition = (sceneId?: string): SceneDefinition =>
   sceneRegistry[sceneId || "grass"] || sceneRegistry.grass;
+

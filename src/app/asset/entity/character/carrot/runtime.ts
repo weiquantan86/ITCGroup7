@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { createCharacterRuntime } from "../player/runtimeBase";
-import { CharacterRuntimeObject } from "../player/runtimeObject";
-import type { CharacterRuntimeFactory } from "../types";
+import { createCharacterRuntime } from "../general/runtime/runtimeBase";
+import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
+import type { CharacterRuntimeFactory } from "../general/types";
 import { createCarrotPhantomModifier } from "./phantomModifier";
 import { profile } from "./profile";
 
@@ -595,6 +595,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     onTick: phantomModifier.onTick,
     resetState,
     update: (args) => {
+      phantomModifier.setAimDirectionWorld(
+        args.aimDirectionWorld,
+        args.aimOriginWorld
+      );
       baseRuntime.update(args);
       attachArm(args.arms);
       if (armRig.arm && punchState.phase === "idle" && !args.isMoving) {
@@ -612,10 +616,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
     },
     dispose: () => {
       resetState();
+      phantomModifier.dispose();
       chargeHud.dispose();
       baseRuntime.dispose();
     },
     isFacingLocked: baseRuntime.isFacingLocked,
   });
 };
+
+
+
 

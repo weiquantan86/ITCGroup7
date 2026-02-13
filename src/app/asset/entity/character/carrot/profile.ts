@@ -1,4 +1,4 @@
-import type { CharacterProfile } from "../types";
+import type { CharacterProfile } from "../general/types";
 
 export const profile: CharacterProfile = {
   id: "carrot",
@@ -12,6 +12,11 @@ export const profile: CharacterProfile = {
     baseSpeed: 5,
     sprintMultiplier: 1.6,
   },
+  camera: {
+    miniBehindDistance: 5.8,
+    miniUpDistance: 2.05,
+    miniLookUpOffset: 0.32,
+  },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {
@@ -20,7 +25,7 @@ export const profile: CharacterProfile = {
         id: "e",
         label: "E",
         description:
-          "Cost 20 mana. Enter a 0.3s phasing state; getting hit triggers a 3s deep phase with full damage immunity. Recast during deep phase to fire 5 energy bolts. If deep phase ends naturally, recover 15 HP and 20 EN.",
+          "Cost 20 mana. Enter a 0.075s phasing state; getting hit triggers a 3s deep phase with full damage immunity. Recast during deep phase to summon 5 large violet orbs above the head and launch them left-to-right; deep phase ends when the third orb is fired. If deep phase ends naturally, recover 15 HP and 20 EN.",
         cost: 20,
         cooldownMs: 7000,
       },
@@ -56,3 +61,4 @@ export const profile: CharacterProfile = {
     );
   },
 };
+

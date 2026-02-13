@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import CharacterScene from "../characterManagement/characterScene/CharacterScene";
-import { RARITY_CONFIG, Rarity } from "../../asset/entity/character/gachaConfig";
+import { RARITY_CONFIG, Rarity } from "../../asset/entity/character/gacha/gachaConfig";
 
 type GachaResult = {
   id: string;
@@ -130,3 +130,4 @@ export default function GachaClient() {
     </div>
   );
 }
+

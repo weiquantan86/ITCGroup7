@@ -4,7 +4,7 @@ import type {
   SkillUseModifier,
   SkillKey,
 } from "../types";
-import type { createPlayerStatsState } from "./statsState";
+import type { createPlayerStatsState } from "../player/statsState";
 
 type PlayerStatsState = ReturnType<typeof createPlayerStatsState>;
 
@@ -82,3 +82,6 @@ export const createPlayerSkillState = ({
     tryUseSkill,
   };
 };
+
+
+

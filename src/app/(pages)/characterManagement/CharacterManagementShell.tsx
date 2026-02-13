@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import CharacterManagementClient from "./CharacterManagementClient";
-import { characterProfiles } from "../../asset/entity/character/player/registry";
+import { characterProfiles } from "../../asset/entity/character/general/player/registry";
 
 type CharacterManagementShellProps = {
   ownedIds: string[];
@@ -128,3 +128,4 @@ export default function CharacterManagementShell({
     </main>
   );
 }
+

@@ -1,4 +1,4 @@
-import type { CharacterProfile } from "../types";
+import type { CharacterProfile } from "../general/types";
 
 export const profile: CharacterProfile = {
   id: "adam",
@@ -66,3 +66,4 @@ export const profile: CharacterProfile = {
     },
   },
 };
+

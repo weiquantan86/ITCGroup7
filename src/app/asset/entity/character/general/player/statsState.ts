@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { resolveCharacterStats } from "./registry";
-import type { StatusHud } from "./statusHud";
-import type { PlayerUiState } from "./types";
+import type { StatusHud } from "../engine/statusHud";
+import type { PlayerUiState } from "../engine/types";
 import type { CharacterProfile, CharacterStats, SkillKey } from "../types";
 
 export type EnergyConfigResolved = {
@@ -22,6 +22,9 @@ export type MovementConfigResolved = {
 
 export type CameraConfigResolved = {
   followHeadBone: boolean;
+  miniBehindDistance: number;
+  miniUpDistance: number;
+  miniLookUpOffset: number;
 };
 
 type CreatePlayerStatsStateArgs = {
@@ -71,6 +74,9 @@ const resolveCameraConfig = (
   profile?: CharacterProfile
 ): CameraConfigResolved => ({
   followHeadBone: Boolean(profile?.camera?.followHeadBone),
+  miniBehindDistance: Math.max(1, profile?.camera?.miniBehindDistance ?? 3.9),
+  miniUpDistance: Math.max(0.2, profile?.camera?.miniUpDistance ?? 2.4),
+  miniLookUpOffset: profile?.camera?.miniLookUpOffset ?? 0,
 });
 
 type SkillCost = number | "all";
@@ -121,7 +127,7 @@ export const createPlayerStatsState = ({
     markDirty();
   };
 
-  const setHealth = (health: number) => {
+  const syncHealth = (health: number) => {
     const clamped = THREE.MathUtils.clamp(health, 0, maxStats.health);
     if (Math.abs(clamped - currentStats.health) < 0.000001) return;
     currentStats.health = clamped;
@@ -133,11 +139,26 @@ export const createPlayerStatsState = ({
     markDirty();
   };
 
-  const setCurrentStats = (next: CharacterStats) => {
-    currentStats.health = THREE.MathUtils.clamp(next.health, 0, maxStats.health);
-    currentStats.mana = THREE.MathUtils.clamp(next.mana, 0, maxStats.mana);
-    currentStats.energy = THREE.MathUtils.clamp(next.energy, 0, maxStats.energy);
-    markDirty();
+  const damageHealth = (amount: number) => {
+    if (amount <= 0 || currentStats.health <= 0) return 0;
+    const next = Math.max(0, currentStats.health - amount);
+    const applied = currentStats.health - next;
+    if (applied > 0) {
+      currentStats.health = next;
+      markDirty();
+    }
+    return applied;
+  };
+
+  const healHealth = (amount: number) => {
+    if (amount <= 0 || currentStats.health >= maxStats.health) return 0;
+    const next = Math.min(maxStats.health, currentStats.health + amount);
+    const applied = next - currentStats.health;
+    if (applied > 0) {
+      currentStats.health = next;
+      markDirty();
+    }
+    return applied;
   };
 
   const applyEnergy = (amount: number) => {
@@ -152,6 +173,18 @@ export const createPlayerStatsState = ({
     return gained;
   };
 
+  const spendEnergy = (amount: number) => {
+    if (infiniteFire) return 0;
+    if (amount <= 0 || currentStats.energy <= 0) return 0;
+    const next = Math.max(0, currentStats.energy - amount);
+    const spent = currentStats.energy - next;
+    if (spent > 0) {
+      currentStats.energy = next;
+      markDirty();
+    }
+    return spent;
+  };
+
   const applyMana = (amount: number) => {
     if (infiniteFire) return 0;
     if (maxStats.mana <= 0 || amount <= 0) return 0;
@@ -162,6 +195,18 @@ export const createPlayerStatsState = ({
       markDirty();
     }
     return gained;
+  };
+
+  const spendMana = (amount: number) => {
+    if (infiniteFire) return 0;
+    if (amount <= 0 || currentStats.mana <= 0) return 0;
+    const next = Math.max(0, currentStats.mana - amount);
+    const spent = currentStats.mana - next;
+    if (spent > 0) {
+      currentStats.mana = next;
+      markDirty();
+    }
+    return spent;
   };
 
   const consumeAllEnergy = () => {
@@ -220,11 +265,10 @@ export const createPlayerStatsState = ({
     }
     if (cost <= 0) return;
     if (getSkillResource(key) === "energy") {
-      currentStats.energy = Math.max(0, currentStats.energy - cost);
+      spendEnergy(cost);
     } else {
-      currentStats.mana = Math.max(0, currentStats.mana - cost);
+      spendMana(cost);
     }
-    markDirty();
   };
 
   const resetSkillCooldowns = () => {
@@ -377,11 +421,14 @@ export const createPlayerStatsState = ({
       return cameraConfig;
     },
     setProfile,
-    setHealth,
-    setCurrentStats,
+    syncHealth,
+    damageHealth,
+    healHealth,
     resetCurrentToMax,
     applyEnergy,
+    spendEnergy,
     applyMana,
+    spendMana,
     consumeAllEnergy,
     hasEnoughSkillResource,
     spendSkillCost,
@@ -397,3 +444,6 @@ export const createPlayerStatsState = ({
     emitUiState,
   };
 };
+
+
+

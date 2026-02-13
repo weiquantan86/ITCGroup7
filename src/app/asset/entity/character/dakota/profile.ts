@@ -1,4 +1,4 @@
-import type { CharacterProfile } from "../types";
+import type { CharacterProfile } from "../general/types";
 
 export const profile: CharacterProfile = {
   id: "dakota",
@@ -27,3 +27,4 @@ export const profile: CharacterProfile = {
     color: 0x22c55e,
   },
 };
+

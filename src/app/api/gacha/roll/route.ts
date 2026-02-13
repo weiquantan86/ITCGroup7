@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import pool from "../../../../database/client";
-import { characterProfiles } from "../../../asset/entity/character/player/registry";
+import { characterProfiles } from "../../../asset/entity/character/general/player/registry";
 import {
   CHARACTER_RARITY,
   RARITY_CONFIG,
   getCharacterRarity,
-} from "../../../asset/entity/character/gachaConfig";
+} from "../../../asset/entity/character/gacha/gachaConfig";
 
 export async function POST() {
   const cookieStore = await cookies();
@@ -112,3 +112,5 @@ export async function POST() {
     );
   }
 }
+
+

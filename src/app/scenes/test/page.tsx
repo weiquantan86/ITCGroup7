@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import pool from "../../../database/client";
-import { characterProfiles } from "../../asset/entity/character/player/registry";
+import { characterProfiles } from "../../asset/entity/character/general/player/registry";
 import TrainingScenePage from "../../asset/scenes/test/page";
 
 function ErrorState({ message }: { message: string }) {
@@ -71,3 +71,4 @@ export default async function TestScenePage() {
     );
   }
 }
+
