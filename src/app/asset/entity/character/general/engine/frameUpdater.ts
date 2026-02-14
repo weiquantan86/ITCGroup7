@@ -84,6 +84,12 @@ export const createPlayerFrameUpdater = ({
     return Math.max(0, multiplier);
   };
 
+  const getCameraScaleMultiplier = (runtime: CharacterRuntime | null) => {
+    const multiplier = runtime?.getCameraScaleMultiplier?.();
+    if (multiplier == null || !Number.isFinite(multiplier)) return 1;
+    return THREE.MathUtils.clamp(multiplier, 0.2, 6);
+  };
+
   const update = (now: number, delta: number) => {
     const runtime = getRuntime();
     const visualState = getVisualState();
@@ -148,14 +154,16 @@ export const createPlayerFrameUpdater = ({
       lookPivot.rotation.x = headPitch * 0.35;
     }
 
+    const cameraScaleMultiplier = getCameraScaleMultiplier(runtime);
     const cameraLookDir = cameraRig.update({
       avatar,
-      eyeHeight: visualState.eyeHeight,
+      eyeHeight: visualState.eyeHeight * cameraScaleMultiplier,
       lookState,
       followHeadBone: statsState.cameraConfig.followHeadBone,
-      miniBehindDistance: statsState.cameraConfig.miniBehindDistance,
-      miniUpDistance: statsState.cameraConfig.miniUpDistance,
-      miniLookUpOffset: statsState.cameraConfig.miniLookUpOffset,
+      miniBehindDistance:
+        statsState.cameraConfig.miniBehindDistance * cameraScaleMultiplier,
+      miniUpDistance: statsState.cameraConfig.miniUpDistance * cameraScaleMultiplier,
+      miniLookUpOffset: statsState.cameraConfig.miniLookUpOffset * cameraScaleMultiplier,
       headBone: visualState.headBone,
     });
 

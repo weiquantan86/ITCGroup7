@@ -72,7 +72,12 @@ export const createPlayerSkillState = ({
 
     if (!ignoreCostAndCooldown) {
       statsState.spendSkillCost(key, profile);
-      statsState.activateSkillCooldown(key, now, isRuntimeCooldownManaged(key));
+      statsState.activateSkillCooldown(
+        key,
+        now,
+        isRuntimeCooldownManaged(key),
+        skillModifier.cooldownScale
+      );
     }
     emitUiState(now);
     return true;

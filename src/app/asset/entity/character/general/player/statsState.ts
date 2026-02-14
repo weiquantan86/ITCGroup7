@@ -282,10 +282,14 @@ export const createPlayerStatsState = ({
   const activateSkillCooldown = (
     key: SkillKey,
     now: number,
-    runtimeManaged: boolean
+    runtimeManaged: boolean,
+    cooldownScale = 1
   ) => {
     if (infiniteFire || runtimeManaged) return;
-    const cooldownMs = skillCooldownDurations[key];
+    const normalizedScale = Number.isFinite(cooldownScale)
+      ? THREE.MathUtils.clamp(cooldownScale, 0, 100)
+      : 1;
+    const cooldownMs = skillCooldownDurations[key] * normalizedScale;
     if (cooldownMs <= 0) return;
     skillCooldownUntil[key] = now + cooldownMs;
   };

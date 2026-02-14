@@ -16,6 +16,7 @@ type CharacterRuntimeObjectInit = {
   getProjectileBlockers?: CharacterRuntime["getProjectileBlockers"];
   handleProjectileBlockHit?: CharacterRuntime["handleProjectileBlockHit"];
   getMovementSpeedMultiplier?: CharacterRuntime["getMovementSpeedMultiplier"];
+  getCameraScaleMultiplier?: CharacterRuntime["getCameraScaleMultiplier"];
   isBasicAttackLocked?: CharacterRuntime["isBasicAttackLocked"];
   isMovementLocked?: CharacterRuntime["isMovementLocked"];
   getSkillCooldownRemainingMs?: CharacterRuntime["getSkillCooldownRemainingMs"];
@@ -42,6 +43,7 @@ export class CharacterRuntimeObject implements CharacterRuntime {
   readonly getProjectileBlockers?: CharacterRuntime["getProjectileBlockers"];
   readonly handleProjectileBlockHit?: CharacterRuntime["handleProjectileBlockHit"];
   readonly getMovementSpeedMultiplier?: CharacterRuntime["getMovementSpeedMultiplier"];
+  readonly getCameraScaleMultiplier?: CharacterRuntime["getCameraScaleMultiplier"];
   readonly isBasicAttackLocked?: CharacterRuntime["isBasicAttackLocked"];
   readonly isMovementLocked?: CharacterRuntime["isMovementLocked"];
   readonly getSkillCooldownRemainingMs?: CharacterRuntime["getSkillCooldownRemainingMs"];
@@ -67,6 +69,7 @@ export class CharacterRuntimeObject implements CharacterRuntime {
     this.getProjectileBlockers = init.getProjectileBlockers;
     this.handleProjectileBlockHit = init.handleProjectileBlockHit;
     this.getMovementSpeedMultiplier = init.getMovementSpeedMultiplier;
+    this.getCameraScaleMultiplier = init.getCameraScaleMultiplier;
     this.isBasicAttackLocked = init.isBasicAttackLocked;
     this.isMovementLocked = init.isMovementLocked;
     this.getSkillCooldownRemainingMs = init.getSkillCooldownRemainingMs;

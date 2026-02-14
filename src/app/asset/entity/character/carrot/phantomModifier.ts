@@ -59,6 +59,18 @@ type DeepVolleyOrb = {
   particles: DeepVolleyOrbParticle[];
 };
 
+type DeepVolleyShotFx = {
+  mesh: THREE.Mesh;
+  update: (deltaSec: number) => void;
+  dispose: () => void;
+};
+
+type DeepVolleyTriggerOptions = {
+  projectileType?: string;
+  summonScaleMultiplier?: number;
+  projectileScale?: number;
+};
+
 export const createCarrotPhantomModifier = ({
   avatar,
   fireProjectile,
@@ -126,6 +138,9 @@ export const createCarrotPhantomModifier = ({
     spawnedCount: 0,
     launchedCount: 0,
     exitedDeepAt: 0,
+    projectileType: "carrotDeepPhantomOrb",
+    summonScaleMultiplier: 1,
+    projectileScale: null as number | null,
   };
   let hasDeepVolleyAimDirection = false;
   let hasDeepVolleyAimOrigin = false;
@@ -332,6 +347,9 @@ export const createCarrotPhantomModifier = ({
     deepVolleyState.spawnedCount = 0;
     deepVolleyState.launchedCount = 0;
     deepVolleyState.exitedDeepAt = 0;
+    deepVolleyState.projectileType = "carrotDeepPhantomOrb";
+    deepVolleyState.summonScaleMultiplier = 1;
+    deepVolleyState.projectileScale = null;
     for (let i = 0; i < deepVolleyOrbs.length; i += 1) {
       const orb = deepVolleyOrbs[i];
       orb.mesh.visible = false;
@@ -747,19 +765,28 @@ export const createCarrotPhantomModifier = ({
     }
   };
 
-  const startDeepVolley = (now: number) => {
+  const startDeepVolley = (now: number, options?: DeepVolleyTriggerOptions) => {
     if (deepVolleyState.active) return false;
     deepVolleyState.active = true;
     deepVolleyState.startedAt = now;
     deepVolleyState.spawnedCount = 0;
     deepVolleyState.launchedCount = 0;
     deepVolleyState.exitedDeepAt = 0;
+    deepVolleyState.projectileType =
+      options?.projectileType ?? "carrotDeepPhantomOrb";
+    deepVolleyState.summonScaleMultiplier = THREE.MathUtils.clamp(
+      options?.summonScaleMultiplier ?? 1,
+      0.2,
+      3
+    );
+    deepVolleyState.projectileScale =
+      options?.projectileScale != null ? Math.max(0.1, options.projectileScale) : null;
     deepVolleyFxGroup.visible = true;
     for (let i = 0; i < deepVolleyOrbs.length; i += 1) {
       const orb = deepVolleyOrbs[i];
       orb.mesh.visible = false;
       orb.material.opacity = 0;
-      orb.mesh.scale.setScalar(0.8);
+      orb.mesh.scale.setScalar(0.8 * deepVolleyState.summonScaleMultiplier);
       orb.mesh.position.set(
         phantomConfig.deepVolleyOrbLocalXOffsets[i] ?? 0,
         phantomConfig.deepVolleyOrbLocalY,
@@ -774,9 +801,114 @@ export const createCarrotPhantomModifier = ({
     return true;
   };
 
+  const createDeepVolleyShotFx = (): DeepVolleyShotFx => {
+    const projectileGeometry = new THREE.SphereGeometry(0.12, 20, 20);
+    const projectileMaterial = new THREE.MeshStandardMaterial({
+      color: 0x22093f,
+      emissive: 0x120a2f,
+      emissiveIntensity: 1.22,
+      roughness: 0.35,
+      metalness: 0.1,
+    });
+    const mesh = new THREE.Mesh(projectileGeometry, projectileMaterial);
+    mesh.userData.carrotPhantomExclude = true;
+
+    const auraGeometry = new THREE.SphereGeometry(0.18, 14, 14);
+    const auraMaterial = new THREE.MeshBasicMaterial({
+      color: 0xa855f7,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const auraMesh = new THREE.Mesh(auraGeometry, auraMaterial);
+    auraMesh.userData.carrotPhantomExclude = true;
+    mesh.add(auraMesh);
+
+    const particleGeometry = new THREE.IcosahedronGeometry(0.085, 0);
+    const particles: DeepVolleyOrbParticle[] = [];
+    const particleCount = 20;
+    for (let i = 0; i < particleCount; i += 1) {
+      const particleMaterial = new THREE.MeshBasicMaterial({
+        color: 0xc084fc,
+        transparent: true,
+        opacity: 0.88,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const particleMesh = new THREE.Mesh(particleGeometry, particleMaterial);
+      particleMesh.userData.carrotPhantomExclude = true;
+      mesh.add(particleMesh);
+      particles.push({
+        mesh: particleMesh,
+        material: particleMaterial,
+        phase: (i / particleCount) * Math.PI * 2 + Math.random() * 0.95,
+        radius: 1.08 + Math.random() * 0.62,
+        speed: 2 + Math.random() * 3.1,
+        lift: -0.46 + Math.random() * 0.92,
+      });
+    }
+
+    let elapsedSec = Math.random() * 0.35;
+    const update = (deltaSec: number) => {
+      elapsedSec += Math.max(0, deltaSec);
+      mesh.rotation.y += deltaSec * 1.8;
+      mesh.rotation.z += deltaSec * 0.9;
+      const rootScale = Math.max(
+        0.0001,
+        Math.max(mesh.scale.x, mesh.scale.y, mesh.scale.z)
+      );
+      const orbitScale = 1 / Math.pow(rootScale, 0.72);
+      const pulse = 0.5 + 0.5 * Math.sin(elapsedSec * 6.5);
+      auraMesh.scale.setScalar((1.45 + pulse * 0.45) * orbitScale);
+      auraMaterial.opacity = 0.34 + pulse * 0.34;
+      for (let i = 0; i < particles.length; i += 1) {
+        const particle = particles[i];
+        const angle = elapsedSec * particle.speed + particle.phase;
+        const radius =
+          particle.radius + Math.sin(elapsedSec * 4.2 + particle.phase) * 0.11;
+        particle.mesh.position.set(
+          Math.cos(angle) * radius * orbitScale,
+          (particle.lift + Math.sin(elapsedSec * 3.3 + particle.phase * 1.2) * 0.24) *
+            orbitScale,
+          Math.sin(angle) * radius * orbitScale
+        );
+        const scale =
+          (1.05 + (0.5 + 0.5 * Math.sin(elapsedSec * 7.3 + particle.phase)) * 0.75) *
+          orbitScale;
+        particle.mesh.scale.setScalar(scale);
+        particle.material.opacity = THREE.MathUtils.clamp(
+          (0.45 + (0.5 + 0.5 * Math.cos(elapsedSec * 6.1 + particle.phase)) * 0.55) *
+            (0.95 + pulse * 0.6),
+          0,
+          1
+        );
+      }
+    };
+
+    update(0);
+
+    return {
+      mesh,
+      update,
+      dispose: () => {
+        for (let i = 0; i < particles.length; i += 1) {
+          particles[i].material.dispose();
+        }
+        auraMaterial.dispose();
+        auraGeometry.dispose();
+        particleGeometry.dispose();
+        projectileMaterial.dispose();
+        projectileGeometry.dispose();
+      },
+    };
+  };
+
   const launchDeepVolleyOrb = (index: number, now: number) => {
     const orb = deepVolleyOrbs[index];
     if (!orb) return;
+    orb.mesh.updateMatrixWorld(true);
+    orb.mesh.getWorldPosition(deepVolleyShotOrigin);
     orb.mesh.visible = false;
     orb.material.opacity = 0;
     if (!fireProjectile) return;
@@ -784,13 +916,6 @@ export const createCarrotPhantomModifier = ({
     resolveAvatarForward();
     avatar.getWorldPosition(phantomAvatarPosition);
 
-    const laneOffset = phantomConfig.deepVolleyOrbLocalXOffsets[index] ?? 0;
-
-    deepVolleyShotOrigin
-      .copy(phantomAvatarPosition)
-      .addScaledVector(phantomUp, phantomConfig.deepVolleyOrbLocalY)
-      .addScaledVector(phantomForward, phantomConfig.deepVolleyOrbLocalZ)
-      .addScaledVector(phantomRight, laneOffset);
     deepVolleyAimPoint
       .copy(hasDeepVolleyAimOrigin ? deepVolleyAimOrigin : phantomAvatarPosition)
       .addScaledVector(
@@ -808,15 +933,24 @@ export const createCarrotPhantomModifier = ({
     const homingRuntimeTargetPoint = new THREE.Vector3();
     const homingDesiredDirection = new THREE.Vector3();
     const homingCurrentDirection = new THREE.Vector3();
+    const shotFx =
+      deepVolleyState.projectileType === "carrotDemonVolleyOrb"
+        ? createDeepVolleyShotFx()
+        : null;
     let hasRuntimeTarget = false;
     let homingElapsed = 0;
 
     fireProjectile({
-      projectileType: "carrotDeepPhantomOrb",
+      projectileType: deepVolleyState.projectileType,
       origin: deepVolleyShotOrigin.clone(),
       direction: phantomDirection.clone(),
+      ...(shotFx ? { mesh: shotFx.mesh } : {}),
+      ...(deepVolleyState.projectileScale != null
+        ? { scale: deepVolleyState.projectileScale }
+        : {}),
       lifecycle: {
         applyForces: ({ velocity, position, delta, findNearestTarget }) => {
+          shotFx?.update(delta);
           homingElapsed += delta;
           const speed = velocity.length();
           if (speed <= 0.000001) {
@@ -853,6 +987,9 @@ export const createCarrotPhantomModifier = ({
               }
             }
           }
+        },
+        onRemove: () => {
+          shotFx?.dispose();
         },
       },
     });
@@ -907,7 +1044,7 @@ export const createCarrotPhantomModifier = ({
       if (!orb) break;
       orb.mesh.visible = true;
       orb.material.opacity = 0.95;
-      orb.mesh.scale.setScalar(1.55);
+      orb.mesh.scale.setScalar(1.55 * deepVolleyState.summonScaleMultiplier);
       deepVolleyState.spawnedCount += 1;
     }
 
@@ -928,7 +1065,9 @@ export const createCarrotPhantomModifier = ({
       const orb = deepVolleyOrbs[i];
       if (!orb?.mesh.visible) continue;
       const pulse = 0.5 + 0.5 * Math.sin(now * 0.012 + i * 0.9);
-      orb.mesh.scale.setScalar(1.35 + pulse * 0.55);
+      orb.mesh.scale.setScalar(
+        (1.35 + pulse * 0.55) * deepVolleyState.summonScaleMultiplier
+      );
       orb.material.opacity = 0.72 + pulse * 0.26;
       updateDeepVolleyOrbParticles(orb, i, now, pulse);
     }
@@ -959,16 +1098,25 @@ export const createCarrotPhantomModifier = ({
     const now = performance.now();
     updatePhantomPhase(now);
     if (isDeepActive(now)) {
-      const didStart = startDeepVolley(now);
-      if (didStart) {
-        updateDeepVolley(now);
-        updateVisuals(now);
-      }
+      const didStart = triggerDeepVolley(now);
       return didStart;
     }
     if (phantomState.phase !== "idle") return false;
     enterShallowPhantom(now);
     return true;
+  };
+
+  const triggerDeepVolley = (
+    now = performance.now(),
+    options?: DeepVolleyTriggerOptions
+  ) => {
+    updatePhantomPhase(now);
+    const didStart = startDeepVolley(now, options);
+    if (didStart) {
+      updateDeepVolley(now);
+      updateVisuals(now);
+    }
+    return didStart;
   };
 
   const beforeSkillUse: NonNullable<CharacterRuntime["beforeSkillUse"]> = ({
@@ -1049,6 +1197,7 @@ export const createCarrotPhantomModifier = ({
     beforeDamage,
     onTick,
     isDeepPhaseActive,
+    triggerDeepVolley,
     setAimDirectionWorld,
     reset,
     dispose,

@@ -5,8 +5,8 @@ export const profile: CharacterProfile = {
   label: "Carrot",
   pathToken: "/carrot/",
   energy: {
-    passivePerSecond: 3,
-    movingPerSecond: 3,
+    passivePerSecond: 0,
+    movingPerSecond: 0,
   },
   movement: {
     baseSpeed: 5,
@@ -20,20 +20,30 @@ export const profile: CharacterProfile = {
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },
     skills: {
-      q: { id: "q", label: "Q", description: "..." },
+      q: {
+        id: "q",
+        label: "Q",
+        description: `CD：30s
+Mana：All EN
+Description：Consume all EN to transform into Demon Lord form for 10s. In this form, basic attacks fire energy orbs, E/R become their deep-phantom variants, incoming damage is reduced to one-third, and when the form ends recover 25 HP.`,
+        cost: "all",
+        cooldownMs: 30000,
+      },
       e: {
         id: "e",
         label: "E",
-        description:
-          "Cost 20 mana. Enter a 0.075s phasing state; getting hit triggers a 3s deep phase with full damage immunity. Recast during deep phase to summon 5 large violet orbs above the head and launch them left-to-right; deep phase ends when the third orb is fired. If deep phase ends naturally, recover 15 HP and 20 EN.",
+        description: `CD：7s
+Mana：20 Mana
+Description：Enter a 0.075s phasing state; getting hit triggers a 3s deep phase with full damage immunity. Recast during deep phase to summon 5 large violet orbs above the head and launch them left-to-right; deep phase ends when the third orb is fired. If deep phase ends naturally, recover 15 HP and 20 EN.`,
         cost: 20,
         cooldownMs: 7000,
       },
       r: {
         id: "r",
         label: "R",
-        description:
-          "Cost 30 mana. Release a massive tornado forward that detonates on impact. While in deep phantom, cast R to summon three larger purple tornadoes.",
+        description: `CD：12s
+Mana：30 Mana
+Description：Release a massive tornado forward that detonates on impact. While in deep phantom, cast R to summon three larger purple tornadoes.`,
         cost: 30,
         cooldownMs: 12000,
       },

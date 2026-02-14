@@ -227,6 +227,7 @@ export interface SkillUseModifier {
   ignoreCooldown?: boolean;
   ignoreResource?: boolean;
   ignoreCostAndCooldown?: boolean;
+  cooldownScale?: number;
 }
 
 export interface IncomingDamageModifier {
@@ -246,6 +247,7 @@ export interface CharacterRuntime {
   getProjectileBlockers?: () => THREE.Object3D[];
   handleProjectileBlockHit?: (args: ProjectileBlockHitArgs) => boolean;
   getMovementSpeedMultiplier?: () => number;
+  getCameraScaleMultiplier?: () => number;
   isBasicAttackLocked?: () => boolean;
   isMovementLocked?: () => boolean;
   getSkillCooldownRemainingMs?: (key: SkillKey) => number | null;
