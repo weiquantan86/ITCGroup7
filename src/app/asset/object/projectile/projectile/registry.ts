@@ -23,6 +23,7 @@ const baseDefaults: ProjectileTypeDefaults = {
   splitOnImpact: false,
   explosionRadius: 0,
   explosionDamage: 0,
+  explosionMinDamage: 0,
   explosionColor: null,
   explosionEmissive: null,
   explosionEmissiveIntensity: null,

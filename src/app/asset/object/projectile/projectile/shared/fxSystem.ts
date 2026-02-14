@@ -15,6 +15,8 @@ export const createProjectileFxSystem = ({ scene }: CreateProjectileFxSystemArgs
   const fragments: ProjectileExplosionFragment[] = [];
   const explosionOrigin = new THREE.Vector3();
   const explosionDirection = new THREE.Vector3();
+  const explosionOffset = new THREE.Vector3();
+  const explosionOutward = new THREE.Vector3();
   const projectileExplosionGeometry = new THREE.IcosahedronGeometry(0.09, 0);
   const projectileExplosionMaterial = new THREE.MeshStandardMaterial({
     color: 0x86efac,
@@ -57,35 +59,97 @@ export const createProjectileFxSystem = ({ scene }: CreateProjectileFxSystemArgs
       projectile.explosionColor != null ||
       projectile.explosionEmissive != null ||
       projectile.explosionEmissiveIntensity != null;
+    const isBlackWhiteExplosion =
+      projectile.explosionColor === 0x000000 &&
+      projectile.explosionEmissive === 0xffffff;
+    const resolvedFragmentCount = isBlackWhiteExplosion
+      ? Math.max(52, Math.min(140, Math.round(34 * visualFactor + 24)))
+      : fragmentCount;
+    const resolvedSpread = isBlackWhiteExplosion
+      ? Math.max(3.2, projectile.explosionRadius * 1.22)
+      : spread;
 
-    for (let i = 0; i < fragmentCount; i += 1) {
+    for (let i = 0; i < resolvedFragmentCount; i += 1) {
       const fragmentMaterial = useCustomExplosionMaterial
-        ? new THREE.MeshStandardMaterial({
-            color: projectile.explosionColor ?? 0x86efac,
-            roughness: 0.22,
-            metalness: 0.18,
-            emissive: projectile.explosionEmissive ?? 0x22c55e,
-            emissiveIntensity: projectile.explosionEmissiveIntensity ?? 0.7,
-          })
+        ? isBlackWhiteExplosion
+          ? new THREE.MeshStandardMaterial({
+              color: i % 2 === 0 ? 0xf8fafc : 0x020617,
+              roughness: 0.2,
+              metalness: 0.28,
+              emissive: i % 2 === 0 ? 0xffffff : 0x0a0a0a,
+              emissiveIntensity: projectile.explosionEmissiveIntensity ?? 1.2,
+            })
+          : new THREE.MeshStandardMaterial({
+              color: projectile.explosionColor ?? 0x86efac,
+              roughness: 0.22,
+              metalness: 0.18,
+              emissive: projectile.explosionEmissive ?? 0x22c55e,
+              emissiveIntensity: projectile.explosionEmissiveIntensity ?? 0.7,
+            })
         : projectileExplosionMaterial;
       const mesh = new THREE.Mesh(projectileExplosionGeometry, fragmentMaterial);
-      const baseScale = THREE.MathUtils.lerp(minScale, maxScale, Math.random());
+      const baseScale = isBlackWhiteExplosion
+        ? THREE.MathUtils.lerp(0.86 * visualFactor, 1.92 * visualFactor, Math.random())
+        : THREE.MathUtils.lerp(minScale, maxScale, Math.random());
       mesh.scale.setScalar(baseScale);
-      mesh.position.copy(explosionOrigin).add(
-        new THREE.Vector3(
-          (Math.random() - 0.5) * spread,
-          (Math.random() - 0.5) * spread,
-          (Math.random() - 0.5) * spread
-        )
-      );
+      if (isBlackWhiteExplosion) {
+        explosionOffset.set(
+          Math.random() - 0.5,
+          Math.random() - 0.5,
+          Math.random() - 0.5
+        );
+        if (explosionOffset.lengthSq() < 0.000001) {
+          explosionOffset.set(1, 0, 0);
+        } else {
+          explosionOffset.normalize();
+        }
+        explosionOffset.multiplyScalar(Math.random() * resolvedSpread);
+        mesh.position.copy(explosionOrigin).add(explosionOffset);
+      } else {
+        mesh.position.copy(explosionOrigin).add(
+          new THREE.Vector3(
+            (Math.random() - 0.5) * spread,
+            (Math.random() - 0.5) * spread,
+            (Math.random() - 0.5) * spread
+          )
+        );
+      }
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       scene.add(mesh);
-      const velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 4.6 * velocityScale,
-        (1.5 + Math.random() * 2.8) * velocityScale,
-        (Math.random() - 0.5) * 4.6 * velocityScale
-      ).addScaledVector(explosionDirection, -2.2 * velocityScale);
+      const velocity = isBlackWhiteExplosion
+        ? (() => {
+            explosionOutward.copy(mesh.position).sub(explosionOrigin);
+            explosionOutward.y = 0;
+            if (explosionOutward.lengthSq() < 0.000001) {
+              explosionOutward.set(
+                Math.random() - 0.5,
+                0,
+                Math.random() - 0.5
+              );
+            }
+            if (explosionOutward.lengthSq() < 0.000001) {
+              explosionOutward.set(1, 0, 0);
+            } else {
+              explosionOutward.normalize();
+            }
+            const radialSpeed =
+              (1 + Math.random() * 1.2) *
+              Math.max(2.8, projectile.explosionRadius * 1.35);
+            const upSpeed =
+              (1 + Math.random() * 1.6) *
+              Math.max(1.8, projectile.explosionRadius * 0.72);
+            return new THREE.Vector3()
+              .copy(explosionOutward)
+              .multiplyScalar(radialSpeed)
+              .addScaledVector(explosionDirection, -0.8)
+              .setY(upSpeed);
+          })()
+        : new THREE.Vector3(
+            (Math.random() - 0.5) * 4.6 * velocityScale,
+            (1.5 + Math.random() * 2.8) * velocityScale,
+            (Math.random() - 0.5) * 4.6 * velocityScale
+          ).addScaledVector(explosionDirection, -2.2 * velocityScale);
       fragments.push({
         mesh,
         velocity,
@@ -95,7 +159,9 @@ export const createProjectileFxSystem = ({ scene }: CreateProjectileFxSystemArgs
           (Math.random() - 0.5) * 7.4
         ),
         life: 0,
-        maxLife: (0.55 + Math.random() * 0.2) * velocityScale,
+        maxLife: isBlackWhiteExplosion
+          ? 0.95 + Math.random() * 0.35
+          : (0.55 + Math.random() * 0.2) * velocityScale,
         baseScale,
         material: fragmentMaterial,
         ownsMaterial: useCustomExplosionMaterial,

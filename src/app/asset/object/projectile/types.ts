@@ -56,6 +56,7 @@ export interface Projectile extends LinearProjectileState {
   splitOnImpact: boolean;
   explosionRadius: number;
   explosionDamage: number;
+  explosionMinDamage: number;
   explosionColor: number | null;
   explosionEmissive: number | null;
   explosionEmissiveIntensity: number | null;

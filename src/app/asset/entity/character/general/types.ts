@@ -188,6 +188,7 @@ export interface FireProjectileArgs {
   splitOnImpact?: boolean;
   explosionRadius?: number;
   explosionDamage?: number;
+  explosionMinDamage?: number;
   explosionColor?: number;
   explosionEmissive?: number;
   explosionEmissiveIntensity?: number;

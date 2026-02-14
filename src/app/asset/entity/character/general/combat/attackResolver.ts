@@ -33,6 +33,7 @@ type ApplyExplosionDamageArgs = {
   center: THREE.Vector3;
   radius: number;
   baseDamage: number;
+  minDamage?: number;
   direction: THREE.Vector3;
   excludeTargetId?: string;
 };
@@ -343,11 +344,17 @@ export class AttackTargetResolver {
     center,
     radius,
     baseDamage,
+    minDamage = 1,
     direction,
     excludeTargetId,
   }: ApplyExplosionDamageArgs) {
     if (radius <= 0 || baseDamage <= 0 || !this.attackTargets.length) return;
     const radiusSq = radius * radius;
+    const resolvedMinDamage = THREE.MathUtils.clamp(
+      Math.round(minDamage),
+      1,
+      Math.max(1, Math.round(baseDamage))
+    );
 
     for (let i = 0; i < this.attackTargets.length; i += 1) {
       const target = this.attackTargets[i];
@@ -359,8 +366,10 @@ export class AttackTargetResolver {
       const dist = Math.sqrt(distSq);
       const ratio = 1 - dist / radius;
       const splashDamage = Math.max(
-        1,
-        Math.round(baseDamage * (0.45 + ratio * 0.55))
+        resolvedMinDamage,
+        Math.round(
+          THREE.MathUtils.lerp(resolvedMinDamage, baseDamage, ratio)
+        )
       );
       target.onHit({
         now,

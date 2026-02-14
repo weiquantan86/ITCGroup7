@@ -17,32 +17,38 @@ export const profile: CharacterProfile = {
       q: {
         id: "q",
         label: "Q",
-        description: `CD：0s
-Mana：20 EN
-Description：...`,
+        description: `CD: 0s
+Mana: 20 EN
+Description: ...`,
       },
       e: {
         id: "e",
         label: "E",
-        description: `CD：0s
-Mana：0 Mana
-Description：...`,
+        cooldownMs: 15000,
+        cost: 30,
+        description: `CD: 15s
+Mana: 30
+Description: Enter Light-Jump state for 10s. Gain 1.2x move speed, feet emit green particles, and charged basic attack fires a 2-shot burst.`,
       },
       r: {
         id: "r",
         label: "R",
-        description: `CD：0s
-Mana：0 Mana
-Description：...`,
+        cooldownMs: 15000,
+        cost: 30,
+        description: `CD: 15s
+Mana: 30
+Description: Enter Gravity state for 10s. Move speed is halved. During this state, basic attack charges for 2.5s and fires an explosive shell.`,
       },
     },
   },
   controls: {
     rightClick: "slash",
   },
+  camera: {
+    followHeadBone: true,
+  },
   slash: {
     enabled: true,
     color: 0x22c55e,
   },
 };
-

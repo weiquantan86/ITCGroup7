@@ -76,6 +76,12 @@ const accentMat = new THREE.MeshStandardMaterial({
   roughness: 0.45,
   metalness: 0.12,
 });
+const haloMat = new THREE.MeshStandardMaterial({
+  color: 0xef4444,
+  emissive: 0x7f1d1d,
+  roughness: 0.28,
+  metalness: 0.18,
+});
 const faceLineMat = new THREE.MeshBasicMaterial({
   color: 0xe5e7eb,
 });
@@ -83,14 +89,14 @@ const faceLineMat = new THREE.MeshBasicMaterial({
 const group = new THREE.Group();
 
 const torso = new THREE.Mesh(
-  new THREE.CapsuleGeometry(0.42, 0.9, 6, 16),
+  new THREE.CapsuleGeometry(0.39, 0.9, 6, 16),
   clothSecondary
 );
 torso.name = "torso";
 torso.position.y = 0.86;
 
 const waistBelt = new THREE.Mesh(
-  new THREE.TorusGeometry(0.45, 0.04, 12, 42),
+  new THREE.TorusGeometry(0.42, 0.04, 12, 42),
   accentMat
 );
 waistBelt.position.y = -0.18;
@@ -101,6 +107,47 @@ const headRadius = 0.4;
 const head = new THREE.Mesh(new THREE.SphereGeometry(headRadius, 24, 18), clothPrimary);
 head.name = "head";
 head.position.set(0, 1.76, 0);
+
+const headRing = new THREE.Mesh(
+  new THREE.TorusGeometry(0.34, 0.038, 12, 40),
+  haloMat
+);
+headRing.name = "headRing";
+headRing.position.set(0, 0.18, -0.05);
+headRing.rotation.x = 1.2;
+head.add(headRing);
+
+const headRingKnot = new THREE.Group();
+headRingKnot.name = "headRingKnot";
+headRingKnot.position.set(0, -0.34, 0);
+
+const knotCenter = new THREE.Mesh(new THREE.SphereGeometry(0.046, 12, 10), haloMat);
+knotCenter.scale.set(1.3, 0.9, 0.9);
+
+const knotLoopLeft = new THREE.Mesh(new THREE.SphereGeometry(0.076, 12, 10), haloMat);
+const knotLoopRight = new THREE.Mesh(new THREE.SphereGeometry(0.076, 12, 10), haloMat);
+knotLoopLeft.scale.set(1.24, 0.72, 0.36);
+knotLoopRight.scale.set(1.24, 0.72, 0.36);
+knotLoopLeft.position.set(-0.088, 0.01, 0);
+knotLoopRight.position.set(0.088, 0.01, 0);
+knotLoopLeft.rotation.z = 0.34;
+knotLoopRight.rotation.z = -0.34;
+
+const knotTailLeft = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.018), haloMat);
+const knotTailRight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.018), haloMat);
+knotTailLeft.position.set(-0.04, -0.1, 0);
+knotTailRight.position.set(0.04, -0.1, 0);
+knotTailLeft.rotation.z = 0.24;
+knotTailRight.rotation.z = -0.24;
+
+headRingKnot.add(
+  knotCenter,
+  knotLoopLeft,
+  knotLoopRight,
+  knotTailLeft,
+  knotTailRight
+);
+headRing.add(headRingKnot);
 
 const browGeo = new THREE.PlaneGeometry(0.21, 0.03);
 const browLeft = new THREE.Mesh(browGeo, faceLineMat);
@@ -127,8 +174,8 @@ const armLeftGroup = new THREE.Group();
 const armRightGroup = new THREE.Group();
 armLeftGroup.name = "armLeft";
 armRightGroup.name = "armRight";
-armLeftGroup.position.set(-0.56, 0.58, 0);
-armRightGroup.position.set(0.56, 0.58, 0);
+armLeftGroup.position.set(-0.53, 0.58, 0);
+armRightGroup.position.set(0.53, 0.58, 0);
 armLeftGroup.rotation.z = 0.08;
 armRightGroup.rotation.z = -0.08;
 
@@ -150,8 +197,8 @@ const legLeftGroup = new THREE.Group();
 const legRightGroup = new THREE.Group();
 legLeftGroup.name = "legLeft";
 legRightGroup.name = "legRight";
-legLeftGroup.position.set(-0.22, 0.28, 0);
-legRightGroup.position.set(0.22, 0.28, 0);
+legLeftGroup.position.set(-0.21, 0.28, 0);
+legRightGroup.position.set(0.21, 0.28, 0);
 
 const legLeft = new THREE.Mesh(legGeo, clothSecondary);
 const legRight = new THREE.Mesh(legGeo, clothSecondary);

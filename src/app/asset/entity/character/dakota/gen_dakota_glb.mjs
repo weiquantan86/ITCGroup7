@@ -71,6 +71,22 @@ const eyeMat = new THREE.MeshStandardMaterial({
   roughness: 0.4,
   metalness: 0.0,
 });
+const glassesFrameMat = new THREE.MeshStandardMaterial({
+  color: 0x0f172a,
+  roughness: 0.32,
+  metalness: 0.38,
+});
+const glassesLensMat = new THREE.MeshStandardMaterial({
+  color: 0x7dd3fc,
+  emissive: 0x0ea5e9,
+  emissiveIntensity: 0.18,
+  roughness: 0.08,
+  metalness: 0.04,
+  transparent: true,
+  opacity: 0.34,
+  side: THREE.DoubleSide,
+});
+glassesLensMat.depthWrite = false;
 
 const group = new THREE.Group();
 
@@ -84,24 +100,75 @@ const head = new THREE.Mesh(new THREE.SphereGeometry(0.46, 24, 18), primaryMat);
 head.name = "head";
 head.position.y = 1.75;
 
-const visor = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.16, 0.12), accentMat);
-visor.position.set(0, 0, 0.42);
-head.add(visor);
-
 const eyeLeft = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), eyeMat);
 const eyeRight = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), eyeMat);
 eyeLeft.position.set(-0.16, 0.02, 0.36);
 eyeRight.position.set(0.16, 0.02, 0.36);
 head.add(eyeLeft, eyeRight);
 
-const headsetBase = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.2, 0.1), darkMat);
-headsetBase.position.set(-0.46, 0.04, 0.08);
+const glassesGroup = new THREE.Group();
+glassesGroup.name = "glasses";
+glassesGroup.position.set(0, 0.02, 0.44);
+
+const glassesFrameLeft = new THREE.Mesh(
+  new THREE.TorusGeometry(0.095, 0.015, 10, 28),
+  glassesFrameMat
+);
+const glassesFrameRight = new THREE.Mesh(
+  new THREE.TorusGeometry(0.095, 0.015, 10, 28),
+  glassesFrameMat
+);
+glassesFrameLeft.position.x = -0.14;
+glassesFrameRight.position.x = 0.14;
+
+const glassesBridge = new THREE.Mesh(
+  new THREE.BoxGeometry(0.08, 0.018, 0.02),
+  glassesFrameMat
+);
+
+const glassesTempleLeft = new THREE.Mesh(
+  new THREE.BoxGeometry(0.018, 0.02, 0.24),
+  glassesFrameMat
+);
+const glassesTempleRight = new THREE.Mesh(
+  new THREE.BoxGeometry(0.018, 0.02, 0.24),
+  glassesFrameMat
+);
+glassesTempleLeft.position.set(-0.245, 0, -0.09);
+glassesTempleRight.position.set(0.245, 0, -0.09);
+glassesTempleLeft.rotation.y = Math.PI / 7;
+glassesTempleRight.rotation.y = -Math.PI / 7;
+
+const glassesLensLeft = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.14, 0.09),
+  glassesLensMat
+);
+const glassesLensRight = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.14, 0.09),
+  glassesLensMat
+);
+glassesLensLeft.position.set(-0.14, 0, 0.012);
+glassesLensRight.position.set(0.14, 0, 0.012);
+
+glassesGroup.add(
+  glassesFrameLeft,
+  glassesFrameRight,
+  glassesBridge,
+  glassesTempleLeft,
+  glassesTempleRight,
+  glassesLensLeft,
+  glassesLensRight
+);
+head.add(glassesGroup);
+
+const headsetBase = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.35, 0.2), darkMat);
+headsetBase.position.set(-0.46, 0.00, 0.00);
 headsetBase.rotation.y = Math.PI / 9;
 head.add(headsetBase);
 
 const headsetMic = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.32, 14), darkMat);
-headsetMic.position.set(-0.45, -0.07, 0.22);
-headsetMic.rotation.set(Math.PI / 2.45, 0, -Math.PI / 9);
+headsetMic.position.set(-0.5, 0.3, 0);
+headsetMic.rotation.set(0, 0, 0);
 head.add(headsetMic);
 
 const armGeo = new THREE.CapsuleGeometry(0.14, 0.65, 6, 12);
@@ -162,7 +229,7 @@ backpackPocket.position.set(0, -0.12, -0.5);
 torso.add(backpackPocket);
 
 const gunGroup = new THREE.Group();
-gunGroup.position.set(0.01, -0.01, 0.03);
+gunGroup.position.set(0.01, -0.01, 0.13);
 gunGroup.rotation.set(Math.PI / 2, 0, 0);
 
 const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.44), darkMat);

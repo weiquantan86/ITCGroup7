@@ -197,6 +197,10 @@ export const createProjectileSystem = ({
         0,
         options?.explosionDamage ?? typeDefinition.defaults.explosionDamage
       ),
+      explosionMinDamage: Math.max(
+        0,
+        options?.explosionMinDamage ?? typeDefinition.defaults.explosionMinDamage
+      ),
       explosionColor:
         options?.explosionColor ?? typeDefinition.defaults.explosionColor,
       explosionEmissive:
@@ -254,6 +258,7 @@ export const createProjectileSystem = ({
       center: explosionOrigin,
       radius: projectile.explosionRadius,
       baseDamage: projectile.explosionDamage,
+      minDamage: projectile.explosionMinDamage,
       direction: explosionDirection,
       excludeTargetId: primaryTargetId ?? undefined,
     });
