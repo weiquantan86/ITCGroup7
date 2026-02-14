@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { createCharacterRuntime } from "../general/runtime/runtimeBase";
 import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
-import type { CharacterRuntimeFactory } from "../general/types";
+import type { CharacterRuntimeFactory, CharacterRuntimeTickArgs } from "../general/types";
 import { createCarrotPhantomModifier } from "./phantomModifier";
 import { profile } from "./profile";
 
@@ -147,6 +147,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   applyHealth,
   performMeleeAttack,
   applyEnergy,
+  applyMana,
+  clearSkillCooldown,
   mount,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
@@ -184,11 +186,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
     sweepOffsetZ: 0.46,
     sweepYaw: -1.12,
     sweepPitch: -0.2,
-    deepSpreadYawOffsets: [-0.24, 0, 0.24],
-    deepLaneOffsets: [-1.35, 0, 1.35],
+    deepSpreadYawOffsets: [-0.52, 0, 0.52],
+    deepLaneOffsets: [-2.4, 0, 2.4],
     deepScaleMultiplier: 1.38,
     deepCollisionScale: 1.22,
+    deepSwayAmplitude: 0.48,
+    deepSwayFrequency: 7.8,
   };
+  const passiveManaRegenConfig = {
+    intervalMs: 2000,
+    amount: 1,
+  };
+  let passiveManaElapsedMs = 0;
 
   const punchState = {
     phase: "idle" as PunchPhase,
@@ -293,7 +302,17 @@ export const createRuntime: CharacterRuntimeFactory = ({
     fireProjectile,
     applyHealth,
     applyEnergy,
+    applyMana,
   });
+
+  const updatePassiveManaRegen = (delta: number) => {
+    if (!applyMana || delta <= 0) return;
+    passiveManaElapsedMs += delta * 1000;
+    if (passiveManaElapsedMs < passiveManaRegenConfig.intervalMs) return;
+    const regenTicks = Math.floor(passiveManaElapsedMs / passiveManaRegenConfig.intervalMs);
+    passiveManaElapsedMs -= regenTicks * passiveManaRegenConfig.intervalMs;
+    applyMana(regenTicks * passiveManaRegenConfig.amount);
+  };
 
   const resetChargeHud = () => {
     chargeHud.setVisible(false);
@@ -647,6 +666,24 @@ export const createRuntime: CharacterRuntimeFactory = ({
   }) => {
     if (!fireProjectile) return;
     const isDeepVariant = variant === "deep";
+    const forwardDirection = direction
+      .clone()
+      .setY(0)
+      .normalize();
+    if (forwardDirection.lengthSq() < 0.000001) {
+      forwardDirection.set(0, 0, 1);
+    }
+    const deepSwayDirection = new THREE.Vector3();
+    const deepRightDirection = new THREE.Vector3();
+    if (isDeepVariant) {
+      deepRightDirection.crossVectors(axisY, forwardDirection);
+      if (deepRightDirection.lengthSq() < 0.000001) {
+        deepRightDirection.set(1, 0, 0);
+      } else {
+        deepRightDirection.normalize();
+      }
+    }
+    let deepSwayPhase = Math.random() * Math.PI * 2;
     const resolvedCollisionScale = Math.max(0.2, collisionScale);
     const tornadoBuild = createSkillRTornadoMesh({
       variant,
@@ -682,6 +719,20 @@ export const createRuntime: CharacterRuntimeFactory = ({
         applyForces: ({ delta, velocity }) => {
           flowPhase += delta * (isDeepVariant ? 2.35 : 2);
           spinPhase += delta * 8.5;
+          if (isDeepVariant) {
+            deepSwayPhase += delta * skillRConfig.deepSwayFrequency;
+            deepSwayDirection
+              .copy(forwardDirection)
+              .addScaledVector(
+                deepRightDirection,
+                Math.sin(deepSwayPhase) * skillRConfig.deepSwayAmplitude
+              );
+            if (deepSwayDirection.lengthSq() > 0.000001) {
+              const speed = velocity.length();
+              deepSwayDirection.normalize();
+              velocity.copy(deepSwayDirection).multiplyScalar(speed);
+            }
+          }
           tornadoMesh.rotation.y += delta * 7.8;
           tornadoMesh.rotation.z = Math.sin(spinPhase * 0.7) * (isDeepVariant ? 0.16 : 0.12);
           const pulse = 1 + Math.sin(spinPhase * 1.9) * (isDeepVariant ? 0.13 : 0.1);
@@ -960,8 +1011,24 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const resetState = () => {
     clearPunchState();
     restoreIdlePose();
+    passiveManaElapsedMs = 0;
     phantomModifier.reset();
     baseRuntime.resetState?.();
+  };
+
+  const beforeDamage = ({ amount, now }: { amount: number; now: number }) => {
+    const wasDeepActive = phantomModifier.isDeepPhaseActive(now);
+    const modifier = phantomModifier.beforeDamage({ amount, now });
+    const isDeepActiveNow = phantomModifier.isDeepPhaseActive(now);
+    if (!wasDeepActive && isDeepActiveNow) {
+      clearSkillCooldown?.("r");
+    }
+    return modifier;
+  };
+
+  const onTick = (args: CharacterRuntimeTickArgs) => {
+    phantomModifier.onTick(args);
+    updatePassiveManaRegen(args.delta);
   };
 
   return new CharacterRuntimeObject({
@@ -985,8 +1052,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     getSkillCooldownRemainingMs: baseRuntime.getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs: baseRuntime.getSkillCooldownDurationMs,
     beforeSkillUse: phantomModifier.beforeSkillUse,
-    beforeDamage: phantomModifier.beforeDamage,
-    onTick: phantomModifier.onTick,
+    beforeDamage,
+    onTick,
     resetState,
     update: (args) => {
       phantomModifier.setAimDirectionWorld(

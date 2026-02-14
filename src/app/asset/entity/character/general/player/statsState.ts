@@ -275,6 +275,10 @@ export const createPlayerStatsState = ({
     skillCooldownUntil = { q: 0, e: 0, r: 0 };
   };
 
+  const clearSkillCooldown = (key: SkillKey) => {
+    skillCooldownUntil[key] = 0;
+  };
+
   const activateSkillCooldown = (
     key: SkillKey,
     now: number,
@@ -433,6 +437,7 @@ export const createPlayerStatsState = ({
     hasEnoughSkillResource,
     spendSkillCost,
     resetSkillCooldowns,
+    clearSkillCooldown,
     activateSkillCooldown,
     getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs,

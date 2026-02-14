@@ -275,6 +275,7 @@ export interface CharacterRuntimeFactory {
     applyHealth?: (amount: number) => number;
     applyEnergy?: (amount: number) => number;
     applyMana?: (amount: number) => number;
+    clearSkillCooldown?: (key: SkillKey) => void;
     getCurrentStats?: () => CharacterStats;
   }): CharacterRuntime;
 }

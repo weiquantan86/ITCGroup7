@@ -10,6 +10,7 @@ type CreateCarrotPhantomModifierArgs = {
   fireProjectile?: (args?: FireProjectileArgs) => void;
   applyHealth?: (amount: number) => number;
   applyEnergy?: (amount: number) => number;
+  applyMana?: (amount: number) => number;
 };
 
 type PhantomPhase = "idle" | "shallow" | "deep";
@@ -63,6 +64,7 @@ export const createCarrotPhantomModifier = ({
   fireProjectile,
   applyHealth,
   applyEnergy,
+  applyMana,
 }: CreateCarrotPhantomModifierArgs) => {
   const phantomConfig = {
     shallowDurationMs: 75,
@@ -84,6 +86,7 @@ export const createCarrotPhantomModifier = ({
     deepVolleyHomingTargetHeightBias: 0.25,
     recoverHp: 15,
     recoverEnergy: 20,
+    recoverMana: 30,
     volleyYawOffsets: [-0.28, -0.14, 0, 0.14, 0.28],
     volleyPitchOffsets: [0.07, 0.03, 0, -0.03, -0.07],
     volleyLaneOffsets: [-0.36, -0.18, 0, 0.18, 0.36],
@@ -700,6 +703,7 @@ export const createCarrotPhantomModifier = ({
     if (triggerRecovery) {
       applyHealth?.(phantomConfig.recoverHp);
       applyEnergy?.(phantomConfig.recoverEnergy);
+      applyMana?.(phantomConfig.recoverMana);
     }
     setPhantomPhase("idle", 0, now);
   };

@@ -2,9 +2,9 @@ import { createStandardProjectileHooks } from "../../shared/standardHooks";
 import type { ProjectileTypeDefinition } from "../../types";
 
 const defaultScale = 6;
-const fallbackColor = 0x22093f;
-const fallbackEmissive = 0x27125a;
-const fallbackEmissiveIntensity = 1.12;
+const fallbackColor = 0x3b0764;
+const fallbackEmissive = 0x6d28d9;
+const fallbackEmissiveIntensity = 1.24;
 
 const standardHooks = createStandardProjectileHooks({
   defaultMeshColor: fallbackColor,
@@ -41,11 +41,14 @@ export const carrotDeepPhantomOrbProjectileType: ProjectileTypeDefinition = {
   hooks: {
     ...standardHooks,
     createMesh: ({ visual, buildDefaultSphereMesh }) => {
-      const resolvedVisual = visual
-        ? visual.scale == null
-          ? { ...visual, scale: defaultScale }
-          : visual
-        : { scale: defaultScale };
+      const resolvedVisual = {
+        ...visual,
+        scale: visual?.scale ?? defaultScale,
+        color: visual?.color ?? fallbackColor,
+        emissive: visual?.emissive ?? fallbackEmissive,
+        emissiveIntensity:
+          visual?.emissiveIntensity ?? fallbackEmissiveIntensity,
+      };
       return buildDefaultSphereMesh({
         visual: resolvedVisual,
         fallbackColor,
@@ -55,4 +58,3 @@ export const carrotDeepPhantomOrbProjectileType: ProjectileTypeDefinition = {
     },
   },
 };
-

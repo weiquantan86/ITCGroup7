@@ -391,6 +391,7 @@ export const createPlayer = ({
       applyHealth,
       applyEnergy: statsState.applyEnergy,
       applyMana: statsState.applyMana,
+      clearSkillCooldown: statsState.clearSkillCooldown,
       getCurrentStats: () => statsState.currentStats,
       noCooldown: infiniteFire,
     });
