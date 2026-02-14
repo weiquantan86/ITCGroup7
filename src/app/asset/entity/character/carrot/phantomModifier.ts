@@ -53,10 +53,13 @@ type DeepVolleyOrbParticle = {
   lift: number;
 };
 
+type DeepVolleyOrbStyle = "deepPhantom" | "demon";
+
 type DeepVolleyOrb = {
   mesh: THREE.Mesh;
   material: THREE.MeshStandardMaterial;
   particles: DeepVolleyOrbParticle[];
+  style: DeepVolleyOrbStyle;
 };
 
 type DeepVolleyShotFx = {
@@ -131,7 +134,8 @@ export const createCarrotPhantomModifier = ({
   const deepWispStates: DeepWisp[] = [];
   const shallowBurstParticles: BurstParticle[] = [];
   const deepBurstParticles: BurstParticle[] = [];
-  const deepVolleyOrbs: DeepVolleyOrb[] = [];
+  const deepPhantomVolleyOrbs: DeepVolleyOrb[] = [];
+  const demonVolleyOrbs: DeepVolleyOrb[] = [];
   const deepVolleyState = {
     active: false,
     startedAt: 0,
@@ -141,6 +145,7 @@ export const createCarrotPhantomModifier = ({
     projectileType: "carrotDeepPhantomOrb",
     summonScaleMultiplier: 1,
     projectileScale: null as number | null,
+    activeOrbs: deepPhantomVolleyOrbs as DeepVolleyOrb[],
   };
   let hasDeepVolleyAimDirection = false;
   let hasDeepVolleyAimOrigin = false;
@@ -203,7 +208,36 @@ export const createCarrotPhantomModifier = ({
   }
 
   for (let i = 0; i < 5; i += 1) {
-    const material = new THREE.MeshStandardMaterial({
+    const deepPhantomMaterial = new THREE.MeshStandardMaterial({
+      color: 0x3b0764,
+      emissive: 0x6d28d9,
+      emissiveIntensity: 1.24,
+      roughness: 0.35,
+      metalness: 0.1,
+      transparent: false,
+      opacity: 1,
+      depthWrite: true,
+    });
+    const deepPhantomMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.72, 12, 12),
+      deepPhantomMaterial
+    );
+    deepPhantomMesh.userData.carrotPhantomExclude = true;
+    deepPhantomMesh.visible = false;
+    deepPhantomMesh.position.set(
+      phantomConfig.deepVolleyOrbLocalXOffsets[i] ?? 0,
+      phantomConfig.deepVolleyOrbLocalY,
+      phantomConfig.deepVolleyOrbLocalZ
+    );
+    deepVolleyFxGroup.add(deepPhantomMesh);
+    deepPhantomVolleyOrbs.push({
+      mesh: deepPhantomMesh,
+      material: deepPhantomMaterial,
+      particles: [],
+      style: "deepPhantom",
+    });
+
+    const demonMaterial = new THREE.MeshStandardMaterial({
       color: 0x22093f,
       emissive: 0x120a2f,
       emissiveIntensity: 0.98,
@@ -213,15 +247,15 @@ export const createCarrotPhantomModifier = ({
       opacity: 0,
       depthWrite: false,
     });
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.72, 24, 24), material);
-    mesh.userData.carrotPhantomExclude = true;
-    mesh.visible = false;
-    mesh.position.set(
+    const demonMesh = new THREE.Mesh(new THREE.SphereGeometry(0.72, 24, 24), demonMaterial);
+    demonMesh.userData.carrotPhantomExclude = true;
+    demonMesh.visible = false;
+    demonMesh.position.set(
       phantomConfig.deepVolleyOrbLocalXOffsets[i] ?? 0,
       phantomConfig.deepVolleyOrbLocalY,
       phantomConfig.deepVolleyOrbLocalZ
     );
-    const particles: DeepVolleyOrbParticle[] = [];
+    const demonParticles: DeepVolleyOrbParticle[] = [];
     for (let j = 0; j < 12; j += 1) {
       const particleMaterial = new THREE.MeshBasicMaterial({
         color: 0x8b5cf6,
@@ -235,8 +269,8 @@ export const createCarrotPhantomModifier = ({
         particleMaterial
       );
       particleMesh.userData.carrotPhantomExclude = true;
-      mesh.add(particleMesh);
-      particles.push({
+      demonMesh.add(particleMesh);
+      demonParticles.push({
         mesh: particleMesh,
         material: particleMaterial,
         phase: (j / 12) * Math.PI * 2 + Math.random() * 0.8,
@@ -245,8 +279,13 @@ export const createCarrotPhantomModifier = ({
         lift: -0.34 + Math.random() * 0.68,
       });
     }
-    deepVolleyFxGroup.add(mesh);
-    deepVolleyOrbs.push({ mesh, material, particles });
+    deepVolleyFxGroup.add(demonMesh);
+    demonVolleyOrbs.push({
+      mesh: demonMesh,
+      material: demonMaterial,
+      particles: demonParticles,
+      style: "demon",
+    });
   }
 
   const deepRing = new THREE.Mesh(
@@ -336,6 +375,18 @@ export const createCarrotPhantomModifier = ({
     });
   }
 
+  const forEachDeepVolleyOrb = (callback: (orb: DeepVolleyOrb) => void) => {
+    for (let i = 0; i < deepPhantomVolleyOrbs.length; i += 1) {
+      callback(deepPhantomVolleyOrbs[i]);
+    }
+    for (let i = 0; i < demonVolleyOrbs.length; i += 1) {
+      callback(demonVolleyOrbs[i]);
+    }
+  };
+
+  const resolveVolleyOrbSet = (projectileType: string) =>
+    projectileType === "carrotDemonVolleyOrb" ? demonVolleyOrbs : deepPhantomVolleyOrbs;
+
   const hideAllFx = () => {
     fxRoot.visible = false;
     deepFxGroup.visible = false;
@@ -350,8 +401,8 @@ export const createCarrotPhantomModifier = ({
     deepVolleyState.projectileType = "carrotDeepPhantomOrb";
     deepVolleyState.summonScaleMultiplier = 1;
     deepVolleyState.projectileScale = null;
-    for (let i = 0; i < deepVolleyOrbs.length; i += 1) {
-      const orb = deepVolleyOrbs[i];
+    deepVolleyState.activeOrbs = deepPhantomVolleyOrbs;
+    forEachDeepVolleyOrb((orb) => {
       orb.mesh.visible = false;
       orb.material.opacity = 0;
       orb.mesh.scale.setScalar(0.6);
@@ -360,7 +411,7 @@ export const createCarrotPhantomModifier = ({
         particle.material.opacity = 0;
         particle.mesh.position.set(0, 0, 0);
       }
-    }
+    });
     shallowBurstState.startedAt = -1;
     shallowBurstState.endsAt = -1;
     deepBurstState.startedAt = -1;
@@ -781,12 +832,23 @@ export const createCarrotPhantomModifier = ({
     );
     deepVolleyState.projectileScale =
       options?.projectileScale != null ? Math.max(0.1, options.projectileScale) : null;
+    deepVolleyState.activeOrbs = resolveVolleyOrbSet(deepVolleyState.projectileType);
     deepVolleyFxGroup.visible = true;
-    for (let i = 0; i < deepVolleyOrbs.length; i += 1) {
-      const orb = deepVolleyOrbs[i];
+    forEachDeepVolleyOrb((orb) => {
       orb.mesh.visible = false;
       orb.material.opacity = 0;
-      orb.mesh.scale.setScalar(0.8 * deepVolleyState.summonScaleMultiplier);
+      for (let j = 0; j < orb.particles.length; j += 1) {
+        const particle = orb.particles[j];
+        particle.material.opacity = 0;
+        particle.mesh.position.set(0, 0, 0);
+      }
+    });
+
+    for (let i = 0; i < deepVolleyState.activeOrbs.length; i += 1) {
+      const orb = deepVolleyState.activeOrbs[i];
+      if (!orb) continue;
+      const baseScale = orb.style === "deepPhantom" ? 1 : 0.8;
+      orb.mesh.scale.setScalar(baseScale * deepVolleyState.summonScaleMultiplier);
       orb.mesh.position.set(
         phantomConfig.deepVolleyOrbLocalXOffsets[i] ?? 0,
         phantomConfig.deepVolleyOrbLocalY,
@@ -905,7 +967,7 @@ export const createCarrotPhantomModifier = ({
   };
 
   const launchDeepVolleyOrb = (index: number, now: number) => {
-    const orb = deepVolleyOrbs[index];
+    const orb = deepVolleyState.activeOrbs[index];
     if (!orb) return;
     orb.mesh.updateMatrixWorld(true);
     orb.mesh.getWorldPosition(deepVolleyShotOrigin);
@@ -1032,26 +1094,32 @@ export const createCarrotPhantomModifier = ({
 
   const updateDeepVolley = (now: number) => {
     if (!deepVolleyState.active) return;
+    const activeOrbs = deepVolleyState.activeOrbs;
     const elapsed = now - deepVolleyState.startedAt;
 
     const spawnTargetCount = Math.min(
-      deepVolleyOrbs.length,
+      activeOrbs.length,
       Math.max(0, Math.floor(elapsed / phantomConfig.deepVolleySummonStepMs) + 1)
     );
     while (deepVolleyState.spawnedCount < spawnTargetCount) {
       const index = deepVolleyState.spawnedCount;
-      const orb = deepVolleyOrbs[index];
+      const orb = activeOrbs[index];
       if (!orb) break;
       orb.mesh.visible = true;
-      orb.material.opacity = 0.95;
-      orb.mesh.scale.setScalar(1.55 * deepVolleyState.summonScaleMultiplier);
+      if (orb.style === "deepPhantom") {
+        orb.material.opacity = 1;
+        orb.mesh.scale.setScalar(1 * deepVolleyState.summonScaleMultiplier);
+      } else {
+        orb.material.opacity = 0.95;
+        orb.mesh.scale.setScalar(1.55 * deepVolleyState.summonScaleMultiplier);
+      }
       deepVolleyState.spawnedCount += 1;
     }
 
     if (elapsed >= phantomConfig.deepVolleyLaunchDelayMs) {
       const launchElapsed = elapsed - phantomConfig.deepVolleyLaunchDelayMs;
       const launchTargetCount = Math.min(
-        deepVolleyOrbs.length,
+        activeOrbs.length,
         Math.floor(launchElapsed / phantomConfig.deepVolleyLaunchStepMs) + 1
       );
       while (deepVolleyState.launchedCount < launchTargetCount) {
@@ -1062,17 +1130,22 @@ export const createCarrotPhantomModifier = ({
     }
 
     for (let i = deepVolleyState.launchedCount; i < deepVolleyState.spawnedCount; i += 1) {
-      const orb = deepVolleyOrbs[i];
+      const orb = activeOrbs[i];
       if (!orb?.mesh.visible) continue;
-      const pulse = 0.5 + 0.5 * Math.sin(now * 0.012 + i * 0.9);
-      orb.mesh.scale.setScalar(
-        (1.35 + pulse * 0.55) * deepVolleyState.summonScaleMultiplier
-      );
-      orb.material.opacity = 0.72 + pulse * 0.26;
-      updateDeepVolleyOrbParticles(orb, i, now, pulse);
+      if (orb.style === "deepPhantom") {
+        orb.mesh.scale.setScalar(1 * deepVolleyState.summonScaleMultiplier);
+        orb.material.opacity = 1;
+      } else {
+        const pulse = 0.5 + 0.5 * Math.sin(now * 0.012 + i * 0.9);
+        orb.mesh.scale.setScalar(
+          (1.35 + pulse * 0.55) * deepVolleyState.summonScaleMultiplier
+        );
+        orb.material.opacity = 0.72 + pulse * 0.26;
+        updateDeepVolleyOrbParticles(orb, i, now, pulse);
+      }
     }
 
-    if (deepVolleyState.launchedCount >= deepVolleyOrbs.length) {
+    if (deepVolleyState.launchedCount >= activeOrbs.length) {
       deepVolleyState.active = false;
       deepVolleyFxGroup.visible = false;
     }

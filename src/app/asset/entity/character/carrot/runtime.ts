@@ -66,6 +66,21 @@ type DemonRingParticleState = {
   lift: number;
 };
 
+type DemonTransitionPhase = "none" | "in" | "out";
+
+type DemonTransitionParticleState = {
+  mesh: THREE.Mesh;
+  material: THREE.MeshBasicMaterial;
+  active: boolean;
+  startedAt: number;
+  lifeMs: number;
+  origin: THREE.Vector3;
+  direction: THREE.Vector3;
+  speed: number;
+  baseRotation: THREE.Vector3;
+  spin: THREE.Vector3;
+};
+
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
 const easeInOutCubic = (value: number) =>
   value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
@@ -224,10 +239,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
   const demonFormConfig = {
     durationMs: 10000,
+    transformInDurationMs: 3000,
+    transformOutDurationMs: 2000,
     scaleMultiplier: 3,
     cameraScaleMultiplier: 3,
     damageTakenMultiplier: 1 / 3,
     healOnEnd: 25,
+    transitionParticleSpawnPerSec: 92,
+    transitionParticleLifeMinMs: 520,
+    transitionParticleLifeMaxMs: 1300,
     projectileFireIntervalMs: 500,
     projectileEyeForwardOffset: 0.72,
     projectileForwardSpawnOffset: 1.45,
@@ -259,6 +279,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     active: false,
     startedAt: 0,
     endsAt: 0,
+    transitionPhase: "none" as DemonTransitionPhase,
+    transitionStartedAt: 0,
+    transitionEndsAt: 0,
     projectileCooldownUntil: 0,
     hasAvatarBaseScale: false,
     avatarBaseScale: new THREE.Vector3(1, 1, 1),
@@ -423,6 +446,47 @@ export const createRuntime: CharacterRuntimeFactory = ({
       lift: 0.22 + Math.random() * 0.78,
     });
   }
+  const demonTransitionFxRoot = new THREE.Group();
+  demonTransitionFxRoot.userData.carrotPhantomExclude = true;
+  demonTransitionFxRoot.visible = false;
+  avatar.add(demonTransitionFxRoot);
+  const demonTransitionParticleGeometry = new THREE.IcosahedronGeometry(0.1, 0);
+  const demonTransitionParticles: DemonTransitionParticleState[] = [];
+  for (let i = 0; i < 180; i += 1) {
+    const particleMaterial = new THREE.MeshBasicMaterial({
+      color: 0xd8b4fe,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const particleMesh = new THREE.Mesh(
+      demonTransitionParticleGeometry,
+      particleMaterial
+    );
+    particleMesh.userData.carrotPhantomExclude = true;
+    particleMesh.visible = false;
+    demonTransitionFxRoot.add(particleMesh);
+    demonTransitionParticles.push({
+      mesh: particleMesh,
+      material: particleMaterial,
+      active: false,
+      startedAt: 0,
+      lifeMs: 0,
+      origin: new THREE.Vector3(),
+      direction: new THREE.Vector3(0, 1, 0),
+      speed: 0,
+      baseRotation: new THREE.Vector3(),
+      spin: new THREE.Vector3(),
+    });
+  }
+  const demonTransitionFxState = {
+    active: false,
+    phase: "in" as Exclude<DemonTransitionPhase, "none">,
+    spawnCarry: 0,
+    lastUpdatedAt: 0,
+    cursor: 0,
+  };
   const phantomModifier = createCarrotPhantomModifier({
     avatar,
     fireProjectile,
@@ -702,6 +766,166 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   };
 
+  const setDemonScaleMultiplier = (multiplier: number) => {
+    const safeMultiplier = Math.max(0.0001, multiplier);
+    if (demonFormState.hasAvatarBaseScale) {
+      avatar.scale.copy(demonFormState.avatarBaseScale).multiplyScalar(safeMultiplier);
+      return;
+    }
+    avatar.scale.setScalar(safeMultiplier);
+  };
+
+  const resetDemonTransitionParticles = () => {
+    for (let i = 0; i < demonTransitionParticles.length; i += 1) {
+      const particle = demonTransitionParticles[i];
+      particle.active = false;
+      particle.startedAt = 0;
+      particle.lifeMs = 0;
+      particle.speed = 0;
+      particle.mesh.visible = false;
+      particle.mesh.position.set(0, 0, 0);
+      particle.material.opacity = 0;
+    }
+  };
+
+  const startDemonTransitionFx = (
+    now: number,
+    phase: Exclude<DemonTransitionPhase, "none">
+  ) => {
+    demonTransitionFxState.active = true;
+    demonTransitionFxState.phase = phase;
+    demonTransitionFxState.spawnCarry = 0;
+    demonTransitionFxState.lastUpdatedAt = now;
+    demonTransitionFxRoot.visible = true;
+    resetDemonTransitionParticles();
+  };
+
+  const stopDemonTransitionFx = () => {
+    demonTransitionFxState.active = false;
+    demonTransitionFxState.spawnCarry = 0;
+    demonTransitionFxState.lastUpdatedAt = 0;
+    demonTransitionFxRoot.visible = false;
+    resetDemonTransitionParticles();
+  };
+
+  const spawnDemonTransitionParticle = (now: number, intensity: number) => {
+    const particle = demonTransitionParticles[demonTransitionFxState.cursor];
+    demonTransitionFxState.cursor =
+      (demonTransitionFxState.cursor + 1) % demonTransitionParticles.length;
+    if (!particle) return;
+
+    const angle = Math.random() * Math.PI * 2;
+    const originRadius = 0.08 + Math.random() * 0.32;
+    const outwardBias = 0.22 + Math.random() * 0.94;
+    particle.active = true;
+    particle.startedAt = now;
+    particle.lifeMs =
+      demonFormConfig.transitionParticleLifeMinMs +
+      Math.random() *
+        (demonFormConfig.transitionParticleLifeMaxMs -
+          demonFormConfig.transitionParticleLifeMinMs);
+    particle.origin.set(
+      Math.cos(angle) * originRadius,
+      0.95 + Math.random() * 2.35,
+      Math.sin(angle) * originRadius
+    );
+    particle.direction.set(
+      Math.cos(angle) * outwardBias + (Math.random() - 0.5) * 0.48,
+      0.25 + Math.random() * 1.25,
+      Math.sin(angle) * outwardBias + (Math.random() - 0.5) * 0.48
+    );
+    if (particle.direction.lengthSq() < 0.000001) {
+      particle.direction.set(0, 1, 0);
+    } else {
+      particle.direction.normalize();
+    }
+    particle.speed = (2.9 + Math.random() * 5.4) * (0.75 + intensity * 0.5);
+    particle.baseRotation.set(
+      Math.random() * Math.PI * 2,
+      Math.random() * Math.PI * 2,
+      Math.random() * Math.PI * 2
+    );
+    particle.spin.set(
+      (Math.random() - 0.5) * 8.4,
+      (Math.random() - 0.5) * 8.4,
+      (Math.random() - 0.5) * 8.4
+    );
+    particle.mesh.visible = true;
+    particle.mesh.position.copy(particle.origin);
+    particle.mesh.rotation.copy(particle.baseRotation);
+    particle.mesh.scale.setScalar((0.56 + Math.random() * 0.94) * (0.78 + intensity * 0.44));
+    particle.material.opacity = 0.95;
+  };
+
+  const updateDemonTransitionFx = (now: number, phaseProgress: number) => {
+    if (!demonTransitionFxState.active) {
+      demonTransitionFxRoot.visible = false;
+      return;
+    }
+    demonTransitionFxRoot.visible = true;
+
+    const deltaMs =
+      demonTransitionFxState.lastUpdatedAt > 0
+        ? Math.max(0, now - demonTransitionFxState.lastUpdatedAt)
+        : 16;
+    demonTransitionFxState.lastUpdatedAt = now;
+
+    const clampedProgress = THREE.MathUtils.clamp(phaseProgress, 0, 1);
+    const inPhase = demonTransitionFxState.phase === "in";
+    const intensity = inPhase
+      ? THREE.MathUtils.lerp(0.78, 1.28, clampedProgress)
+      : THREE.MathUtils.lerp(1.3, 0.82, clampedProgress);
+    const spawnPerSec = demonFormConfig.transitionParticleSpawnPerSec * intensity;
+    demonTransitionFxState.spawnCarry += (deltaMs * 0.001) * spawnPerSec;
+    const spawnCount = Math.min(20, Math.floor(demonTransitionFxState.spawnCarry));
+    if (spawnCount > 0) {
+      demonTransitionFxState.spawnCarry -= spawnCount;
+      for (let i = 0; i < spawnCount; i += 1) {
+        spawnDemonTransitionParticle(now, intensity);
+      }
+    }
+
+    let hasAliveParticle = false;
+    for (let i = 0; i < demonTransitionParticles.length; i += 1) {
+      const particle = demonTransitionParticles[i];
+      if (!particle.active) continue;
+      const elapsed = now - particle.startedAt;
+      if (elapsed >= particle.lifeMs || particle.lifeMs <= 0) {
+        particle.active = false;
+        particle.mesh.visible = false;
+        particle.material.opacity = 0;
+        continue;
+      }
+      hasAliveParticle = true;
+      const lifeProgress = THREE.MathUtils.clamp(elapsed / particle.lifeMs, 0, 1);
+      const fade = 1 - lifeProgress;
+      const travel = particle.speed * (elapsed * 0.001);
+      const elapsedSec = elapsed * 0.001;
+      const shimmer = 0.5 + 0.5 * Math.sin(now * 0.012 + i * 0.67);
+      particle.mesh.position
+        .copy(particle.origin)
+        .addScaledVector(particle.direction, travel);
+      particle.mesh.rotation.set(
+        particle.baseRotation.x + particle.spin.x * elapsedSec,
+        particle.baseRotation.y + particle.spin.y * elapsedSec,
+        particle.baseRotation.z + particle.spin.z * elapsedSec
+      );
+      particle.mesh.scale.setScalar((0.56 + shimmer * 0.52) * (0.44 + fade * 0.72));
+      particle.material.opacity = fade ** 1.2 * (0.36 + shimmer * 0.62);
+    }
+
+    if (!hasAliveParticle && demonTransitionFxState.spawnCarry < 0.001) {
+      demonTransitionFxRoot.visible = false;
+    }
+  };
+
+  const isDemonTransitionInvincible = () => demonFormState.transitionPhase !== "none";
+
+  const isDemonFormTransitionActive = (now = performance.now()) => {
+    updateDemonFormState(now);
+    return demonFormState.transitionPhase !== "none";
+  };
+
   const resolveDemonProjectileDirection = () => {
     if (hasRuntimeAimDirection) {
       demonProjectileDirection.copy(runtimeAimDirection);
@@ -769,10 +993,19 @@ export const createRuntime: CharacterRuntimeFactory = ({
     now: number;
     triggerHeal: boolean;
   }) => {
-    if (!demonFormState.active) return;
+    if (
+      !demonFormState.active &&
+      demonFormState.transitionPhase === "none" &&
+      !demonTransitionFxState.active
+    ) {
+      return;
+    }
     demonFormState.active = false;
     demonFormState.startedAt = 0;
     demonFormState.endsAt = 0;
+    demonFormState.transitionPhase = "none";
+    demonFormState.transitionStartedAt = 0;
+    demonFormState.transitionEndsAt = 0;
     demonFormState.projectileCooldownUntil = 0;
     if (demonFormState.hasAvatarBaseScale) {
       avatar.scale.copy(demonFormState.avatarBaseScale);
@@ -783,38 +1016,124 @@ export const createRuntime: CharacterRuntimeFactory = ({
     restoreDemonLegs();
     updateDemonFootRing(now, false);
     clearDemonMirrorArm();
+    stopDemonTransitionFx();
     if (triggerHeal) {
       applyHealth?.(demonFormConfig.healOnEnd);
     }
   };
 
-  const activateDemonForm = (now: number) => {
-    if (demonFormState.active) return false;
-    if (!demonFormState.hasAvatarBaseScale) {
-      demonFormState.avatarBaseScale.copy(avatar.scale);
-      demonFormState.hasAvatarBaseScale = true;
-    }
+  const enterActiveDemonForm = (now: number) => {
+    demonFormState.transitionPhase = "none";
+    demonFormState.transitionStartedAt = 0;
+    demonFormState.transitionEndsAt = 0;
     demonFormState.active = true;
     demonFormState.startedAt = now;
     demonFormState.endsAt = now + demonFormConfig.durationMs;
     demonFormState.projectileCooldownUntil = 0;
-    avatar.scale
-      .copy(demonFormState.avatarBaseScale)
-      .multiplyScalar(demonFormConfig.scaleMultiplier);
+    setDemonScaleMultiplier(demonFormConfig.scaleMultiplier);
     applyDemonFormMaterials();
+    stopDemonTransitionFx();
+    updateDemonFootRing(now, true);
+  };
+
+  const startDemonFormTransitionOut = (now: number) => {
+    if (demonFormState.transitionPhase === "out") return false;
+    if (!demonFormState.active && demonFormState.transitionPhase !== "in") return false;
+    demonFormState.active = false;
+    demonFormState.startedAt = 0;
+    demonFormState.endsAt = 0;
+    demonFormState.transitionPhase = "out";
+    demonFormState.transitionStartedAt = now;
+    demonFormState.transitionEndsAt = now + demonFormConfig.transformOutDurationMs;
+    demonFormState.projectileCooldownUntil = 0;
+    setDemonScaleMultiplier(demonFormConfig.scaleMultiplier);
+    applyDemonFormMaterials();
+    updateDemonFootRing(now, false);
+    clearDemonMirrorArm();
+    startDemonTransitionFx(now, "out");
+    return true;
+  };
+
+  const activateDemonForm = (now: number) => {
+    if (demonFormState.active || demonFormState.transitionPhase !== "none") {
+      return false;
+    }
+    if (!demonFormState.hasAvatarBaseScale) {
+      demonFormState.avatarBaseScale.copy(avatar.scale);
+      demonFormState.hasAvatarBaseScale = true;
+    }
+    demonFormState.active = false;
+    demonFormState.startedAt = 0;
+    demonFormState.endsAt = 0;
+    demonFormState.transitionPhase = "in";
+    demonFormState.transitionStartedAt = now;
+    demonFormState.transitionEndsAt = now + demonFormConfig.transformInDurationMs;
+    demonFormState.projectileCooldownUntil = 0;
+    setDemonScaleMultiplier(1);
+    applyDemonFormMaterials();
+    clearDemonMirrorArm();
+    updateDemonFootRing(now, false);
+    startDemonTransitionFx(now, "in");
     return true;
   };
 
   const updateDemonFormState = (now: number) => {
+    if (demonFormState.transitionPhase === "in") {
+      const duration = Math.max(
+        1,
+        demonFormState.transitionEndsAt - demonFormState.transitionStartedAt
+      );
+      const progress = THREE.MathUtils.clamp(
+        (now - demonFormState.transitionStartedAt) / duration,
+        0,
+        1
+      );
+      const eased = easeInOutCubic(progress);
+      const multiplier = THREE.MathUtils.lerp(1, demonFormConfig.scaleMultiplier, eased);
+      setDemonScaleMultiplier(multiplier);
+      applyDemonFormMaterials();
+      updateDemonFootRing(now, false);
+      clearDemonMirrorArm();
+      updateDemonTransitionFx(now, progress);
+      if (now >= demonFormState.transitionEndsAt) {
+        enterActiveDemonForm(now);
+      }
+      return;
+    }
+
+    if (demonFormState.transitionPhase === "out") {
+      const duration = Math.max(
+        1,
+        demonFormState.transitionEndsAt - demonFormState.transitionStartedAt
+      );
+      const progress = THREE.MathUtils.clamp(
+        (now - demonFormState.transitionStartedAt) / duration,
+        0,
+        1
+      );
+      const eased = easeInOutCubic(progress);
+      const multiplier = THREE.MathUtils.lerp(demonFormConfig.scaleMultiplier, 1, eased);
+      setDemonScaleMultiplier(multiplier);
+      applyDemonFormMaterials();
+      updateDemonFootRing(now, false);
+      clearDemonMirrorArm();
+      updateDemonTransitionFx(now, progress);
+      if (now >= demonFormState.transitionEndsAt) {
+        deactivateDemonForm({ now, triggerHeal: true });
+      }
+      return;
+    }
+
     if (!demonFormState.active) {
       updateDemonFootRing(now, false);
       clearDemonMirrorArm();
       return;
     }
     if (now >= demonFormState.endsAt) {
-      deactivateDemonForm({ now, triggerHeal: true });
+      startDemonFormTransitionOut(now);
       return;
     }
+    setDemonScaleMultiplier(demonFormConfig.scaleMultiplier);
     applyDemonFormMaterials();
     updateDemonFootRing(now, true);
   };
@@ -1263,9 +1582,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const handleSkillR = () => {
+    const now = performance.now();
+    updateDemonFormState(now);
+    if (demonFormState.transitionPhase !== "none") return false;
     if (!fireProjectile) return false;
     if (punchState.phase !== "idle") return false;
-    const now = performance.now();
 
     avatar.updateMatrixWorld(true);
     avatar.getWorldPosition(skillRSpawnOrigin);
@@ -1320,7 +1641,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const handleSkillQ = () => {
     const now = performance.now();
     updateDemonFormState(now);
-    if (demonFormState.active) return false;
+    if (demonFormState.active || demonFormState.transitionPhase !== "none") return false;
+    // Ensure phantom material overrides do not leak into demon-form snapshot restore.
+    phantomModifier.reset();
     if (punchState.phase !== "idle") {
       clearPunchState();
       restoreIdlePose();
@@ -1330,7 +1653,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const handleSkillE = () => {
     const now = performance.now();
-    if (isDemonFormActive(now)) {
+    updateDemonFormState(now);
+    if (demonFormState.transitionPhase !== "none") return false;
+    if (demonFormState.active) {
       return phantomModifier.triggerDeepVolley(now, {
         projectileType: "carrotDemonVolleyOrb",
         summonScaleMultiplier: demonFormConfig.demonESummonScaleMultiplier,
@@ -1396,26 +1721,38 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const handlePrimaryDown = () => {
-    if (isDemonFormActive()) {
-      fireDemonBasicProjectile();
+    const now = performance.now();
+    updateDemonFormState(now);
+    if (demonFormState.transitionPhase !== "none") return;
+    if (demonFormState.active) {
+      fireDemonBasicProjectile(now);
       return;
     }
     beginCharge();
   };
 
   const handlePrimaryUp = () => {
-    if (isDemonFormActive()) return;
+    const now = performance.now();
+    updateDemonFormState(now);
+    if (demonFormState.transitionPhase !== "none") return;
+    if (demonFormState.active) return;
     releaseCharge();
   };
 
   const handlePrimaryCancel = () => {
-    if (isDemonFormActive()) return;
+    const now = performance.now();
+    updateDemonFormState(now);
+    if (demonFormState.transitionPhase !== "none") return;
+    if (demonFormState.active) return;
     cancelCharge();
   };
 
   const handleRightClick = (facing: Parameters<typeof baseRuntime.handleRightClick>[0]) => {
-    if (isDemonFormActive()) {
-      fireDemonBasicProjectile();
+    const now = performance.now();
+    updateDemonFormState(now);
+    if (demonFormState.transitionPhase !== "none") return;
+    if (demonFormState.active) {
+      fireDemonBasicProjectile(now);
       return;
     }
     if (punchState.phase !== "idle") return;
@@ -1578,6 +1915,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const beforeSkillUse = ({ key, now }: { key: SkillKey; now: number }) => {
+    if (isDemonFormTransitionActive(now)) {
+      return { allow: false };
+    }
     const baseModifier = phantomModifier.beforeSkillUse?.({ key, now });
     const resolvedModifier =
       baseModifier && typeof baseModifier === "object"
@@ -1594,6 +1934,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const beforeDamage = ({ amount, now }: { amount: number; now: number }) => {
+    updateDemonFormState(now);
+    const demonTransitionInvincible = isDemonTransitionInvincible();
     const wasDeepActive = phantomModifier.isDeepPhaseActive(now);
     const modifier = phantomModifier.beforeDamage({ amount, now });
     const isDeepActiveNow = phantomModifier.isDeepPhaseActive(now);
@@ -1606,9 +1948,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
         : modifier && typeof modifier === "object"
           ? modifier.amount
           : amount;
-    const resolvedAmount = isDemonFormActive(now)
+    const demonAdjustedAmount = demonFormState.active
       ? baseAmount * demonFormConfig.damageTakenMultiplier
       : baseAmount;
+    const resolvedAmount = demonTransitionInvincible ? 0 : demonAdjustedAmount;
     if (typeof modifier === "number") {
       return resolvedAmount;
     }
@@ -1636,8 +1979,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     getMovementSpeedMultiplier: baseRuntime.getMovementSpeedMultiplier,
     getCameraScaleMultiplier: () =>
       (isDemonFormActive() ? demonFormConfig.cameraScaleMultiplier : 1),
-    isBasicAttackLocked: () => punchState.phase !== "idle",
-    isMovementLocked: baseRuntime.isMovementLocked,
+    isBasicAttackLocked: () =>
+      punchState.phase !== "idle" || isDemonFormTransitionActive(),
+    isMovementLocked: () =>
+      Boolean(baseRuntime.isMovementLocked?.()) || isDemonFormTransitionActive(),
     getSkillCooldownRemainingMs: baseRuntime.getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs: baseRuntime.getSkillCooldownDurationMs,
     beforeSkillUse,
@@ -1689,6 +2034,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       demonRingParticleGeometry.dispose();
       for (let i = 0; i < demonRingParticles.length; i += 1) {
         demonRingParticles[i].material.dispose();
+      }
+      demonTransitionParticleGeometry.dispose();
+      for (let i = 0; i < demonTransitionParticles.length; i += 1) {
+        demonTransitionParticles[i].material.dispose();
       }
       skillRTornadoGeometry.dispose();
       skillRTornadoMaterial.dispose();
