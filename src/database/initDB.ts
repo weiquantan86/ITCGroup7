@@ -2,6 +2,7 @@
 import pool from './client.ts';
 
 const DEFAULT_CHARACTER_NAME = 'Adam';
+const DEFAULT_SEED_RESOURCE_AMOUNT = 5;
 
 async function assignDefaultCharacter(userId: number) {
   await pool.query(
@@ -13,6 +14,28 @@ async function assignDefaultCharacter(userId: number) {
       ON CONFLICT DO NOTHING;
     `,
     [userId, DEFAULT_CHARACTER_NAME]
+  );
+}
+
+async function assignUserResources(userId: number, amount: number) {
+  await pool.query(
+    `
+      INSERT INTO user_resources (
+        user_id,
+        energy_sugar,
+        dream_fruit_dust,
+        core_crunch_seed,
+        star_gel_essence
+      )
+      VALUES ($1, $2, $2, $2, $2)
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        energy_sugar = EXCLUDED.energy_sugar,
+        dream_fruit_dust = EXCLUDED.dream_fruit_dust,
+        core_crunch_seed = EXCLUDED.core_crunch_seed,
+        star_gel_essence = EXCLUDED.star_gel_essence;
+    `,
+    [userId, amount]
   );
 }
 
@@ -60,6 +83,17 @@ async function initDB() {
     console.log('User characters table created or already exists');
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_resources (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        energy_sugar INTEGER NOT NULL DEFAULT 0 CHECK (energy_sugar >= 0),
+        dream_fruit_dust INTEGER NOT NULL DEFAULT 0 CHECK (dream_fruit_dust >= 0),
+        core_crunch_seed INTEGER NOT NULL DEFAULT 0 CHECK (core_crunch_seed >= 0),
+        star_gel_essence INTEGER NOT NULL DEFAULT 0 CHECK (star_gel_essence >= 0)
+      );
+    `);
+    console.log('User resources table created or already exists');
+
+    await pool.query(`
       DO $$
       BEGIN
         IF EXISTS (
@@ -88,6 +122,34 @@ async function initDB() {
       ADD COLUMN IF NOT EXISTS self_introduction TEXT;
     `);
 
+    await pool.query(`
+      ALTER TABLE user_resources
+      ADD COLUMN IF NOT EXISTS energy_sugar INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await pool.query(`
+      ALTER TABLE user_resources
+      ADD COLUMN IF NOT EXISTS dream_fruit_dust INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await pool.query(`
+      ALTER TABLE user_resources
+      ADD COLUMN IF NOT EXISTS core_crunch_seed INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await pool.query(`
+      ALTER TABLE user_resources
+      ADD COLUMN IF NOT EXISTS star_gel_essence INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await pool.query(`
+      INSERT INTO user_resources (user_id)
+      SELECT u.id
+      FROM users u
+      LEFT JOIN user_resources ur ON ur.user_id = u.id
+      WHERE ur.user_id IS NULL;
+    `);
+
     const passwordHash = await bcrypt.hash('123456', 10);
     await pool.query(
       `
@@ -113,6 +175,7 @@ async function initDB() {
       
       // Only insert Adam as the default character
       await assignDefaultCharacter(userId);
+      await assignUserResources(userId, DEFAULT_SEED_RESOURCE_AMOUNT);
       console.log("Seed user_characters reset: Sarcus only owns Adam");
     }
   } catch (err) {

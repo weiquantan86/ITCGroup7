@@ -91,6 +91,7 @@ export async function DELETE(_request: Request, context: RequestContext) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query("DELETE FROM user_resources WHERE user_id = $1", [userId]);
     await client.query("DELETE FROM user_characters WHERE user_id = $1", [userId]);
     const deleteUserResult = await client.query(
       "DELETE FROM users WHERE id = $1 RETURNING id",

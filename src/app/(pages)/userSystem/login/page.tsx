@@ -2,14 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import SceneLauncher from "../../../asset/scenes/SceneLauncher";
 import './page.css';
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [message, setMessage] = useState('');
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminInput, setAdminInput] = useState('');
   const [adminError, setAdminError] = useState('');
@@ -24,7 +22,6 @@ export default function Login() {
     });
     const data = await res.json();
     const success = Boolean(data.success);
-    setIsLoggedIn(success);
     setMessage(data.error || (success ? 'Login successful' : 'Login failed'));
     if (success) {
       router.push('/userSystem/user');
@@ -99,11 +96,6 @@ export default function Login() {
         </button>
       </div>
       <p className="message">{message}</p>
-      {isLoggedIn && (
-        <div className="three-preview" aria-live="polite">
-          <SceneLauncher sceneId="grass" />
-        </div>
-      )}
       <div className="link">
         <a href="/userSystem/register">Don't have an account? Register</a>
       </div>

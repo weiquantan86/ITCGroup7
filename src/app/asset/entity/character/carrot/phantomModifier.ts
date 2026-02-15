@@ -1239,6 +1239,13 @@ export const createCarrotPhantomModifier = ({
     return isDeepActive(now);
   };
 
+  const exitDeepPhase = (now = performance.now()) => {
+    updatePhantomPhase(now);
+    if (!isDeepActive(now)) return false;
+    endDeepPhantom(false, now);
+    return true;
+  };
+
   const reset = () => {
     phantomState.phase = "idle";
     phantomState.endsAt = 0;
@@ -1270,6 +1277,7 @@ export const createCarrotPhantomModifier = ({
     beforeDamage,
     onTick,
     isDeepPhaseActive,
+    exitDeepPhase,
     triggerDeepVolley,
     setAimDirectionWorld,
     reset,

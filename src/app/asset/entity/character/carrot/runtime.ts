@@ -1736,6 +1736,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (demonFormState.transitionPhase !== "none") return false;
     if (!fireProjectile) return false;
     if (punchState.phase !== "idle") return false;
+    const deepPhantomActive = phantomModifier.isDeepPhaseActive(now);
 
     avatar.updateMatrixWorld(true);
     avatar.getWorldPosition(skillRSpawnOrigin);
@@ -1744,7 +1745,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillRSpawnOrigin.addScaledVector(direction, skillRConfig.forwardSpawnOffset);
     skillRSpawnOrigin.y += skillRConfig.verticalSpawnOffset;
 
-    if (phantomModifier.isDeepPhaseActive(now) || isDemonFormActive(now)) {
+    if (deepPhantomActive || isDemonFormActive(now)) {
       skillRRight.crossVectors(axisY, direction);
       if (skillRRight.lengthSq() < 0.000001) {
         skillRRight.set(1, 0, 0);
@@ -1784,6 +1785,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       });
     }
     beginSkillRSweep(now);
+    if (deepPhantomActive) {
+      phantomModifier.exitDeepPhase(now);
+    }
     return true;
   };
 

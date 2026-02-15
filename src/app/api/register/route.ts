@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import pool from '../../../database/client';
 
 export async function POST(request) {
+  const client = await pool.connect();
   try {
     const { email, phone, username, password } = await request.json();
 
@@ -27,12 +28,43 @@ export async function POST(request) {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
+    await client.query('BEGIN');
+
     // Insert user
-    await pool.query('INSERT INTO users (email, phone, username, password_hash) VALUES ($1, $2, $3, $4)', [email, phone, username, passwordHash]);
+    const userInsertResult = await client.query(
+      'INSERT INTO users (email, phone, username, password_hash) VALUES ($1, $2, $3, $4) RETURNING id',
+      [email, phone, username, passwordHash]
+    );
+
+    const userId = userInsertResult.rows[0].id;
+
+    await client.query(
+      `
+        INSERT INTO user_resources (
+          user_id,
+          energy_sugar,
+          dream_fruit_dust,
+          core_crunch_seed,
+          star_gel_essence
+        )
+        VALUES ($1, 0, 0, 0, 0)
+        ON CONFLICT (user_id) DO NOTHING
+      `,
+      [userId]
+    );
+
+    await client.query('COMMIT');
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error(rollbackError);
+    }
     console.error(error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } finally {
+    client.release();
   }
 }
