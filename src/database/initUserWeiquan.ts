@@ -25,15 +25,17 @@ async function assignUserResources(userId: number, amount: number) {
         energy_sugar,
         dream_fruit_dust,
         core_crunch_seed,
-        star_gel_essence
+        star_gel_essence,
+        point
       )
-      VALUES ($1, $2, $2, $2, $2)
+      VALUES ($1, $2, $2, $2, $2, $2)
       ON CONFLICT (user_id)
       DO UPDATE SET
         energy_sugar = EXCLUDED.energy_sugar,
         dream_fruit_dust = EXCLUDED.dream_fruit_dust,
         core_crunch_seed = EXCLUDED.core_crunch_seed,
-        star_gel_essence = EXCLUDED.star_gel_essence;
+        star_gel_essence = EXCLUDED.star_gel_essence,
+        point = EXCLUDED.point;
     `,
     [userId, amount]
   );
@@ -54,8 +56,23 @@ async function initUserWeiquan() {
       energy_sugar INTEGER NOT NULL DEFAULT 0 CHECK (energy_sugar >= 0),
       dream_fruit_dust INTEGER NOT NULL DEFAULT 0 CHECK (dream_fruit_dust >= 0),
       core_crunch_seed INTEGER NOT NULL DEFAULT 0 CHECK (core_crunch_seed >= 0),
-      star_gel_essence INTEGER NOT NULL DEFAULT 0 CHECK (star_gel_essence >= 0)
+      star_gel_essence INTEGER NOT NULL DEFAULT 0 CHECK (star_gel_essence >= 0),
+      point INTEGER NOT NULL DEFAULT 0 CHECK (point >= 0)
     );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS community_comments (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      comment TEXT NOT NULL,
+      commented_date TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    ALTER TABLE user_resources
+    ADD COLUMN IF NOT EXISTS point INTEGER NOT NULL DEFAULT 0;
   `);
 
   await pool.query('BEGIN');

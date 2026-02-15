@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Energy Sugar</title>
+  <desc id="desc">Blue crystal cubes representing energy sugar.</desc>
+  <rect width="128" height="128" rx="20" fill="#08101c"/>
+  <rect x="12" y="12" width="104" height="104" rx="16" fill="#0d1a2d" stroke="#5ea7ff" stroke-opacity="0.25"/>
+  <g transform="translate(64 64)">
+    <polygon points="-30,-6 -16,-24 0,-6 -16,12" fill="#6bc3ff"/>
+    <polygon points="-16,-24 0,-6 0,-32" fill="#9edbff"/>
+    <polygon points="0,-6 -16,12 0,24 16,6" fill="#4aa7f5"/>
+    <polygon points="0,-32 0,-6 16,-24" fill="#c7ecff"/>
+    <polygon points="16,-24 0,-6 16,6 30,-12" fill="#86d0ff"/>
+    <polygon points="-8,28 8,10 24,28 8,46" fill="#7cbcff"/>
+  </g>
+</svg>

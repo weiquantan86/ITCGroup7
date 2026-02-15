@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import * as THREE from "three";
-import { createPlayer, type PlayerUiState } from "../entity/character/general/player";
+import { createPlayer, type PlayerUiState } from "../../entity/character/general/player";
 import { getSceneDefinition, type SceneUiState } from "./registry";
 
 export default function SceneLauncher({

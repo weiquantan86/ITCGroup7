@@ -10,7 +10,7 @@ type PanelProps = {
 function Panel({ children, className = "" }: PanelProps) {
   return (
     <div
-      className={`relative overflow-hidden rounded-[24px] border border-slate-200/20 bg-[#0d1219]/90 p-6 shadow-[0_0_28px_rgba(90,140,220,0.14)] before:pointer-events-none before:absolute before:inset-[6px] before:rounded-[18px] before:border before:border-slate-200/10 before:content-[''] ${className}`}
+      className={`relative overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_0_28px_rgba(59,130,246,0.16)] backdrop-blur-md before:pointer-events-none before:absolute before:inset-[6px] before:rounded-[20px] before:border before:border-white/10 before:content-[''] ${className}`}
     >
       {children}
     </div>
@@ -24,19 +24,21 @@ type MenuButtonProps = {
 };
 
 function MenuButton({ label, className = "", href }: MenuButtonProps) {
-  const sharedClassName = `group relative flex w-full items-center justify-center rounded-[20px] border border-slate-200/20 bg-[#111823]/90 px-7 py-7 text-center text-xl font-semibold tracking-wide text-slate-100 shadow-[0_0_18px_rgba(90,140,220,0.18)] transition duration-200 hover:border-slate-100/40 hover:shadow-[0_0_26px_rgba(130,190,255,0.26)] ${className}`;
+  const sharedClassName = `group relative flex w-full items-center justify-center rounded-[20px] border border-white/15 bg-gradient-to-r from-slate-900/85 to-slate-800/75 px-7 py-7 text-center text-xl font-semibold tracking-wide text-slate-100 shadow-[0_8px_24px_rgba(15,23,42,0.35)] transition duration-200 hover:-translate-y-0.5 hover:border-white/30 hover:shadow-[0_12px_30px_rgba(14,165,233,0.25)] ${className}`;
+
   if (href) {
     return (
       <a href={href} className={sharedClassName}>
         <span className="relative z-10">{label}</span>
-        <span className="pointer-events-none absolute inset-[6px] rounded-[16px] border border-slate-200/10 transition duration-200 group-hover:border-slate-100/25" />
+        <span className="pointer-events-none absolute inset-[6px] rounded-[14px] border border-white/10 transition duration-200 group-hover:border-white/20" />
       </a>
     );
   }
+
   return (
     <button className={sharedClassName}>
       <span className="relative z-10">{label}</span>
-      <span className="pointer-events-none absolute inset-[6px] rounded-[16px] border border-slate-200/10 transition duration-200 group-hover:border-slate-100/25" />
+      <span className="pointer-events-none absolute inset-[6px] rounded-[14px] border border-white/10 transition duration-200 group-hover:border-white/20" />
     </button>
   );
 }
@@ -94,95 +96,89 @@ export default async function UserPage() {
   }
 
   return (
-    <main className="h-screen w-full bg-[#06080b] text-slate-200 overflow-hidden">
-      <div className="relative h-full w-full bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:32px_32px]">
-        <div className="pointer-events-none absolute right-6 top-6 z-20 flex items-center justify-center">
-          <button
-            type="button"
-            aria-label="Evil button"
-            className="pointer-events-auto group relative flex h-16 w-16 items-center justify-center rounded-full border border-rose-200/40 bg-[radial-gradient(circle_at_top,#3b0a12,#0a0d12_70%)] text-2xl font-semibold text-rose-200 shadow-[0_0_26px_rgba(248,113,113,0.35)] transition duration-200 hover:scale-105 hover:border-rose-100/80 hover:text-rose-100 hover:shadow-[0_0_34px_rgba(248,113,113,0.55)]"
-          >
-            <span className="relative z-10 translate-y-[1px]">{">:)"}</span>
-            <span className="pointer-events-none absolute inset-[4px] rounded-full border border-rose-200/15" />
-          </button>
-        </div>
-        <div className="mx-auto flex h-full w-full max-w-[1920px] items-stretch px-6 py-6 lg:px-12 xl:px-16">
-          <div className="h-full w-full rounded-[36px] border border-slate-200/20 bg-[#0b1016]/80 py-10 px-12 shadow-[0_0_52px_rgba(70,120,210,0.22)] lg:py-12 lg:px-14">
-            <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[1fr_1.5fr_1fr] lg:grid-rows-[280px_minmax(0,1fr)] xl:grid-rows-[320px_minmax(0,1fr)]">
-              <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
-                <div className="flex h-full items-center justify-center gap-3 text-base text-slate-200/90">
-                  <span className="h-2.5 w-2.5 rounded-full bg-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.7)]" />
-                  <span className="text-center text-2xl font-semibold tracking-wide md:text-3xl">
-                    {username}
-                    <span className="ml-2 inline-flex items-center text-amber-300">
-                      {isAuthorised ? "★" : ""}
+    <main className="relative h-screen w-full overflow-hidden bg-[#05070d] text-slate-100">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[length:38px_38px]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_25%,rgba(251,146,60,0.46),transparent_44%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.4),transparent_42%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.62)_48%,rgba(2,6,23,0.86)_68%,rgba(2,6,23,0.95)_100%)]" />
+
+      <div className="relative mx-auto flex h-full w-full max-w-[1920px] items-stretch px-6 py-6 lg:px-12 xl:px-16">
+        <div className="h-full w-full rounded-[36px] border border-white/10 bg-white/[0.03] py-10 px-12 shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md lg:py-12 lg:px-14">
+          <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[1fr_1.5fr_1fr] lg:grid-rows-[280px_minmax(0,1fr)] xl:grid-rows-[320px_minmax(0,1fr)]">
+            <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
+              <div className="flex h-full items-center justify-center gap-3 text-base text-slate-200/90">
+                <span className="h-2.5 w-2.5 rounded-full bg-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.7)]" />
+                <span className="inline-flex items-center text-center text-2xl font-semibold tracking-wide md:text-3xl">
+                  {username}
+                  {isAuthorised ? (
+                    <span className="ml-2.5 inline-flex h-8 w-8 items-center justify-center">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-8 w-8 drop-shadow-[0_0_10px_rgba(251,191,36,0.95)]"
+                        aria-label="Authorised"
+                        role="img"
+                      >
+                        <path
+                          d="M12 2.6l2.75 5.57 6.15.9-4.45 4.34 1.05 6.13L12 16.66l-5.5 2.88 1.05-6.13L3.1 9.07l6.15-.9L12 2.6z"
+                          fill="#facc15"
+                          stroke="#fff7cc"
+                          strokeWidth="1.5"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
                     </span>
-                  </span>
-                </div>
-                <a
-                  href="/userSystem/userProfile"
-                  className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-slate-200/15 bg-[#111722]/80 px-4 py-2 text-sm font-semibold text-slate-100 shadow-[0_0_12px_rgba(90,140,220,0.16)] transition duration-200 hover:border-slate-100/35 hover:shadow-[0_0_18px_rgba(120,180,255,0.25)]"
+                  ) : null}
+                </span>
+              </div>
+
+              <a
+                href="/userSystem/userProfile"
+                className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-orange-500/85 to-pink-500/80 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition duration-200 hover:brightness-105"
+              >
+                View my profile
+                <span className="pointer-events-none absolute inset-[5px] rounded-[14px] border border-white/20" />
+              </a>
+
+              <form action="/api/logout" method="post" className="h-full w-full">
+                <button
+                  type="submit"
+                  className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-sky-500/85 to-cyan-400/85 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(14,165,233,0.28)] transition duration-200 hover:brightness-105"
                 >
-                  View my profile
-                  <span className="pointer-events-none absolute inset-0 opacity-70">
-                    <span className="absolute left-[10%] top-[18%] h-[70%] w-[2px] rotate-[10deg] bg-gradient-to-b from-transparent via-slate-100/25 to-transparent" />
-                    <span className="absolute left-[44%] top-[8%] h-[84%] w-[2px] -rotate-[9deg] bg-gradient-to-b from-transparent via-slate-100/20 to-transparent" />
-                    <span className="absolute left-[70%] top-[24%] h-[60%] w-[2px] rotate-[14deg] bg-gradient-to-b from-transparent via-slate-100/3 to-transparent" />
-                    <span className="absolute left-[18%] top-[60%] h-[2px] w-[40%] -rotate-[7deg] bg-gradient-to-r from-transparent via-slate-100/25 to-transparent" />
-                  </span>
-                  <span className="pointer-events-none absolute inset-[5px] rounded-[14px] border border-slate-200/10" />
-                </a>
-                <form action="/api/logout" method="post" className="h-full w-full">
-                  <button
-                    type="submit"
-                    className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-slate-200/15 bg-[#111722]/80 px-4 py-2 text-sm font-semibold text-slate-100 shadow-[0_0_12px_rgba(90,140,220,0.16)] transition duration-200 hover:border-slate-100/35 hover:shadow-[0_0_18px_rgba(120,180,255,0.25)]"
-                  >
-                    Log out
-                    <span className="pointer-events-none absolute inset-0 opacity-70">
-                      <span className="absolute left-[12%] top-[18%] h-[70%] w-[2px] rotate-[12deg] bg-gradient-to-b from-transparent via-slate-100/30 to-transparent" />
-                      <span className="absolute left-[48%] top-[10%] h-[80%] w-[2px] -rotate-[8deg] bg-gradient-to-b from-transparent via-slate-100/25 to-transparent" />
-                      <span className="absolute left-[72%] top-[22%] h-[60%] w-[2px] rotate-[16deg] bg-gradient-to-b from-transparent via-slate-100/35 to-transparent" />
-                      <span className="absolute left-[20%] top-[62%] h-[2px] w-[38%] -rotate-[6deg] bg-gradient-to-r from-transparent via-slate-100/25 to-transparent" />
-                    </span>
-                    <span className="pointer-events-none absolute inset-[5px] rounded-[14px] border border-slate-200/10" />
-                  </button>
-                </form>
-              </Panel>
+                  Log out
+                  <span className="pointer-events-none absolute inset-[5px] rounded-[14px] border border-white/20" />
+                </button>
+              </form>
+            </Panel>
 
-              <Panel className="flex h-full items-center justify-between gap-10 px-10 py-8">
-                <div className="h-14 w-14 rounded-full border border-slate-200/30 bg-[#0d141d]/90 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
-                <div className="text-center text-6xl font-semibold italic tracking-[0.2em] text-slate-100 md:text-7xl">
-                  Lab 7½
-                </div>
-                <div className="h-14 w-14 rounded-full border border-slate-200/30 bg-[#0d141d]/90 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
-              </Panel>
+            <Panel className="flex h-full items-center justify-between gap-10 px-10 py-8">
+              <div className="h-14 w-14 rounded-full border border-white/20 bg-white/10 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
+              <div className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-center text-6xl font-semibold italic tracking-[0.16em] text-transparent md:text-7xl">
+                Lab 7.5
+              </div>
+              <div className="h-14 w-14 rounded-full border border-white/20 bg-white/10 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
+            </Panel>
 
-              <Panel className="grid h-full min-h-0 grid-rows-4 gap-6 lg:col-start-3 lg:row-span-2 lg:row-start-1">
-                <MenuButton
-                  label="Snack Gacha"
-                  className="h-full text-4xl"
-                  href="/gacha"
-                />
-                <MenuButton
-                  label="Character"
-                  className="h-full"
-                  href="/characterManagement"
-                />
-                <MenuButton label="Storage" className="h-full" href="/storage" />
-                <MenuButton label="Community" className="h-full" href="/community" />
-              </Panel>
+            <Panel className="grid h-full min-h-0 grid-rows-4 gap-6 lg:col-start-3 lg:row-span-2 lg:row-start-1">
+              <MenuButton label="Snack Gacha" className="h-full text-4xl" href="/gacha" />
+              <MenuButton label="Character" className="h-full" href="/characterManagement" />
+              <MenuButton label="Storage" className="h-full" href="/storage" />
+              <MenuButton label="Community" className="h-full" href="/community" />
+            </Panel>
 
-              <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
-                <MenuButton label="Game 1" className="h-full" /> {/* Mech Onslaught */}
-                <MenuButton label="Game 2" className="h-full" /> {/* Dragon Hunter */}
-                <MenuButton label="Game" className="h-full" /> {/* Bluestone Colossus */}
-              </Panel>
+            <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
+              <MenuButton
+                label="Mochi Soldier Surge"
+                className="h-full"
+                href="/mochiSoldierSurge"
+              />
+              <MenuButton label="Game 2" className="h-full" />
+              <MenuButton label="Game" className="h-full" />
+            </Panel>
 
-              <Panel className="grid h-full min-h-0 grid-rows-2 gap-6">
-                <MenuButton label="Subgame1" className="h-full" /> {/* Deathmatch */}
-                <MenuButton label="Subgame2" className="h-full" /> {/* Can Wars */}
-              </Panel>
-            </div>
+            <Panel className="grid h-full min-h-0 grid-rows-2 gap-6">
+              <MenuButton label="Subgame1" className="h-full" />
+              <MenuButton label="Subgame2" className="h-full" />
+            </Panel>
           </div>
         </div>
       </div>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Star Gel Essence</title>
+  <desc id="desc">Star in gel droplet representing star gel essence.</desc>
+  <rect width="128" height="128" rx="20" fill="#07151b"/>
+  <rect x="12" y="12" width="104" height="104" rx="16" fill="#0d2029" stroke="#67e8f9" stroke-opacity="0.28"/>
+  <path d="M64 24c22 0 36 16 36 35 0 20-16 37-36 47-20-10-36-27-36-47 0-19 14-35 36-35z" fill="#67e8f9" fill-opacity="0.45"/>
+  <path d="M64 38l7 14 15 2-11 10 3 15-14-7-14 7 3-15-11-10 15-2z" fill="#ecfeff"/>
+  <circle cx="64" cy="88" r="4" fill="#a5f3fc"/>
+</svg>

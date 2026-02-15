@@ -52,7 +52,7 @@ export default function CharacterManagementShell({
     } catch (error) {
       console.error(error);
     } finally {
-      router.push("/scenes/test");
+      router.push("/asset/scenes/test");
       setIsTryingCharacter(false);
     }
   };

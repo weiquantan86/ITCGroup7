@@ -45,9 +45,10 @@ export async function POST(request) {
           energy_sugar,
           dream_fruit_dust,
           core_crunch_seed,
-          star_gel_essence
+          star_gel_essence,
+          point
         )
-        VALUES ($1, 0, 0, 0, 0)
+        VALUES ($1, 0, 0, 0, 0, 0)
         ON CONFLICT (user_id) DO NOTHING
       `,
       [userId]
