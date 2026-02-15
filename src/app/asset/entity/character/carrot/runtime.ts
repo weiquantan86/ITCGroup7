@@ -35,6 +35,12 @@ type ChargeHud = {
   dispose: () => void;
 };
 
+type DemonFaceFlickerFx = {
+  setActive: (active: boolean) => void;
+  update: (now: number) => void;
+  dispose: () => void;
+};
+
 type SkillRTornadoParticleState = {
   mesh: THREE.Mesh;
   swirlOffset: number;
@@ -181,6 +187,146 @@ const createCarrotChargeHud = (mount?: HTMLElement): ChargeHud => {
   };
 };
 
+const createDemonFaceFlickerFx = (avatar: THREE.Object3D): DemonFaceFlickerFx => {
+  let active = false;
+  let lastUpdateAt = 0;
+  let flickerElapsed = 0;
+  let isWhite = true;
+  const flickerInterval = 0.25;
+  let targetMesh: THREE.Mesh | null = null;
+  const materialEntries: Array<{
+    material: THREE.Material & {
+      color?: THREE.Color;
+      emissive?: THREE.Color;
+      emissiveIntensity?: number;
+    };
+    baseColor?: THREE.Color;
+    baseEmissive?: THREE.Color;
+    baseEmissiveIntensity: number;
+  }> = [];
+
+  const clearMaterials = () => {
+    for (let i = 0; i < materialEntries.length; i += 1) {
+      materialEntries[i].material.dispose();
+    }
+    materialEntries.length = 0;
+  };
+
+  const resolveTarget = () => {
+    if (targetMesh?.parent && materialEntries.length > 0) return;
+    targetMesh = null;
+    clearMaterials();
+
+    let visorCandidate: THREE.Mesh | null = null;
+    let faceCandidate: THREE.Mesh | null = null;
+    let headCandidate: THREE.Mesh | null = null;
+    avatar.traverse((node) => {
+      if (!(node instanceof THREE.Mesh)) return;
+      const name = (node.name || "").toLowerCase();
+      if (!visorCandidate && name === "visor") {
+        visorCandidate = node;
+        return;
+      }
+      if (!faceCandidate && name.includes("face")) {
+        faceCandidate = node;
+      }
+      if (!headCandidate && name === "headball") {
+        headCandidate = node;
+      }
+    });
+    targetMesh = visorCandidate ?? faceCandidate ?? headCandidate;
+    if (!targetMesh) return;
+
+    const sourceMaterials = Array.isArray(targetMesh.material)
+      ? targetMesh.material
+      : [targetMesh.material];
+    if (!sourceMaterials.length) return;
+
+    const clonedMaterials = sourceMaterials.map(
+      (material) =>
+        material.clone() as THREE.Material & {
+          color?: THREE.Color;
+          emissive?: THREE.Color;
+          emissiveIntensity?: number;
+        }
+    );
+    targetMesh.material = Array.isArray(targetMesh.material)
+      ? clonedMaterials
+      : clonedMaterials[0];
+
+    for (let i = 0; i < clonedMaterials.length; i += 1) {
+      const material = clonedMaterials[i];
+      materialEntries.push({
+        material,
+        baseColor: material.color?.clone(),
+        baseEmissive: material.emissive?.clone(),
+        baseEmissiveIntensity: material.emissiveIntensity ?? 0,
+      });
+    }
+  };
+
+  const applyPalette = () => {
+    if (!materialEntries.length) return;
+    if (active) {
+      for (let i = 0; i < materialEntries.length; i += 1) {
+        const entry = materialEntries[i];
+        if (isWhite) {
+          entry.material.color?.set(0xffffff);
+          entry.material.emissive?.set(0xffffff);
+          entry.material.emissiveIntensity = 0.82;
+        } else {
+          entry.material.color?.set(0x000000);
+          entry.material.emissive?.set(0x000000);
+          entry.material.emissiveIntensity = 0;
+        }
+      }
+      return;
+    }
+    for (let i = 0; i < materialEntries.length; i += 1) {
+      const entry = materialEntries[i];
+      if (entry.baseColor) {
+        entry.material.color?.copy(entry.baseColor);
+      }
+      if (entry.baseEmissive) {
+        entry.material.emissive?.copy(entry.baseEmissive);
+      }
+      entry.material.emissiveIntensity = entry.baseEmissiveIntensity;
+    }
+  };
+
+  return {
+    setActive: (nextActive) => {
+      active = nextActive;
+      if (!active) {
+        lastUpdateAt = 0;
+        flickerElapsed = 0;
+        isWhite = true;
+      }
+      resolveTarget();
+      applyPalette();
+    },
+    update: (now) => {
+      if (!active) return;
+      resolveTarget();
+      const deltaSeconds =
+        lastUpdateAt > 0
+          ? THREE.MathUtils.clamp((now - lastUpdateAt) / 1000, 0, 0.08)
+          : 0;
+      lastUpdateAt = now;
+      flickerElapsed += deltaSeconds;
+      while (flickerElapsed >= flickerInterval) {
+        flickerElapsed -= flickerInterval;
+        isWhite = !isWhite;
+      }
+      applyPalette();
+    },
+    dispose: () => {
+      clearMaterials();
+      targetMesh = null;
+    },
+  };
+};
+
 export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
   fireProjectile,
@@ -193,6 +339,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
   const chargeHud = createCarrotChargeHud(mount);
+  const demonFaceFlickerFx = createDemonFaceFlickerFx(avatar);
 
   const punchConfig = {
     maxChargeMs: 1600,
@@ -1013,6 +1160,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       avatar.scale.set(1, 1, 1);
     }
     restoreDemonFormMaterials();
+    demonFaceFlickerFx.setActive(false);
     restoreDemonLegs();
     updateDemonFootRing(now, false);
     clearDemonMirrorArm();
@@ -1032,6 +1180,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     demonFormState.projectileCooldownUntil = 0;
     setDemonScaleMultiplier(demonFormConfig.scaleMultiplier);
     applyDemonFormMaterials();
+    demonFaceFlickerFx.setActive(true);
     stopDemonTransitionFx();
     updateDemonFootRing(now, true);
   };
@@ -1910,6 +2059,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     restoreIdlePose();
     passiveManaElapsedMs = 0;
     deactivateDemonForm({ now: performance.now(), triggerHeal: false });
+    demonFaceFlickerFx.setActive(false);
     phantomModifier.reset();
     baseRuntime.resetState?.();
   };
@@ -2005,6 +2155,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       baseRuntime.update(args);
       attachArm(args.arms);
       const demonActive = isDemonFormActive(args.now);
+      demonFaceFlickerFx.setActive(demonActive);
+      demonFaceFlickerFx.update(args.now);
       if (demonActive) {
         applyDemonArmPose(args.arms, args.now, args.isMoving);
         hideDemonLegs(args.legLeft, args.legRight);
@@ -2028,6 +2180,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       resetState();
       phantomModifier.dispose();
       chargeHud.dispose();
+      demonFaceFlickerFx.dispose();
       clearDemonMirrorArm();
       demonFootRingMesh.geometry.dispose();
       (demonFootRingMesh.material as THREE.Material).dispose();

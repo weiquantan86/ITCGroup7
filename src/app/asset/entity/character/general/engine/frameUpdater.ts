@@ -60,8 +60,18 @@ export const createPlayerFrameUpdater = ({
   worldTick,
   emitUiState,
 }: CreatePlayerFrameUpdaterArgs) => {
+  const miniOrbitYawRotateSpeed = 1.8;
+  const miniOrbitPitchRotateSpeed = 1.35;
+  const miniOrbitDistanceAdjustSpeed = 3.2;
+  const miniOrbitPitchMinOffset = -0.85;
+  const miniOrbitPitchMaxOffset = 0.85;
+  const miniOrbitDistanceMinOffset = -2;
+  const miniOrbitDistanceMaxOffset = 6;
   let velocityY = 0;
   let isGrounded = true;
+  let miniOrbitYawOffset = 0;
+  let miniOrbitPitchOffset = 0;
+  let miniOrbitDistanceOffset = 0;
   const moveDir = new THREE.Vector3();
   const forward = new THREE.Vector3();
   const right = new THREE.Vector3();
@@ -105,6 +115,30 @@ export const createPlayerFrameUpdater = ({
           right,
         });
     const shiftHeld = pressedKeys.has("shift");
+    const miniOrbitYawInput =
+      (pressedKeys.has("z") ? 1 : 0) + (pressedKeys.has("x") ? -1 : 0);
+    if (miniOrbitYawInput !== 0) {
+      miniOrbitYawOffset += miniOrbitYawInput * miniOrbitYawRotateSpeed * delta;
+    }
+    const miniOrbitPitchInput =
+      (pressedKeys.has("c") ? 1 : 0) + (pressedKeys.has("v") ? -1 : 0);
+    if (miniOrbitPitchInput !== 0) {
+      miniOrbitPitchOffset = THREE.MathUtils.clamp(
+        miniOrbitPitchOffset + miniOrbitPitchInput * miniOrbitPitchRotateSpeed * delta,
+        miniOrbitPitchMinOffset,
+        miniOrbitPitchMaxOffset
+      );
+    }
+    const miniOrbitDistanceInput =
+      (pressedKeys.has("b") ? 1 : 0) + (pressedKeys.has("n") ? -1 : 0);
+    if (miniOrbitDistanceInput !== 0) {
+      miniOrbitDistanceOffset = THREE.MathUtils.clamp(
+        miniOrbitDistanceOffset +
+          miniOrbitDistanceInput * miniOrbitDistanceAdjustSpeed * delta,
+        miniOrbitDistanceMinOffset,
+        miniOrbitDistanceMaxOffset
+      );
+    }
     let isMoving = false;
 
     if (hasMoveInput) {
@@ -159,6 +193,9 @@ export const createPlayerFrameUpdater = ({
       avatar,
       eyeHeight: visualState.eyeHeight * cameraScaleMultiplier,
       lookState,
+      miniOrbitYawOffset,
+      miniOrbitPitchOffset,
+      miniOrbitDistanceOffset,
       followHeadBone: statsState.cameraConfig.followHeadBone,
       miniBehindDistance:
         statsState.cameraConfig.miniBehindDistance * cameraScaleMultiplier,
@@ -230,6 +267,9 @@ export const createPlayerFrameUpdater = ({
   const resetKinematics = () => {
     velocityY = 0;
     isGrounded = true;
+    miniOrbitYawOffset = 0;
+    miniOrbitPitchOffset = 0;
+    miniOrbitDistanceOffset = 0;
   };
 
   const jump = (jumpVelocity: number) => {

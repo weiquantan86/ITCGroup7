@@ -17,9 +17,11 @@ export const profile: CharacterProfile = {
       q: {
         id: "q",
         label: "Q",
-        description: `CD: 0s
-Mana: 20 EN
-Description: ...`,
+        cooldownMs: 10000,
+        cost: 0,
+        description: `CD: 10s
+Mana: 0 EN
+Description: Enter Mech-Electric state. Requires at least 70 EN to activate, drains 5 EN per second, grants 1.2x move speed, and charged basic attack fires 2 explosive shots.`,
       },
       e: {
         id: "e",

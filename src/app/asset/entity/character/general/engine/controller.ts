@@ -390,6 +390,7 @@ export const createPlayer = ({
       performMeleeAttack,
       applyHealth,
       applyEnergy: statsState.applyEnergy,
+      spendEnergy: statsState.spendEnergy,
       applyMana: statsState.applyMana,
       clearSkillCooldown: statsState.clearSkillCooldown,
       getCurrentStats: () => statsState.currentStats,

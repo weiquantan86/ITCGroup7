@@ -764,7 +764,7 @@ const createTrainingScene = (
       label: "Tester",
       pathToken: "/tester/",
       stats: {
-        health: 360,
+        health: 1000,
         attack: 0,
         defense: 0,
         speed: 0,
@@ -848,7 +848,7 @@ const createTrainingScene = (
   };
 
   const handleTesterDeath = (now: number, direction: THREE.Vector3) => {
-    testerRespawnAt = now + 5000;
+    testerRespawnAt = now + 2000;
     testerAnchor.visible = false;
     spawnTesterExplosion(direction);
     emitTesterState();

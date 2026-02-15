@@ -89,14 +89,14 @@ const faceLineMat = new THREE.MeshBasicMaterial({
 const group = new THREE.Group();
 
 const torso = new THREE.Mesh(
-  new THREE.CapsuleGeometry(0.39, 0.9, 6, 16),
+  new THREE.CapsuleGeometry(0.33, 0.9, 6, 16),
   clothSecondary
 );
 torso.name = "torso";
 torso.position.y = 0.86;
 
 const waistBelt = new THREE.Mesh(
-  new THREE.TorusGeometry(0.42, 0.04, 12, 42),
+  new THREE.TorusGeometry(0.36, 0.04, 12, 42),
   accentMat
 );
 waistBelt.position.y = -0.18;
@@ -174,8 +174,8 @@ const armLeftGroup = new THREE.Group();
 const armRightGroup = new THREE.Group();
 armLeftGroup.name = "armLeft";
 armRightGroup.name = "armRight";
-armLeftGroup.position.set(-0.53, 0.58, 0);
-armRightGroup.position.set(0.53, 0.58, 0);
+armLeftGroup.position.set(-0.49, 0.58, 0);
+armRightGroup.position.set(0.49, 0.58, 0);
 armLeftGroup.rotation.z = 0.08;
 armRightGroup.rotation.z = -0.08;
 

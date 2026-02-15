@@ -12,6 +12,9 @@ type UpdatePlayerCameraRigArgs = {
   avatar: THREE.Object3D;
   eyeHeight: number;
   lookState: PlayerLookState;
+  miniOrbitYawOffset: number;
+  miniOrbitPitchOffset: number;
+  miniOrbitDistanceOffset: number;
   followHeadBone: boolean;
   miniBehindDistance: number;
   miniUpDistance: number;
@@ -49,6 +52,8 @@ export const createPlayerCameraRig = ({
   const headWorldTarget = new THREE.Vector3();
   const miniTarget = new THREE.Vector3();
   const miniOffset = new THREE.Vector3();
+  const miniPitchMin = THREE.MathUtils.degToRad(-20);
+  const miniPitchMax = THREE.MathUtils.degToRad(80);
 
   const updateMiniViewport = (width: number, height: number) => {
     if (!showMiniMap) {
@@ -65,6 +70,9 @@ export const createPlayerCameraRig = ({
     avatar,
     eyeHeight,
     lookState,
+    miniOrbitYawOffset,
+    miniOrbitPitchOffset,
+    miniOrbitDistanceOffset,
     followHeadBone,
     miniBehindDistance,
     miniUpDistance,
@@ -97,10 +105,23 @@ export const createPlayerCameraRig = ({
     );
     const behindDistance = Math.max(1, miniBehindDistance);
     const upDistance = Math.max(0.2, miniUpDistance);
+    const miniYaw = lookState.yaw + miniOrbitYawOffset;
+    const miniRadius = Math.max(
+      0.8,
+      Math.hypot(behindDistance, upDistance) + miniOrbitDistanceOffset
+    );
+    const miniBasePitch = Math.atan2(upDistance, behindDistance);
+    const miniPitch = THREE.MathUtils.clamp(
+      miniBasePitch + miniOrbitPitchOffset,
+      miniPitchMin,
+      miniPitchMax
+    );
+    const miniHorizontalDistance = Math.cos(miniPitch) * miniRadius;
+    const miniVerticalDistance = Math.sin(miniPitch) * miniRadius;
     miniOffset.set(
-      -Math.sin(lookState.yaw) * behindDistance,
-      upDistance,
-      -Math.cos(lookState.yaw) * behindDistance
+      -Math.sin(miniYaw) * miniHorizontalDistance,
+      miniVerticalDistance,
+      -Math.cos(miniYaw) * miniHorizontalDistance
     );
     miniCamera.position.copy(miniTarget).add(miniOffset);
     miniCamera.lookAt(miniTarget);

@@ -277,6 +277,7 @@ export interface CharacterRuntimeFactory {
     performMeleeAttack?: (args: MeleeAttackArgs) => number;
     applyHealth?: (amount: number) => number;
     applyEnergy?: (amount: number) => number;
+    spendEnergy?: (amount: number) => number;
     applyMana?: (amount: number) => number;
     clearSkillCooldown?: (key: SkillKey) => void;
     getCurrentStats?: () => CharacterStats;
