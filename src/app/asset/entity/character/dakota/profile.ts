@@ -5,7 +5,10 @@ export const profile: CharacterProfile = {
   label: "Dakota",
   pathToken: "/dakota/",
   energy: {
-    hitGain: 18,
+    hitGain: 0,
+  },
+  mana: {
+    passivePerSecond: 0,
   },
   movement: {
     baseSpeed: 5,

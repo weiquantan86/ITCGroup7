@@ -12,6 +12,7 @@ export const shurikenProjectileType: ProjectileTypeDefinition = {
     damageBase: 11,
     damagePerSpeed: 0.58,
     energyGainOnHit: 4,
+    manaGainOnHit: null,
     splitOnImpact: true,
     explosionRadius: 3.4,
     explosionDamage: 14,

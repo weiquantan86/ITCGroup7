@@ -10,6 +10,7 @@ export interface ProjectileTypeDefaults {
   damageBase: number;
   damagePerSpeed: number;
   energyGainOnHit: number | null;
+  manaGainOnHit: number | null;
   splitOnImpact: boolean;
   explosionRadius: number;
   explosionDamage: number;
@@ -21,6 +22,7 @@ export interface ProjectileTypeDefaults {
 
 export interface ProjectileTypeRules {
   grantEnergyOnTargetHit: boolean;
+  grantManaOnTargetHit: boolean;
   explodeOnTargetHit: boolean;
   explodeOnWorldHit: boolean;
   explodeOnExpire: boolean;
@@ -74,6 +76,7 @@ export interface ProjectileTypeTargetHitArgs {
   direction: THREE.Vector3;
   applyTargetDamage: () => void;
   grantDefaultEnergyOnHit: () => void;
+  grantDefaultManaOnHit: () => void;
   triggerExplosion: (primaryTargetId?: string | null) => void;
   removeProjectile: () => void;
 }

@@ -25,11 +25,15 @@ export const createStandardProjectileHooks = (
     targetId,
     applyTargetDamage,
     grantDefaultEnergyOnHit,
+    grantDefaultManaOnHit,
     triggerExplosion,
     removeProjectile,
   }) => {
     if (projectile.grantEnergyOnTargetHit) {
       grantDefaultEnergyOnHit();
+    }
+    if (projectile.grantManaOnTargetHit) {
+      grantDefaultManaOnHit();
     }
     applyTargetDamage();
     if (projectile.explodeOnTargetHit) {

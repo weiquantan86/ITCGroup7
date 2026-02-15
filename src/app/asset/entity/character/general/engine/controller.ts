@@ -147,12 +147,146 @@ export const createPlayer = ({
     eyeHeight: 1.6,
     modelFootOffset: 0,
   };
+  const playerHitFlashColor = new THREE.Color(0xff3b30);
+  const playerHitFlashOriginalState = new Map<
+    THREE.Material,
+    {
+      color?: THREE.Color;
+      emissive?: THREE.Color;
+      emissiveIntensity?: number;
+    }
+  >();
+  const playerHitFlashMaterials = new Set<THREE.Material>();
+  const playerHitFlashDurationMs = 110;
+  let playerHitFlashUntil = 0;
+  let playerHitFlashTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const isColorMaterial = (
+    material: THREE.Material
+  ): material is THREE.Material & { color: THREE.Color } => {
+    return Boolean(
+      (material as THREE.Material & { color?: THREE.Color }).color?.isColor
+    );
+  };
+
+  const isEmissiveMaterial = (
+    material: THREE.Material
+  ): material is THREE.Material & {
+    emissive: THREE.Color;
+    emissiveIntensity: number;
+  } => {
+    const mat = material as THREE.Material & {
+      emissive?: THREE.Color;
+      emissiveIntensity?: number;
+    };
+    return Boolean(mat.emissive?.isColor);
+  };
+
+  const savePlayerHitMaterialState = (material: THREE.Material) => {
+    if (playerHitFlashOriginalState.has(material)) return;
+    const state: {
+      color?: THREE.Color;
+      emissive?: THREE.Color;
+      emissiveIntensity?: number;
+    } = {};
+    if (isColorMaterial(material)) {
+      state.color = material.color.clone();
+    }
+    if (isEmissiveMaterial(material)) {
+      state.emissive = material.emissive.clone();
+      state.emissiveIntensity = material.emissiveIntensity;
+    }
+    playerHitFlashOriginalState.set(material, state);
+  };
+
+  const collectPlayerHitMaterials = (): THREE.Material[] => {
+    const materials = new Set<THREE.Material>();
+    const collectFromObject = (object: THREE.Object3D | null | undefined) => {
+      if (!object) return;
+      object.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh || !mesh.material) return;
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach((material) => {
+            if (material) materials.add(material);
+          });
+        } else {
+          materials.add(mesh.material);
+        }
+      });
+    };
+    collectFromObject(visualState.avatarModel);
+    collectFromObject(avatarBody);
+    collectFromObject(avatarGlow);
+    return Array.from(materials);
+  };
+
+  const restorePlayerHitFlash = () => {
+    playerHitFlashMaterials.forEach((material) => {
+      const state = playerHitFlashOriginalState.get(material);
+      if (!state) return;
+      if (state.color && isColorMaterial(material)) {
+        material.color.copy(state.color);
+      }
+      if (state.emissive && isEmissiveMaterial(material)) {
+        material.emissive.copy(state.emissive);
+        if (typeof state.emissiveIntensity === "number") {
+          material.emissiveIntensity = state.emissiveIntensity;
+        }
+      }
+    });
+    playerHitFlashMaterials.clear();
+  };
+
+  const clearPlayerHitFlash = () => {
+    if (playerHitFlashTimer) {
+      clearTimeout(playerHitFlashTimer);
+      playerHitFlashTimer = null;
+    }
+    playerHitFlashUntil = 0;
+    restorePlayerHitFlash();
+    playerHitFlashOriginalState.clear();
+  };
+
+  const schedulePlayerHitFlashRestore = () => {
+    if (playerHitFlashTimer) {
+      clearTimeout(playerHitFlashTimer);
+      playerHitFlashTimer = null;
+    }
+    const delay = Math.max(0, playerHitFlashUntil - performance.now());
+    playerHitFlashTimer = setTimeout(() => {
+      playerHitFlashTimer = null;
+      if (performance.now() < playerHitFlashUntil) {
+        schedulePlayerHitFlashRestore();
+        return;
+      }
+      restorePlayerHitFlash();
+    }, delay);
+  };
+
+  const triggerPlayerHitFlash = () => {
+    const materials = collectPlayerHitMaterials();
+    if (!materials.length) return;
+    materials.forEach((material) => {
+      savePlayerHitMaterialState(material);
+      if (isColorMaterial(material)) {
+        material.color.copy(playerHitFlashColor);
+      }
+      if (isEmissiveMaterial(material)) {
+        material.emissive.copy(playerHitFlashColor);
+        material.emissiveIntensity = Math.max(material.emissiveIntensity, 0.78);
+      }
+      playerHitFlashMaterials.add(material);
+    });
+    playerHitFlashUntil = performance.now() + playerHitFlashDurationMs;
+    schedulePlayerHitFlashRestore();
+  };
 
   const defaultCharacterPath = "/assets/characters/adam/adam.glb";
   let characterEntry = getCharacterEntry(characterPath || defaultCharacterPath);
   let characterRuntime: CharacterRuntime | null = null;
 
-  const statusHud = createStatusHud(mount);
+  const statusHud = createStatusHud(mount, { showMiniMap });
   const statsState = createPlayerStatsState({
     profile: characterEntry.profile,
     infiniteFire,
@@ -206,10 +340,32 @@ export const createPlayer = ({
     getRuntimeSkillCooldownDurationMs(key) != null;
 
   const emitUiState = (now: number) => {
+    const cooldownRemainingMs: Record<SkillKey, number> = {
+      q: getSkillCooldownRemainingMs(now, "q"),
+      e: getSkillCooldownRemainingMs(now, "e"),
+      r: getSkillCooldownRemainingMs(now, "r"),
+    };
+    const cooldownDurationMs: Record<SkillKey, number> = {
+      q: getSkillCooldownDurationMs("q"),
+      e: getSkillCooldownDurationMs("e"),
+      r: getSkillCooldownDurationMs("r"),
+    };
+    statusHud.setSkillCooldowns(
+      {
+        q: cooldownRemainingMs.q / 1000,
+        e: cooldownRemainingMs.e / 1000,
+        r: cooldownRemainingMs.r / 1000,
+      },
+      {
+        q: cooldownDurationMs.q / 1000,
+        e: cooldownDurationMs.e / 1000,
+        r: cooldownDurationMs.r / 1000,
+      }
+    );
     statsState.emitUiState({
       now,
-      getCooldownRemainingMs: (key) => getSkillCooldownRemainingMs(now, key),
-      getCooldownDurationMs: (key) => getSkillCooldownDurationMs(key),
+      getCooldownRemainingMs: (key) => cooldownRemainingMs[key],
+      getCooldownDurationMs: (key) => cooldownDurationMs[key],
     });
   };
 
@@ -232,7 +388,9 @@ export const createPlayer = ({
     projectileColliders,
     attackResolver,
     applyEnergy: statsState.applyEnergy,
+    applyMana: statsState.applyMana,
     getDefaultHitEnergyGain: () => statsState.energyConfig.hitGain,
+    getDefaultHitManaGain: () => 0,
   });
   const characterLoader = createCharacterLoader({
     loader: new GLTFLoader(),
@@ -339,6 +497,7 @@ export const createPlayer = ({
     lookState.pitch = 0;
     statsState.resetSkillCooldowns();
     survivalState?.clearRecoveryZoneCooldowns();
+    clearPlayerHitFlash();
     const spawnY = resolvedWorld.groundY + visualState.modelFootOffset;
     avatar.position.set(playerSpawn.x, spawnY, playerSpawn.z);
     avatar.rotation.y = 0;
@@ -363,11 +522,16 @@ export const createPlayer = ({
     syncHealthFromPool,
     onResetPlayer: resetPlayerState,
     worldPlayerDeath,
+    onDamageApplied: () => {
+      triggerPlayerHitFlash();
+      statusHud.triggerDamageFlash();
+    },
     beforeDamage: ({ amount, now }) =>
       characterRuntime?.beforeDamage?.({ amount, now }) ?? amount,
   });
 
   const loadCharacter = (path?: string) => {
+    clearPlayerHitFlash();
     const resolvedPath = path || defaultCharacterPath;
     const loadPath = withDevCacheBust(resolvedPath);
     const nextEntry = getCharacterEntry(resolvedPath);
@@ -480,6 +644,7 @@ export const createPlayer = ({
 
   const dispose = () => {
     isMounted = false;
+    clearPlayerHitFlash();
     inputBindings.dispose();
     avatarBody.geometry.dispose();
     avatarBody.material.dispose();
@@ -495,6 +660,7 @@ export const createPlayer = ({
     projectileSystem.dispose();
     scene.remove(avatar);
     statusHud.dispose();
+    playerHitFlashOriginalState.clear();
   };
 
   return {

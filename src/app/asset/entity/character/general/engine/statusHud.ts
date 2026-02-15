@@ -1,13 +1,26 @@
-import type { CharacterStats } from "../types";
+import type { CharacterStats, SkillKey } from "../types";
 
 export type StatusHud = {
   setStats: (current: CharacterStats, max: CharacterStats) => void;
+  setSkillCooldowns: (
+    cooldowns: Record<SkillKey, number>,
+    durations: Record<SkillKey, number>
+  ) => void;
+  triggerDamageFlash: () => void;
   dispose: () => void;
 };
 
-export const createStatusHud = (mount?: HTMLElement): StatusHud => {
+export const createStatusHud = (
+  mount?: HTMLElement,
+  options?: { showMiniMap?: boolean }
+): StatusHud => {
   if (!mount) {
-    return { setStats: () => {}, dispose: () => {} };
+    return {
+      setStats: () => {},
+      setSkillCooldowns: () => {},
+      triggerDamageFlash: () => {},
+      dispose: () => {},
+    };
   }
 
   const host = mount.parentElement ?? mount;
@@ -52,7 +65,79 @@ export const createStatusHud = (mount?: HTMLElement): StatusHud => {
   const manaBar = createBar("MP", "#38bdf8", "rgba(56,189,248,0.6)");
   const energyBar = createBar("EN", "#22c55e", "rgba(34,197,94,0.62)");
   hud.append(healthBar.row, manaBar.row, energyBar.row);
-  host.appendChild(hud);
+
+  const cooldownPanel = document.createElement("div");
+  cooldownPanel.style.cssText =
+    "position:absolute;right:16px;z-index:6;display:flex;flex-direction:column;" +
+    "gap:5px;padding:6px;border-radius:10px;" +
+    "background:rgba(2,6,23,0.52);border:1px solid rgba(148,163,184,0.24);" +
+    "box-shadow:0 10px 24px rgba(2,6,23,0.58);pointer-events:none;";
+
+  const createCooldownCard = (label: SkillKey) => {
+    const shell = document.createElement("div");
+    shell.style.cssText =
+      "position:relative;width:38px;height:38px;border-radius:10px;overflow:hidden;" +
+      "border:1px solid rgba(148,163,184,0.28);background:rgba(15,23,42,0.75);";
+
+    const fan = document.createElement("div");
+    fan.style.cssText =
+      "position:absolute;inset:0;opacity:0;border-radius:10px;" +
+      "background:conic-gradient(from -90deg, rgba(2,6,23,0.86) 360deg, rgba(2,6,23,0.05) 360deg);";
+
+    const keyLabel = document.createElement("span");
+    keyLabel.textContent = label.toUpperCase();
+    keyLabel.style.cssText =
+      "position:absolute;right:4px;bottom:2px;font-size:10px;letter-spacing:0.06em;" +
+      "font-weight:700;color:rgba(191,219,254,0.92);";
+
+    const time = document.createElement("span");
+    time.style.cssText =
+      "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);" +
+      "font-size:11px;font-variant-numeric:tabular-nums;font-weight:700;color:#f8fafc;";
+
+    shell.append(fan, time, keyLabel);
+    cooldownPanel.appendChild(shell);
+    return { shell, fan, time };
+  };
+
+  const cooldownCards = {
+    q: createCooldownCard("q"),
+    e: createCooldownCard("e"),
+    r: createCooldownCard("r"),
+  };
+
+  const miniMapMargin = 14;
+  const cooldownGapBelowMini = 12;
+  const updateCooldownPanelPosition = () => {
+    if (options?.showMiniMap === false) {
+      cooldownPanel.style.top = "16px";
+      return;
+    }
+    const minEdge = Math.min(host.clientWidth || 0, host.clientHeight || 0);
+    const miniSize = Math.max(120, Math.floor(minEdge * 0.25));
+    const top = miniMapMargin + miniSize + cooldownGapBelowMini;
+    cooldownPanel.style.top = `${top}px`;
+  };
+
+  const handleResize = () => {
+    updateCooldownPanelPosition();
+  };
+
+  window.addEventListener("resize", handleResize);
+  let resizeObserver: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(() => {
+      updateCooldownPanelPosition();
+    });
+    resizeObserver.observe(host);
+  }
+
+  const damageOverlay = document.createElement("div");
+  damageOverlay.style.cssText =
+    "position:absolute;inset:0;z-index:7;pointer-events:none;background:#ef4444;opacity:0;";
+
+  host.append(hud, cooldownPanel, damageOverlay);
+  updateCooldownPanelPosition();
 
   const updateFill = (
     fillBar: HTMLDivElement,
@@ -68,16 +153,72 @@ export const createStatusHud = (mount?: HTMLElement): StatusHud => {
     )}`;
   };
 
+  const formatCooldownText = (remaining: number) => {
+    if (remaining <= 0.04) return "";
+    if (remaining >= 10) {
+      return `${Math.ceil(remaining)}`;
+    }
+    return (Math.ceil(remaining * 10) / 10).toFixed(1).replace(/\.0$/, "");
+  };
+
+  const setCooldownCard = (
+    key: SkillKey,
+    remaining: number,
+    duration: number
+  ) => {
+    const card = cooldownCards[key];
+    if (!card) return;
+    const resolvedRemaining = Math.max(0, remaining);
+    const resolvedDuration = Math.max(0, duration);
+    const ratio =
+      resolvedDuration > 0
+        ? Math.min(1, resolvedRemaining / resolvedDuration)
+        : resolvedRemaining > 0
+        ? 1
+        : 0;
+
+    if (ratio <= 0.001) {
+      card.fan.style.opacity = "0";
+      card.time.textContent = "";
+      card.shell.style.borderColor = "rgba(74,222,128,0.45)";
+      return;
+    }
+
+    const sweep = Math.max(1, Math.round(ratio * 360));
+    card.fan.style.opacity = "1";
+    card.fan.style.background =
+      `conic-gradient(from -90deg, rgba(2,6,23,0.86) 0deg ${sweep}deg, ` +
+      `rgba(2,6,23,0.08) ${sweep}deg 360deg)`;
+    card.time.textContent = formatCooldownText(resolvedRemaining);
+    card.shell.style.borderColor = `rgba(251,146,60,${0.32 + ratio * 0.45})`;
+  };
+
+  const triggerDamageFlash = () => {
+    damageOverlay.style.transition = "opacity 0ms linear";
+    damageOverlay.style.opacity = "0.2";
+    void damageOverlay.offsetHeight;
+    damageOverlay.style.transition = "opacity 140ms ease-out";
+    damageOverlay.style.opacity = "0";
+  };
+
   return {
     setStats: (current: CharacterStats, max: CharacterStats) => {
       updateFill(healthBar.fillBar, healthBar.value, current.health, max.health);
       updateFill(manaBar.fillBar, manaBar.value, current.mana, max.mana);
       updateFill(energyBar.fillBar, energyBar.value, current.energy, max.energy);
     },
+    setSkillCooldowns: (cooldowns, durations) => {
+      setCooldownCard("q", cooldowns.q, durations.q);
+      setCooldownCard("e", cooldowns.e, durations.e);
+      setCooldownCard("r", cooldowns.r, durations.r);
+    },
+    triggerDamageFlash,
     dispose: () => {
+      window.removeEventListener("resize", handleResize);
+      resizeObserver?.disconnect();
       hud.parentElement?.removeChild(hud);
+      cooldownPanel.parentElement?.removeChild(cooldownPanel);
+      damageOverlay.parentElement?.removeChild(damageOverlay);
     },
   };
 };
-
-

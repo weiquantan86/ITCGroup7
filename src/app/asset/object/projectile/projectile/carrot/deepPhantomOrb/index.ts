@@ -23,6 +23,7 @@ export const carrotDeepPhantomOrbProjectileType: ProjectileTypeDefinition = {
     damageBase: 30,
     damagePerSpeed: 0,
     energyGainOnHit: null,
+    manaGainOnHit: null,
     splitOnImpact: false,
     explosionRadius: 0,
     explosionDamage: 0,

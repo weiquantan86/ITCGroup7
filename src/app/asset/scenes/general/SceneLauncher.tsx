@@ -4,7 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import * as THREE from "three";
 import { createPlayer, type PlayerUiState } from "../../entity/character/general/player";
 import { loadSceneDefinition } from "../registry";
-import type { SceneSetupResult, SceneUiState } from "./sceneTypes";
+import type { SceneDefinition, SceneSetupResult, SceneUiState } from "./sceneTypes";
 
 export default function SceneLauncher({
   sceneId = "grass",
@@ -18,6 +18,7 @@ export default function SceneLauncher({
   infiniteFire = false,
   onSceneStateChange,
   onPlayerStateChange,
+  sceneLoader,
 }: {
   sceneId?: string;
   gameMode?: string;
@@ -30,6 +31,7 @@ export default function SceneLauncher({
   infiniteFire?: boolean;
   onSceneStateChange?: (state: SceneUiState) => void;
   onPlayerStateChange?: (state: PlayerUiState) => void;
+  sceneLoader?: () => Promise<SceneDefinition> | SceneDefinition;
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
@@ -53,7 +55,9 @@ export default function SceneLauncher({
 
     const initialize = async () => {
       try {
-        const sceneDefinition = await loadSceneDefinition(sceneId);
+        const sceneDefinition = sceneLoader
+          ? await Promise.resolve(sceneLoader())
+          : await loadSceneDefinition(sceneId);
         if (isDisposed) return;
 
         sceneSetup = sceneDefinition?.setupScene?.(scene, {
@@ -136,6 +140,7 @@ export default function SceneLauncher({
     infiniteFire,
     onSceneStateChange,
     onPlayerStateChange,
+    sceneLoader,
   ]);
 
   return (

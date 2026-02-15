@@ -12,6 +12,7 @@ export interface SceneUiState {
     maxHealth: number;
     alive: boolean;
   };
+  [key: string]: unknown;
 }
 
 export interface SceneSetupContext {

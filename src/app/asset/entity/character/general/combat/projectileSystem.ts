@@ -19,7 +19,9 @@ type CreateProjectileSystemArgs = {
   projectileColliders: THREE.Object3D[];
   attackResolver: AttackTargetResolver;
   applyEnergy: (amount: number) => number;
+  applyMana: (amount: number) => number;
   getDefaultHitEnergyGain: () => number;
+  getDefaultHitManaGain: () => number;
 };
 
 type UpdateProjectileSystemArgs = {
@@ -70,7 +72,9 @@ export const createProjectileSystem = ({
   projectileColliders,
   attackResolver,
   applyEnergy,
+  applyMana,
   getDefaultHitEnergyGain,
+  getDefaultHitManaGain,
 }: CreateProjectileSystemArgs) => {
   let projectileId = 0;
   const projectiles: Projectile[] = [];
@@ -155,6 +159,10 @@ export const createProjectileSystem = ({
       options?.energyGainOnHit == null
         ? typeDefinition.defaults.energyGainOnHit
         : Math.max(0, options.energyGainOnHit);
+    const resolvedManaGainOnHit =
+      options?.manaGainOnHit == null
+        ? typeDefinition.defaults.manaGainOnHit
+        : Math.max(0, options.manaGainOnHit);
 
     const id = projectileId++;
     projectiles.push({
@@ -167,6 +175,9 @@ export const createProjectileSystem = ({
       grantEnergyOnTargetHit:
         options?.grantEnergyOnTargetHit ??
         typeDefinition.rules.grantEnergyOnTargetHit,
+      grantManaOnTargetHit:
+        options?.grantManaOnTargetHit ??
+        typeDefinition.rules.grantManaOnTargetHit,
       explodeOnTargetHit:
         options?.explodeOnTargetHit ?? typeDefinition.rules.explodeOnTargetHit,
       explodeOnWorldHit:
@@ -188,6 +199,7 @@ export const createProjectileSystem = ({
       ),
       damage: resolvedDamage,
       energyGainOnHit: resolvedEnergyGainOnHit,
+      manaGainOnHit: resolvedManaGainOnHit,
       splitOnImpact: options?.splitOnImpact ?? typeDefinition.defaults.splitOnImpact,
       explosionRadius: Math.max(
         0,
@@ -365,6 +377,7 @@ export const createProjectileSystem = ({
 
           let targetDamageApplied = false;
           let targetEnergyGranted = false;
+          let targetManaGranted = false;
           let targetRemoved = false;
           const removeTargetProjectile = () => {
             if (targetRemoved) return;
@@ -394,6 +407,11 @@ export const createProjectileSystem = ({
               if (targetEnergyGranted) return;
               targetEnergyGranted = true;
               applyEnergy(projectile.energyGainOnHit ?? getDefaultHitEnergyGain());
+            },
+            grantDefaultManaOnHit: () => {
+              if (targetManaGranted) return;
+              targetManaGranted = true;
+              applyMana(projectile.manaGainOnHit ?? getDefaultHitManaGain());
             },
             triggerExplosion: (primaryTargetId) => {
               const resolvedPrimaryTargetId =

@@ -23,6 +23,7 @@ export const carrotDemonVolleyOrbProjectileType: ProjectileTypeDefinition = {
     damageBase: 13,
     damagePerSpeed: 0,
     energyGainOnHit: null,
+    manaGainOnHit: null,
     splitOnImpact: false,
     explosionRadius: 0,
     explosionDamage: 0,

@@ -12,6 +12,7 @@ export const abilityOrbProjectileType: ProjectileTypeDefinition = {
     damageBase: 10,
     damagePerSpeed: 0.6,
     energyGainOnHit: null,
+    manaGainOnHit: null,
     splitOnImpact: false,
     explosionRadius: 0,
     explosionDamage: 0,

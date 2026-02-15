@@ -22,6 +22,7 @@ type CreatePlayerSurvivalStateArgs = {
   worldPlayerDeath?: (
     args: PlayerDeathArgs
   ) => PlayerDeathResolution | void;
+  onDamageApplied?: (args: { amount: number; now: number }) => void;
   beforeDamage?: (args: {
     amount: number;
     now: number;
@@ -39,6 +40,7 @@ export const createPlayerSurvivalState = ({
   syncHealthFromPool,
   onResetPlayer,
   worldPlayerDeath,
+  onDamageApplied,
   beforeDamage,
 }: CreatePlayerSurvivalStateArgs) => {
   const recoveryZoneLastTriggered = new Map<string, number>();
@@ -81,6 +83,7 @@ export const createPlayerSurvivalState = ({
       syncHealthFromPool();
       statsState.applyEnergy(applied * statsState.energyConfig.damageTakenRatio);
       statsState.syncHud();
+      onDamageApplied?.({ amount: applied, now });
     }
 
     if (!healthPool.isAlive) {

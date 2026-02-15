@@ -1,8 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SceneLauncher from "../../../asset/scenes/general/SceneLauncher";
+import type { SceneUiState } from "../../../asset/scenes/general/sceneTypes";
+import MochiSoldierPreview from "./MochiSoldierPreview";
+import {
+  SURGE_SCENE_STATE_KEY,
+  SURGE_SNACK_KEYS,
+  SURGE_SNACK_LABELS,
+  createEmptySurgeSnackRewards,
+  createInitialMochiSoldierSurgeState,
+  type MochiSoldierSurgeState,
+  type SurgeSnackRewards,
+} from "./surgeConfig";
 
 type SkillDetail = {
   key: "q" | "e" | "r";
@@ -22,6 +33,15 @@ type MochiSoldierSurgeClientProps = {
   characterOptions: GameCharacterOption[];
 };
 
+type RewardClaimStatus = "idle" | "claiming" | "claimed" | "error";
+
+const cloneRewards = (rewards: SurgeSnackRewards): SurgeSnackRewards => ({
+  energy_sugar: rewards.energy_sugar || 0,
+  dream_fruit_dust: rewards.dream_fruit_dust || 0,
+  core_crunch_seed: rewards.core_crunch_seed || 0,
+  star_gel_essence: rewards.star_gel_essence || 0,
+});
+
 export default function MochiSoldierSurgeClient({
   characterOptions,
 }: MochiSoldierSurgeClientProps) {
@@ -31,6 +51,20 @@ export default function MochiSoldierSurgeClient({
   const [activeSkillKey, setActiveSkillKey] = useState<"q" | "e" | "r">("q");
   const [isStarting, setIsStarting] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [sceneSessionId, setSceneSessionId] = useState(0);
+  const [surgeState, setSurgeState] = useState<MochiSoldierSurgeState>(
+    createInitialMochiSoldierSurgeState()
+  );
+  const [rewardClaimStatus, setRewardClaimStatus] =
+    useState<RewardClaimStatus>("idle");
+  const [rewardClaimMessage, setRewardClaimMessage] = useState("");
+  const [obtainedSnackRewards, setObtainedSnackRewards] = useState<SurgeSnackRewards>(
+    createEmptySurgeSnackRewards()
+  );
+  const [winBonusRewards, setWinBonusRewards] = useState<SurgeSnackRewards>(
+    createEmptySurgeSnackRewards()
+  );
+  const rewardSubmittedRef = useRef(false);
 
   const selectedCharacter = useMemo(() => {
     if (!selectedCharacterId) return characterOptions[0] ?? null;
@@ -50,6 +84,49 @@ export default function MochiSoldierSurgeClient({
     );
   }, [activeSkillKey, selectedCharacter]);
 
+  const buildRewardEntries = useCallback((rewards: SurgeSnackRewards) => {
+    return SURGE_SNACK_KEYS.filter((key) => rewards[key] > 0).map((key) => ({
+      key,
+      label: SURGE_SNACK_LABELS[key],
+      count: rewards[key],
+    }));
+  }, []);
+
+  const obtainedSnackEntries = useMemo(
+    () => buildRewardEntries(obtainedSnackRewards),
+    [buildRewardEntries, obtainedSnackRewards]
+  );
+
+  const winBonusEntries = useMemo(
+    () => buildRewardEntries(winBonusRewards),
+    [buildRewardEntries, winBonusRewards]
+  );
+
+  const handleSceneStateChange = useCallback((state: SceneUiState) => {
+    const next = (state as Record<string, MochiSoldierSurgeState | undefined>)[
+      SURGE_SCENE_STATE_KEY
+    ];
+    if (!next) return;
+    setSurgeState({
+      totalMonsters: next.totalMonsters || 0,
+      spawnedMonsters: next.spawnedMonsters || 0,
+      aliveMonsters: next.aliveMonsters || 0,
+      defeatedMonsters: next.defeatedMonsters || 0,
+      playerDead: Boolean(next.playerDead),
+      gameEnded: Boolean(next.gameEnded),
+      victory: Boolean(next.victory),
+    });
+  }, []);
+
+  const resetRunUi = useCallback(() => {
+    setSurgeState(createInitialMochiSoldierSurgeState());
+    setRewardClaimStatus("idle");
+    setRewardClaimMessage("");
+    setObtainedSnackRewards(createEmptySurgeSnackRewards());
+    setWinBonusRewards(createEmptySurgeSnackRewards());
+    rewardSubmittedRef.current = false;
+  }, []);
+
   const startGame = async () => {
     if (isStarting || !selectedCharacter) return;
     setIsStarting(true);
@@ -62,10 +139,86 @@ export default function MochiSoldierSurgeClient({
     } catch (error) {
       console.error(error);
     } finally {
+      resetRunUi();
+      setSceneSessionId((prev) => prev + 1);
       setHasStarted(true);
       setIsStarting(false);
     }
   };
+
+  const loadSurgeScene = useCallback(async () => {
+    const { createMochiSoldierSurgeScene } = await import("./surgeSceneDefinition");
+    return {
+      id: "mochiSoldierSurge",
+      setupScene: createMochiSoldierSurgeScene,
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasStarted || !surgeState.gameEnded || rewardSubmittedRef.current) return;
+
+    rewardSubmittedRef.current = true;
+    let cancelled = false;
+    const claimRewards = async () => {
+      setRewardClaimStatus("claiming");
+      setRewardClaimMessage("");
+      try {
+        const response = await fetch("/api/games/mochisoldiersurge/reward", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            defeatedMonsters: surgeState.defeatedMonsters,
+            victory: surgeState.victory,
+          }),
+        });
+        const data = (await response.json()) as {
+          error?: string;
+          granted?: Partial<SurgeSnackRewards>;
+          obtainedSnack?: Partial<SurgeSnackRewards>;
+          winBonus?: Partial<SurgeSnackRewards>;
+        };
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to claim rewards.");
+        }
+        if (cancelled) return;
+        const granted = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.granted ?? {}),
+        });
+        const obtainedSnack = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.obtainedSnack ?? {}),
+        });
+        const winBonus = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.winBonus ?? {}),
+        });
+        const grantedCount = SURGE_SNACK_KEYS.reduce(
+          (total, key) => total + granted[key],
+          0
+        );
+        setObtainedSnackRewards(obtainedSnack);
+        setWinBonusRewards(winBonus);
+        setRewardClaimStatus("claimed");
+        if (grantedCount <= 0) {
+          setRewardClaimMessage("No snack reward earned in this run.");
+        } else {
+          setRewardClaimMessage("Snack rewards have been added to storage.");
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setRewardClaimStatus("error");
+        setRewardClaimMessage(
+          error instanceof Error ? error.message : "Failed to claim rewards."
+        );
+      }
+    };
+
+    void claimRewards();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasStarted, surgeState.gameEnded, surgeState.defeatedMonsters, surgeState.victory]);
 
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-[#05070d] text-slate-100">
@@ -74,30 +227,172 @@ export default function MochiSoldierSurgeClient({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.4),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.62)_48%,rgba(2,6,23,0.86)_68%,rgba(2,6,23,0.95)_100%)]" />
 
-      <div className="absolute left-6 top-6 z-20">
-        <Link
-          href="/userSystem/user"
-          className="inline-flex h-11 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-6 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105"
-        >
-          Back to User Home
-        </Link>
-      </div>
+      {!(hasStarted && surgeState.gameEnded) ? (
+        <div className="absolute left-6 top-6 z-20">
+          <Link
+            href="/userSystem/user"
+            className="inline-flex h-11 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-6 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105"
+          >
+            Back to User Home
+          </Link>
+        </div>
+      ) : null}
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1500px] flex-col justify-start px-6 pt-20 pb-6">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[1500px] flex-col justify-start px-6 pb-6 pt-20">
         <section className="w-full rounded-[32px] border border-white/10 bg-white/[0.04] p-8 text-center shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
           <h1 className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-4xl font-bold text-transparent md:text-5xl">
             Mochi Soldier Surge
           </h1>
         </section>
 
-        {hasStarted ? (
-          <section className="mt-4 flex w-full justify-center">
-            <SceneLauncher
-              sceneId="mochiStreet"
-              gameMode="default"
-              characterPath={selectedCharacter?.path}
-              className="h-[72vh] min-h-[560px] w-full max-w-[1400px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
-            />
+        {hasStarted ? surgeState.gameEnded ? (
+          <section className="mt-6 flex w-full justify-center">
+            <div className="w-full max-w-[1220px] rounded-[34px] border border-white/15 bg-[#0b1220]/95 p-8 text-center shadow-[0_30px_90px_-35px_rgba(2,6,23,0.95)] md:p-12">
+              <p
+                className={`text-base font-semibold uppercase tracking-[0.24em] ${
+                  surgeState.victory ? "text-emerald-300" : "text-rose-300"
+                }`}
+              >
+                {surgeState.victory ? "Victory" : "Defeat"}
+              </p>
+              <h3 className="mt-4 text-4xl font-bold text-slate-100 md:text-6xl">
+                {surgeState.victory
+                  ? "All 50 Mochi Soldiers Defeated"
+                  : "Player Eliminated"}
+              </h3>
+
+              <div className="mt-8 rounded-[22px] border border-white/10 bg-slate-950/70 p-6 text-left md:p-8">
+                <p className="text-xl font-semibold text-slate-200">Numbers Killed:</p>
+                <p className="mt-2 text-2xl font-semibold tabular-nums text-slate-100">
+                  {surgeState.defeatedMonsters}
+                </p>
+
+                <p className="mt-6 text-xl font-semibold text-slate-200">Obtained Snack:</p>
+                {rewardClaimStatus === "claiming" ? (
+                  <p className="mt-2 text-lg text-slate-300">Calculating...</p>
+                ) : obtainedSnackEntries.length === 0 ? (
+                  <p className="mt-2 text-lg text-slate-300">None</p>
+                ) : (
+                  <ul className="mt-2 space-y-2 text-lg">
+                    {obtainedSnackEntries.map((entry) => (
+                      <li key={entry.key} className="text-slate-100">
+                        {entry.label} x {entry.count}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <p className="mt-6 text-xl font-semibold text-slate-200">Win Bonus:</p>
+                {rewardClaimStatus === "claiming" ? (
+                  <p className="mt-2 text-lg text-slate-300">Calculating...</p>
+                ) : winBonusEntries.length === 0 ? (
+                  <p className="mt-2 text-lg text-slate-300">None</p>
+                ) : (
+                  <ul className="mt-2 space-y-2 text-lg">
+                    {winBonusEntries.map((entry) => (
+                      <li key={entry.key} className="text-slate-100">
+                        {entry.label} x {entry.count}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <p
+                  className={`mt-5 text-sm ${
+                    rewardClaimStatus === "error"
+                      ? "text-rose-300"
+                      : rewardClaimStatus === "claimed"
+                      ? "text-emerald-300"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {rewardClaimStatus === "claiming"
+                    ? "Claiming rewards..."
+                    : rewardClaimMessage || "Settlement pending..."}
+                </p>
+              </div>
+
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+                <Link
+                  href="/userSystem/user"
+                  className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-8 text-base font-semibold text-white transition hover:brightness-105"
+                >
+                  Back to Menu
+                </Link>
+                <Link
+                  href="/storage"
+                  className="inline-flex h-12 items-center justify-center rounded-full border border-white/25 px-8 text-base font-semibold text-slate-100 transition hover:border-white/45 hover:bg-white/10"
+                >
+                  Open Storage
+                </Link>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="mt-4 grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="relative flex w-full justify-center">
+              <SceneLauncher
+                key={sceneSessionId}
+                gameMode="mochisoldiersurge"
+                characterPath={selectedCharacter?.path}
+                sceneLoader={loadSurgeScene}
+                onSceneStateChange={handleSceneStateChange}
+                className="h-[72vh] min-h-[560px] w-full max-w-[1400px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
+              />
+            </div>
+
+            <aside className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Counter
+              </h2>
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                    Defeated
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-100">
+                    {surgeState.defeatedMonsters}/{surgeState.totalMonsters}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                    Spawned
+                  </p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums text-cyan-200">
+                    {surgeState.spawnedMonsters}/{surgeState.totalMonsters}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                    Alive Now
+                  </p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums text-amber-200">
+                    {surgeState.aliveMonsters}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/65 p-4 text-center">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
+                  Settlement Rule
+                </p>
+                <p className="mt-3 text-base font-medium leading-relaxed text-slate-100">
+                  Every 5 kills gives 1 random snack.
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-300">
+                  Full clear bonus: +3 random snacks.
+                </p>
+              </div>
+
+              <div className="mt-4 flex min-h-[220px] flex-1 flex-col rounded-xl border border-white/10 bg-slate-950/65 p-3">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                  Mochi Soldier
+                </p>
+                <div className="mt-2 min-h-0 flex-1 overflow-hidden rounded-lg border border-white/10 bg-[radial-gradient(circle_at_28%_18%,rgba(56,189,248,0.2),transparent_54%),linear-gradient(180deg,rgba(2,6,23,0.85)_0%,rgba(2,6,23,0.98)_100%)]">
+                  <MochiSoldierPreview />
+                </div>
+              </div>
+            </aside>
           </section>
         ) : (
           <section className="mt-4 flex w-full justify-center">

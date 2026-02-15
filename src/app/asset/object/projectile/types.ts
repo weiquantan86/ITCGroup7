@@ -44,6 +44,7 @@ export interface Projectile extends LinearProjectileState {
   projectileType: string;
   gravity: number;
   grantEnergyOnTargetHit: boolean;
+  grantManaOnTargetHit: boolean;
   explodeOnTargetHit: boolean;
   explodeOnWorldHit: boolean;
   explodeOnExpire: boolean;
@@ -53,6 +54,7 @@ export interface Projectile extends LinearProjectileState {
   targetHitRadius: number;
   damage: number;
   energyGainOnHit: number | null;
+  manaGainOnHit: number | null;
   splitOnImpact: boolean;
   explosionRadius: number;
   explosionDamage: number;

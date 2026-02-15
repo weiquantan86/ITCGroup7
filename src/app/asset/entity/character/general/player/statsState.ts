@@ -87,8 +87,21 @@ export const createPlayerStatsState = ({
   statusHud,
   onUiStateChange,
 }: CreatePlayerStatsStateArgs) => {
+  const createStartingCurrentStats = (
+    resolvedMaxStats: CharacterStats
+  ): CharacterStats => {
+    const nextCurrentStats: CharacterStats = {
+      ...resolvedMaxStats,
+      energy: 0,
+    };
+    if (infiniteFire && resolvedMaxStats.energy > 0) {
+      nextCurrentStats.energy = resolvedMaxStats.energy;
+    }
+    return nextCurrentStats;
+  };
+
   let maxStats: CharacterStats = resolveCharacterStats(profile);
-  let currentStats: CharacterStats = { ...maxStats };
+  let currentStats: CharacterStats = createStartingCurrentStats(maxStats);
   let skillCooldownDurations: Record<SkillKey, number> =
     resolveSkillCooldownDurations(profile);
   let skillCooldownUntil: Record<SkillKey, number> = { q: 0, e: 0, r: 0 };
@@ -111,7 +124,7 @@ export const createPlayerStatsState = ({
 
   const setProfile = (nextProfile: CharacterProfile) => {
     maxStats = resolveCharacterStats(nextProfile);
-    currentStats = { ...maxStats };
+    currentStats = createStartingCurrentStats(maxStats);
     energyConfig = resolveEnergyConfig(nextProfile);
     manaConfig = resolveManaConfig(nextProfile);
     movementConfig = resolveMovementConfig(nextProfile);
@@ -120,9 +133,6 @@ export const createPlayerStatsState = ({
     skillCooldownUntil = { q: 0, e: 0, r: 0 };
     if (infiniteFire && maxStats.mana > 0) {
       currentStats.mana = maxStats.mana;
-    }
-    if (infiniteFire && maxStats.energy > 0) {
-      currentStats.energy = maxStats.energy;
     }
     markDirty();
   };

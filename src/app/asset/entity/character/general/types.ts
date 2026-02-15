@@ -185,6 +185,7 @@ export interface FireProjectileArgs {
   scale?: number;
   damage?: number;
   energyGainOnHit?: number;
+  manaGainOnHit?: number;
   splitOnImpact?: boolean;
   explosionRadius?: number;
   explosionDamage?: number;
@@ -194,6 +195,7 @@ export interface FireProjectileArgs {
   explosionEmissiveIntensity?: number;
   gravity?: number;
   grantEnergyOnTargetHit?: boolean;
+  grantManaOnTargetHit?: boolean;
   explodeOnTargetHit?: boolean;
   explodeOnWorldHit?: boolean;
   explodeOnExpire?: boolean;

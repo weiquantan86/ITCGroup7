@@ -1016,6 +1016,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
   mount,
   fireProjectile,
+  applyMana,
   spendEnergy,
   getCurrentStats,
 }) => {
@@ -1203,6 +1204,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     metalness: 0.08,
   });
   let lastUpdateAt = 0;
+  let manaRegenElapsed = 0;
 
   const clearBurstQueue = () => {
     burstState.active = false;
@@ -1286,6 +1288,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (!fireProjectile) return;
 
     const isExplosiveShell = skillRState.active || skillQState.active;
+    const recoversEnergyOnHit =
+      !skillQState.active && (skillEState.active || skillRState.active);
     const gravityShellMaterial = isExplosiveShell
       ? (projectileMaterial.clone() as THREE.MeshStandardMaterial)
       : null;
@@ -1327,7 +1331,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       speed: isExplosiveShell ? 20 : chargeConfig.projectileSpeed,
       lifetime: isExplosiveShell ? 1.8 : chargeConfig.projectileLifetime,
       gravity: 0,
-      energyGainOnHit: 6,
+      energyGainOnHit: recoversEnergyOnHit ? 4 : 0,
+      grantEnergyOnTargetHit: recoversEnergyOnHit,
+      manaGainOnHit: 3,
+      grantManaOnTargetHit: true,
       damage: isExplosiveShell ? skillRConfig.directDamage : undefined,
       splitOnImpact: isExplosiveShell,
       explodeOnExpire: isExplosiveShell,
@@ -1486,6 +1493,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const resetState = () => {
     cancelCharge();
+    manaRegenElapsed = 0;
     armPose.restartRequested = true;
     armPose.wasMoving = false;
     deactivateSkillE();
@@ -1555,6 +1563,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
           ? THREE.MathUtils.clamp((args.now - lastUpdateAt) / 1000, 0, 0.12)
           : 0;
       lastUpdateAt = args.now;
+      if (deltaSeconds > 0) {
+        manaRegenElapsed += deltaSeconds;
+        while (manaRegenElapsed >= 2) {
+          manaRegenElapsed -= 2;
+          applyMana?.(1);
+        }
+      }
 
       if (args.aimOriginWorld) {
         aimOrigin.copy(args.aimOriginWorld);
@@ -1672,6 +1687,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       faceGlassesPulseFx.dispose();
       gunChargeFx.dispose();
       lastUpdateAt = 0;
+      manaRegenElapsed = 0;
       hud.dispose();
       projectileGeometry.dispose();
       projectileMaterial.dispose();
