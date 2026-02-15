@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { PlayerUiState } from "../../entity/character/general/player";
 import { characterProfiles } from "../../entity/character/general/player/registry";
 import SceneLauncher from "../general/SceneLauncher";
-import type { SceneUiState } from "../general/registry";
+import type { SceneUiState } from "../general/sceneTypes";
 
 const characters = characterProfiles.map((profile) => ({
   id: profile.id,

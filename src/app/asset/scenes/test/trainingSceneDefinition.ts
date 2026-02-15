@@ -8,7 +8,7 @@ import type {
   PlayerWorldTickArgs,
 } from "../../entity/character/general/player";
 import { Monster } from "../../entity/monster/general";
-import type { SceneSetupContext, SceneSetupResult } from "../general/registry";
+import type { SceneSetupContext, SceneSetupResult } from "../general/sceneTypes";
 
 export const createTrainingScene = (
   scene: THREE.Scene,
@@ -986,4 +986,3 @@ export const createTrainingScene = (
 
   return { world, dispose };
 };
-

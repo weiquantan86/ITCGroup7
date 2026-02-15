@@ -1,28 +1,6 @@
 import * as THREE from "three";
-import { createTrainingScene } from "../test/trainingSceneDefinition";
-import type { PlayerWorld } from "../../entity/character/general/player";
-
-export interface SceneSetupResult {
-  world?: PlayerWorld;
-  dispose?: () => void;
-}
-
-export interface SceneUiState {
-  tester?: {
-    health: number;
-    maxHealth: number;
-    alive: boolean;
-  };
-}
-
-export interface SceneSetupContext {
-  onStateChange?: (state: SceneUiState) => void;
-}
-
-export interface SceneDefinition {
-  id: string;
-  setupScene: (scene: THREE.Scene, context?: SceneSetupContext) => SceneSetupResult;
-}
+import type { PlayerWorld } from "../entity/character/general/player";
+import type { SceneDefinition, SceneSetupResult } from "./general/sceneTypes";
 
 const createGrassScene = (scene: THREE.Scene): SceneSetupResult => {
   scene.background = new THREE.Color(0x0b0f1a);
@@ -345,7 +323,7 @@ const createEmptyScene = (): SceneSetupResult => ({
   world: { sceneId: "empty", groundY: -1.4 },
 });
 
-const sceneRegistry: Record<string, SceneDefinition> = {
+const staticSceneRegistry: Record<string, SceneDefinition> = {
   grass: {
     id: "grass",
     setupScene: createGrassScene,
@@ -354,16 +332,52 @@ const sceneRegistry: Record<string, SceneDefinition> = {
     id: "range",
     setupScene: createRangeScene,
   },
-  training: {
-    id: "training",
-    setupScene: createTrainingScene,
-  },
   empty: {
     id: "empty",
     setupScene: createEmptyScene,
   },
 };
 
-export const getSceneDefinition = (sceneId?: string): SceneDefinition =>
-  sceneRegistry[sceneId || "grass"] || sceneRegistry.grass;
+const dynamicSceneLoaders: Record<string, () => Promise<SceneDefinition>> = {
+  training: async () => {
+    const { createTrainingScene } = await import("./test/trainingSceneDefinition");
+    return {
+      id: "training",
+      setupScene: createTrainingScene,
+    };
+  },
+  mochiStreet: async () => {
+    const { createMochiStreetScene } = await import("./mochiStreet/sceneDefinition");
+    return {
+      id: "mochiStreet",
+      setupScene: createMochiStreetScene,
+    };
+  },
+};
+
+const sceneDefinitionCache = new Map<string, SceneDefinition>();
+Object.entries(staticSceneRegistry).forEach(([key, definition]) => {
+  sceneDefinitionCache.set(key, definition);
+});
+
+const resolveSceneKey = (sceneId?: string) => {
+  if (!sceneId) return "grass";
+  if (sceneId in staticSceneRegistry) return sceneId;
+  if (sceneId in dynamicSceneLoaders) return sceneId;
+  return "grass";
+};
+
+export const loadSceneDefinition = async (sceneId?: string): Promise<SceneDefinition> => {
+  const key = resolveSceneKey(sceneId);
+  const cached = sceneDefinitionCache.get(key);
+  if (cached) return cached;
+
+  const loader = dynamicSceneLoaders[key];
+  if (!loader) {
+    return staticSceneRegistry.grass;
+  }
+  const definition = await loader();
+  sceneDefinitionCache.set(key, definition);
+  return definition;
+};
 

@@ -169,7 +169,7 @@ export default async function UserPage() {
               <MenuButton
                 label="Mochi Soldier Surge"
                 className="h-full"
-                href="/mochiSoldierSurge"
+                href="/mochisoldiersurge"
               />
               <MenuButton label="Game 2" className="h-full" />
               <MenuButton label="Game" className="h-full" />
