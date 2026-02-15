@@ -12,9 +12,19 @@ export default async function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-950 px-6 py-12 text-slate-100">
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 rounded-2xl border border-slate-800 bg-slate-900/70 p-8">
-        <header className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">Admin Interface</h1>
-          <p className="text-slate-300">Access granted. Choose an admin action below.</p>
+        <header className="space-y-4">
+          <form action="/api/logout" method="post">
+            <button
+              type="submit"
+              className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm transition-colors hover:bg-slate-700"
+            >
+              Logout
+            </button>
+          </form>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold tracking-tight">Admin Interface</h1>
+            <p className="text-slate-300">Access granted. Choose an admin action below.</p>
+          </div>
         </header>
 
         <section className="grid gap-3">
@@ -23,6 +33,12 @@ export default async function AdminPage() {
             className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 transition-colors hover:bg-slate-700"
           >
             Users
+          </Link>
+          <Link
+            href="/admin/monster"
+            className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 transition-colors hover:bg-slate-700"
+          >
+            View Monster
           </Link>
         </section>
       </main>
