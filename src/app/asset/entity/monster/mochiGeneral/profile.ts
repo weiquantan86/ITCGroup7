@@ -13,7 +13,3 @@ export const mochiGeneralProfile: MonsterProfile = {
     attackRange: 2.2,
   },
 };
-
-export const mochiGeneralCombatConfig = {
-  attackCooldownMs: 1200,
-};

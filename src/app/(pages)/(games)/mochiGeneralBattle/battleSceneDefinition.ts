@@ -9,7 +9,6 @@ import type {
 import { Monster } from "../../../asset/entity/monster/general";
 import type { MochiGeneralCombatEntry } from "../../../asset/entity/monster/mochiGeneral/combatBehavior";
 import {
-  attachMochiGeneralSwordCollider,
   createMochiGeneralCombatState,
   resetMochiGeneralCombatState,
   resolveMochiGeneralRig,
@@ -328,7 +327,6 @@ export const createMochiGeneralBattleScene = (
     entry.anchor.add(model);
     entry.model = model;
     entry.rig = resolveMochiGeneralRig(model);
-    entry.swordCollider = attachMochiGeneralSwordCollider(entry.rig.sword, trackMesh);
     entry.fallback.visible = false;
   };
 
@@ -417,7 +415,6 @@ export const createMochiGeneralBattleScene = (
     delta,
     player,
     currentStats,
-    applyDamage,
   }: PlayerWorldTickArgs) => {
     if (!playerDead && currentStats.health <= 0) {
       playerDead = true;
@@ -434,12 +431,10 @@ export const createMochiGeneralBattleScene = (
       if (!entry.monster.isAlive) continue;
       tickMochiGeneralCombat({
         entry,
-        now,
         delta,
         player,
         gameEnded,
         isBlocked: worldIsBlocked,
-        applyDamage,
       });
     }
 
