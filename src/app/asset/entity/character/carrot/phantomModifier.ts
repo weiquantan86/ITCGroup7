@@ -469,6 +469,7 @@ export const createCarrotPhantomModifier = ({
         const material = materials[i];
         if (!material) continue;
         if (material.userData?.carrotPhantomExclude) continue;
+        if (material.userData?.__playerHitFlashActive) continue;
         if (material.blending !== THREE.NormalBlending) continue;
         const snapshot = getMaterialSnapshot(material);
         callback(material, snapshot);

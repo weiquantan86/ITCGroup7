@@ -560,6 +560,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillRRightArmWorld = new THREE.Vector3();
   const skillRForwardWorld = new THREE.Vector3();
   const skillRSphereLaunchOrigin = new THREE.Vector3();
+  const skillRExplosionDirection = new THREE.Vector3();
   const skillQAimDirection = new THREE.Vector3(0, 0, 1);
   const skillQOrigin = new THREE.Vector3();
   const skillQBaseDirection = new THREE.Vector3();
@@ -713,6 +714,69 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetSkillRSphereAttachment();
   };
 
+  const spawnSkillRExplosionRangeFx = (
+    parent: THREE.Object3D,
+    center: THREE.Vector3,
+    radius: number
+  ) => {
+    const resolvedRadius = Math.max(0.5, radius);
+    const ringGeometry = new THREE.TorusGeometry(1, 0.08, 10, 56);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0x86efac,
+      transparent: true,
+      opacity: 0.62,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.copy(center);
+    ring.position.y += 0.12;
+    ring.scale.setScalar(resolvedRadius * 0.18);
+
+    const shellGeometry = new THREE.SphereGeometry(1, 24, 16);
+    const shellMaterial = new THREE.MeshBasicMaterial({
+      color: 0x22c55e,
+      transparent: true,
+      opacity: 0.24,
+      wireframe: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+    shell.position.copy(center);
+    shell.scale.setScalar(resolvedRadius * 0.22);
+
+    parent.add(ring, shell);
+
+    const startedAt = performance.now();
+    const lifeMs = 360;
+    ring.onBeforeRender = () => {
+      const progress = THREE.MathUtils.clamp(
+        (performance.now() - startedAt) / lifeMs,
+        0,
+        1
+      );
+      const fade = 1 - progress;
+      ring.scale.setScalar(
+        THREE.MathUtils.lerp(resolvedRadius * 0.18, resolvedRadius, progress)
+      );
+      shell.scale.setScalar(
+        THREE.MathUtils.lerp(resolvedRadius * 0.22, resolvedRadius, progress)
+      );
+      ringMaterial.opacity = 0.62 * fade * fade;
+      shellMaterial.opacity = 0.24 * fade;
+      if (progress >= 1 || !ring.parent || !shell.parent) {
+        ring.onBeforeRender = () => {};
+        parent.remove(ring, shell);
+        ringGeometry.dispose();
+        ringMaterial.dispose();
+        shellGeometry.dispose();
+        shellMaterial.dispose();
+      }
+    };
+  };
+
   const setSkillQChargeFxActive = (active: boolean) => {
     skillQChargeAura.setVisible(active);
     if (!active) {
@@ -846,6 +910,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         damage: volleyDamage,
         energyGainOnHit: 8,
         splitOnImpact: false,
+        removeOnTargetHit: false,
         lifecycle: {
           applyForces: () => {
             entry.aura.update(performance.now());
@@ -910,9 +975,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
         // Keep camera aim direction exactly; just disable default gravity.
         applyForces: () => {
         },
-        onRemove: ({ reason, triggerExplosion }) => {
+        onRemove: ({ reason, triggerExplosion, position }) => {
           if (reason === "expired") {
             triggerExplosion();
+          }
+          if (reason !== "cleared") {
+            spawnSkillRExplosionRangeFx(
+              worldRoot,
+              position.clone(),
+              skillRECombo.explosionRadius
+            );
           }
           skillRSphereInFlight = false;
           resetSkillRSphereAttachment();
@@ -922,6 +994,69 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (!bypassCooldown) {
       skillE.cooldownUntil = now + skillECooldownMs;
     }
+    return true;
+  };
+
+  const detonateSkillRInPlace = (now: number) => {
+    if (!skillR.active || skillRSphereInFlight || !fireProjectile) return false;
+    const worldRoot = avatar.parent;
+    if (!worldRoot) return false;
+
+    cancelCharge();
+    deactivateSkillE(false);
+    avatar.updateMatrixWorld(true);
+    skillRSphere.updateMatrixWorld(true);
+    skillRSphere.getWorldPosition(skillRSphereLaunchOrigin);
+    skillRExplosionDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
+    if (skillRExplosionDirection.lengthSq() < 0.000001) {
+      skillRExplosionDirection.set(0, 0, 1);
+    } else {
+      skillRExplosionDirection.normalize();
+    }
+
+    skillRSphere.removeFromParent();
+    worldRoot.add(skillRSphere);
+    skillRSphere.position.copy(skillRSphereLaunchOrigin);
+    skillRSphere.visible = true;
+    armReset.pending = true;
+    skillR.active = false;
+    skillR.expiresAt = 0;
+    skillRSphereInFlight = true;
+
+    fireProjectile({
+      projectileType: "abilityOrb",
+      origin: skillRSphereLaunchOrigin,
+      direction: skillRExplosionDirection,
+      mesh: skillRSphere,
+      radius: skillRSphereConfig.radius,
+      speed: 0,
+      gravity: 0,
+      lifetime: 0.02,
+      damage: 0,
+      energyGainOnHit: 0,
+      splitOnImpact: true,
+      explosionRadius: skillRECombo.explosionRadius,
+      explosionDamage: skillRECombo.explosionDamage,
+      removeOnTargetHit: false,
+      removeOnWorldHit: false,
+      lifecycle: {
+        onRemove: ({ reason, triggerExplosion, position }) => {
+          if (reason === "expired") {
+            triggerExplosion();
+          }
+          if (reason !== "cleared") {
+            spawnSkillRExplosionRangeFx(
+              worldRoot,
+              position.clone(),
+              skillRECombo.explosionRadius
+            );
+          }
+          skillRSphereInFlight = false;
+          resetSkillRSphereAttachment();
+        },
+      },
+    });
+
     return true;
   };
 
@@ -1042,10 +1177,20 @@ export const createRuntime: CharacterRuntimeFactory = ({
     triggerSlash: baseRuntime.triggerSlash,
     handleRightClick: (facing) => {
       if (skillQChargeState.active) return;
+      if (skillR.active) {
+        detonateSkillRInPlace(performance.now());
+        return;
+      }
       baseRuntime.handleRightClick(facing);
     },
     handleSkillQ,
-    handlePrimaryDown: beginCharge,
+    handlePrimaryDown: () => {
+      if (skillR.active) {
+        detonateSkillRInPlace(performance.now());
+        return;
+      }
+      beginCharge();
+    },
     handlePrimaryUp: releaseCharge,
     handlePrimaryCancel: cancelCharge,
     handleSkillE,

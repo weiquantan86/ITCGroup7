@@ -209,6 +209,8 @@ export interface MeleeAttackArgs {
   maxDistance: number;
   hitRadius?: number;
   maxHits?: number;
+  excludeTargetIds?: ReadonlySet<string>;
+  onHitTarget?: (targetId: string) => void;
   origin?: THREE.Vector3;
   direction?: THREE.Vector3;
   contactCenter?: THREE.Vector3;

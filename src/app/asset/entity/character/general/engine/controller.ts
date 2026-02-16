@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { HpPool } from "../../../hpPool";
-import { getCharacterEntry } from "../player/registry";
+import { characterProfiles, getCharacterEntry } from "../player/registry";
 import { bindPlayerInput } from "./input";
 import { createStatusHud } from "./statusHud";
 import { AttackTargetResolver } from "../combat/attackResolver";
@@ -158,6 +158,7 @@ export const createPlayer = ({
   >();
   const playerHitFlashMaterials = new Set<THREE.Material>();
   const playerHitFlashDurationMs = 110;
+  const playerHitFlashMaterialFlagKey = "__playerHitFlashActive";
   let playerHitFlashUntil = 0;
   let playerHitFlashTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -234,8 +235,12 @@ export const createPlayer = ({
           material.emissiveIntensity = state.emissiveIntensity;
         }
       }
+      if (material.userData) {
+        delete material.userData[playerHitFlashMaterialFlagKey];
+      }
     });
     playerHitFlashMaterials.clear();
+    playerHitFlashOriginalState.clear();
   };
 
   const clearPlayerHitFlash = () => {
@@ -267,6 +272,10 @@ export const createPlayer = ({
   const triggerPlayerHitFlash = () => {
     const materials = collectPlayerHitMaterials();
     if (!materials.length) return;
+    if (playerHitFlashMaterials.size > 0) {
+      restorePlayerHitFlash();
+    }
+    playerHitFlashOriginalState.clear();
     materials.forEach((material) => {
       savePlayerHitMaterialState(material);
       if (isColorMaterial(material)) {
@@ -276,13 +285,18 @@ export const createPlayer = ({
         material.emissive.copy(playerHitFlashColor);
         material.emissiveIntensity = Math.max(material.emissiveIntensity, 0.78);
       }
+      material.userData[playerHitFlashMaterialFlagKey] = true;
       playerHitFlashMaterials.add(material);
     });
     playerHitFlashUntil = performance.now() + playerHitFlashDurationMs;
     schedulePlayerHitFlashRestore();
   };
 
-  const defaultCharacterPath = "/assets/characters/adam/adam.glb";
+  const defaultProfile = characterProfiles[0];
+  if (!defaultProfile) {
+    throw new Error("No character profiles registered.");
+  }
+  const defaultCharacterPath = `/assets/characters${defaultProfile.pathToken}${defaultProfile.id}.glb`;
   let characterEntry = getCharacterEntry(characterPath || defaultCharacterPath);
   let characterRuntime: CharacterRuntime | null = null;
 
@@ -411,6 +425,8 @@ export const createPlayer = ({
     maxDistance,
     hitRadius = 0.45,
     maxHits = 1,
+    excludeTargetIds,
+    onHitTarget,
     origin,
     direction,
     contactCenter,
@@ -433,6 +449,8 @@ export const createPlayer = ({
         damage,
         radius: resolvedContactRadius,
         maxHits,
+        excludeTargetIds,
+        onHitTarget,
       });
     }
     if (maxDistance <= 0) return 0;
@@ -445,6 +463,8 @@ export const createPlayer = ({
       maxDistance,
       hitRadius,
       maxHits,
+      excludeTargetIds,
+      onHitTarget,
     });
   };
 

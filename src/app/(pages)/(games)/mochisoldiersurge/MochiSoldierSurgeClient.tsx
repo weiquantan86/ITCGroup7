@@ -34,6 +34,14 @@ type MochiSoldierSurgeClientProps = {
 };
 
 type RewardClaimStatus = "idle" | "claiming" | "claimed" | "error";
+type RewardEntry = {
+  key: keyof SurgeSnackRewards;
+  label: string;
+  count: number;
+};
+
+const REWARD_LINE_STAGGER_MS = 280;
+const REWARD_COUNT_STEP_MS = 90;
 
 const cloneRewards = (rewards: SurgeSnackRewards): SurgeSnackRewards => ({
   energy_sugar: rewards.energy_sugar || 0,
@@ -51,6 +59,7 @@ export default function MochiSoldierSurgeClient({
   const [activeSkillKey, setActiveSkillKey] = useState<"q" | "e" | "r">("q");
   const [isStarting, setIsStarting] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [deltaStartAtMs, setDeltaStartAtMs] = useState<number | null>(null);
   const [sceneSessionId, setSceneSessionId] = useState(0);
   const [surgeState, setSurgeState] = useState<MochiSoldierSurgeState>(
     createInitialMochiSoldierSurgeState()
@@ -64,7 +73,16 @@ export default function MochiSoldierSurgeClient({
   const [winBonusRewards, setWinBonusRewards] = useState<SurgeSnackRewards>(
     createEmptySurgeSnackRewards()
   );
+  const [revealedObtainedLines, setRevealedObtainedLines] = useState(0);
+  const [revealedWinBonusLines, setRevealedWinBonusLines] = useState(0);
+  const [obtainedAnimatedCounts, setObtainedAnimatedCounts] = useState<
+    Record<string, number>
+  >({});
+  const [winBonusAnimatedCounts, setWinBonusAnimatedCounts] = useState<
+    Record<string, number>
+  >({});
   const rewardSubmittedRef = useRef(false);
+  const rewardAnimationTimersRef = useRef<number[]>([]);
 
   const selectedCharacter = useMemo(() => {
     if (!selectedCharacterId) return characterOptions[0] ?? null;
@@ -84,7 +102,7 @@ export default function MochiSoldierSurgeClient({
     );
   }, [activeSkillKey, selectedCharacter]);
 
-  const buildRewardEntries = useCallback((rewards: SurgeSnackRewards) => {
+  const buildRewardEntries = useCallback((rewards: SurgeSnackRewards): RewardEntry[] => {
     return SURGE_SNACK_KEYS.filter((key) => rewards[key] > 0).map((key) => ({
       key,
       label: SURGE_SNACK_LABELS[key],
@@ -124,11 +142,16 @@ export default function MochiSoldierSurgeClient({
     setRewardClaimMessage("");
     setObtainedSnackRewards(createEmptySurgeSnackRewards());
     setWinBonusRewards(createEmptySurgeSnackRewards());
+    setRevealedObtainedLines(0);
+    setRevealedWinBonusLines(0);
+    setObtainedAnimatedCounts({});
+    setWinBonusAnimatedCounts({});
     rewardSubmittedRef.current = false;
   }, []);
 
   const startGame = async () => {
     if (isStarting || !selectedCharacter) return;
+    setDeltaStartAtMs(performance.now());
     setIsStarting(true);
     try {
       await fetch("/api/user/selected-character", {
@@ -220,6 +243,74 @@ export default function MochiSoldierSurgeClient({
     };
   }, [hasStarted, surgeState.gameEnded, surgeState.defeatedMonsters, surgeState.victory]);
 
+  useEffect(() => {
+    rewardAnimationTimersRef.current.forEach((timer) => {
+      window.clearTimeout(timer);
+      window.clearInterval(timer);
+    });
+    rewardAnimationTimersRef.current = [];
+    setRevealedObtainedLines(0);
+    setRevealedWinBonusLines(0);
+    setObtainedAnimatedCounts({});
+    setWinBonusAnimatedCounts({});
+
+    if (!surgeState.gameEnded || rewardClaimStatus !== "claimed") return;
+
+    obtainedSnackEntries.forEach((entry, index) => {
+      const revealTimer = window.setTimeout(() => {
+        setRevealedObtainedLines((prev) => Math.max(prev, index + 1));
+        if (entry.count <= 1) {
+          setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
+          return;
+        }
+        let currentCount = 1;
+        setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
+        const countTimer = window.setInterval(() => {
+          currentCount += 1;
+          if (currentCount >= entry.count) {
+            currentCount = entry.count;
+            window.clearInterval(countTimer);
+          }
+          setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
+        }, REWARD_COUNT_STEP_MS);
+        rewardAnimationTimersRef.current.push(countTimer);
+      }, index * REWARD_LINE_STAGGER_MS);
+      rewardAnimationTimersRef.current.push(revealTimer);
+    });
+
+    const winStartDelay =
+      Math.max(1, obtainedSnackEntries.length) * REWARD_LINE_STAGGER_MS + 220;
+    winBonusEntries.forEach((entry, index) => {
+      const revealTimer = window.setTimeout(() => {
+        setRevealedWinBonusLines((prev) => Math.max(prev, index + 1));
+        if (entry.count <= 1) {
+          setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
+          return;
+        }
+        let currentCount = 1;
+        setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
+        const countTimer = window.setInterval(() => {
+          currentCount += 1;
+          if (currentCount >= entry.count) {
+            currentCount = entry.count;
+            window.clearInterval(countTimer);
+          }
+          setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
+        }, REWARD_COUNT_STEP_MS);
+        rewardAnimationTimersRef.current.push(countTimer);
+      }, winStartDelay + index * REWARD_LINE_STAGGER_MS);
+      rewardAnimationTimersRef.current.push(revealTimer);
+    });
+
+    return () => {
+      rewardAnimationTimersRef.current.forEach((timer) => {
+        window.clearTimeout(timer);
+        window.clearInterval(timer);
+      });
+      rewardAnimationTimersRef.current = [];
+    };
+  }, [surgeState.gameEnded, rewardClaimStatus, obtainedSnackEntries, winBonusEntries]);
+
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-[#05070d] text-slate-100">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[length:38px_38px]" />
@@ -247,58 +338,98 @@ export default function MochiSoldierSurgeClient({
 
         {hasStarted ? surgeState.gameEnded ? (
           <section className="mt-6 flex w-full justify-center">
-            <div className="w-full max-w-[1220px] rounded-[34px] border border-white/15 bg-[#0b1220]/95 p-8 text-center shadow-[0_30px_90px_-35px_rgba(2,6,23,0.95)] md:p-12">
+            <div className="w-full max-w-[1280px] rounded-[34px] border border-white/15 bg-[#0b1220]/95 p-8 text-center shadow-[0_30px_90px_-35px_rgba(2,6,23,0.95)] md:p-12">
               <p
-                className={`text-base font-semibold uppercase tracking-[0.24em] ${
+                className={`text-lg font-semibold uppercase tracking-[0.24em] md:text-xl ${
                   surgeState.victory ? "text-emerald-300" : "text-rose-300"
                 }`}
               >
                 {surgeState.victory ? "Victory" : "Defeat"}
               </p>
-              <h3 className="mt-4 text-4xl font-bold text-slate-100 md:text-6xl">
+              <h3 className="mt-4 text-5xl font-bold text-slate-100 md:text-7xl">
                 {surgeState.victory
                   ? "All 50 Mochi Soldiers Defeated"
                   : "Player Eliminated"}
               </h3>
 
-              <div className="mt-8 rounded-[22px] border border-white/10 bg-slate-950/70 p-6 text-left md:p-8">
-                <p className="text-xl font-semibold text-slate-200">Numbers Killed:</p>
-                <p className="mt-2 text-2xl font-semibold tabular-nums text-slate-100">
+              <div className="mt-8 rounded-[22px] border border-white/10 bg-slate-950/70 p-6 text-center md:p-8">
+                <p className="text-2xl font-semibold text-slate-200 md:text-3xl">Numbers Killed:</p>
+                <p className="mt-2 text-4xl font-semibold tabular-nums text-slate-100 md:text-5xl">
                   {surgeState.defeatedMonsters}
                 </p>
 
-                <p className="mt-6 text-xl font-semibold text-slate-200">Obtained Snack:</p>
+                <p className="mt-8 text-2xl font-semibold text-slate-200 md:text-3xl">Obtained Snack:</p>
                 {rewardClaimStatus === "claiming" ? (
-                  <p className="mt-2 text-lg text-slate-300">Calculating...</p>
+                  <p className="mt-3 text-xl text-slate-300">Calculating...</p>
                 ) : obtainedSnackEntries.length === 0 ? (
-                  <p className="mt-2 text-lg text-slate-300">None</p>
+                  <p className="mt-3 text-xl text-slate-300">None</p>
                 ) : (
-                  <ul className="mt-2 space-y-2 text-lg">
-                    {obtainedSnackEntries.map((entry) => (
-                      <li key={entry.key} className="text-slate-100">
-                        {entry.label} x {entry.count}
-                      </li>
-                    ))}
+                  <ul className="mt-4 space-y-3 text-xl md:text-2xl">
+                    {obtainedSnackEntries.slice(0, revealedObtainedLines).map((entry) => {
+                      const shownCount = obtainedAnimatedCounts[entry.key] ?? 1;
+                      const isCounting = shownCount < entry.count;
+                      return (
+                        <li
+                          key={entry.key}
+                          className={`mx-auto flex max-w-[680px] items-center justify-center gap-3 rounded-xl border px-5 py-3 transition ${
+                            isCounting
+                              ? "border-cyan-300/45 bg-cyan-500/12 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.24)]"
+                              : "border-white/12 bg-white/[0.03] text-slate-100"
+                          }`}
+                        >
+                          <span className="font-semibold">{entry.label}</span>
+                          <span
+                            className={`inline-flex min-w-[96px] items-center justify-center rounded-full px-3 py-1 text-lg font-bold tabular-nums ${
+                              isCounting
+                                ? "animate-pulse bg-cyan-300/25 text-cyan-100"
+                                : "bg-slate-100/12 text-slate-100"
+                            }`}
+                          >
+                            x {shownCount}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
 
-                <p className="mt-6 text-xl font-semibold text-slate-200">Win Bonus:</p>
+                <p className="mt-8 text-2xl font-semibold text-slate-200 md:text-3xl">Win Bonus:</p>
                 {rewardClaimStatus === "claiming" ? (
-                  <p className="mt-2 text-lg text-slate-300">Calculating...</p>
+                  <p className="mt-3 text-xl text-slate-300">Calculating...</p>
                 ) : winBonusEntries.length === 0 ? (
-                  <p className="mt-2 text-lg text-slate-300">None</p>
+                  <p className="mt-3 text-xl text-slate-300">None</p>
                 ) : (
-                  <ul className="mt-2 space-y-2 text-lg">
-                    {winBonusEntries.map((entry) => (
-                      <li key={entry.key} className="text-slate-100">
-                        {entry.label} x {entry.count}
-                      </li>
-                    ))}
+                  <ul className="mt-4 space-y-3 text-xl md:text-2xl">
+                    {winBonusEntries.slice(0, revealedWinBonusLines).map((entry) => {
+                      const shownCount = winBonusAnimatedCounts[entry.key] ?? 1;
+                      const isCounting = shownCount < entry.count;
+                      return (
+                        <li
+                          key={entry.key}
+                          className={`mx-auto flex max-w-[680px] items-center justify-center gap-3 rounded-xl border px-5 py-3 transition ${
+                            isCounting
+                              ? "border-amber-300/45 bg-amber-500/12 text-amber-100 shadow-[0_0_28px_rgba(251,191,36,0.2)]"
+                              : "border-white/12 bg-white/[0.03] text-slate-100"
+                          }`}
+                        >
+                          <span className="font-semibold">{entry.label}</span>
+                          <span
+                            className={`inline-flex min-w-[96px] items-center justify-center rounded-full px-3 py-1 text-lg font-bold tabular-nums ${
+                              isCounting
+                                ? "animate-pulse bg-amber-300/25 text-amber-100"
+                                : "bg-slate-100/12 text-slate-100"
+                            }`}
+                          >
+                            x {shownCount}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
 
                 <p
-                  className={`mt-5 text-sm ${
+                  className={`mt-6 text-base md:text-lg ${
                     rewardClaimStatus === "error"
                       ? "text-rose-300"
                       : rewardClaimStatus === "claimed"
@@ -336,6 +467,7 @@ export default function MochiSoldierSurgeClient({
                 gameMode="mochisoldiersurge"
                 characterPath={selectedCharacter?.path}
                 sceneLoader={loadSurgeScene}
+                deltaStartAtMs={deltaStartAtMs ?? undefined}
                 onSceneStateChange={handleSceneStateChange}
                 className="h-[72vh] min-h-[560px] w-full max-w-[1400px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
               />
@@ -403,12 +535,12 @@ export default function MochiSoldierSurgeClient({
                 </div>
               ) : (
                 <>
-                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-                    <div className="space-y-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  <div className="flex flex-col items-center gap-6">
+                    <div className="w-full max-w-[1120px] space-y-4 text-center">
+                      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-300 md:text-base">
                         Choose Character
                       </p>
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                         {characterOptions.map((option) => {
                           const selected = option.id === selectedCharacter?.id;
                           return (
@@ -419,14 +551,16 @@ export default function MochiSoldierSurgeClient({
                                 setSelectedCharacterId(option.id);
                                 setActiveSkillKey("q");
                               }}
-                              className={`rounded-xl border px-4 py-4 text-left transition ${
+                              className={`rounded-2xl border px-6 py-6 text-center transition ${
                                 selected
-                                  ? "border-sky-300/70 bg-sky-500/15 shadow-[0_0_20px_rgba(56,189,248,0.25)]"
+                                  ? "border-sky-300/70 bg-sky-500/15 shadow-[0_0_26px_rgba(56,189,248,0.28)]"
                                   : "border-white/10 bg-slate-900/60 hover:border-white/30"
                               }`}
                             >
-                              <p className="text-lg font-semibold text-slate-100">{option.label}</p>
-                              <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">
+                              <p className="text-xl font-semibold text-slate-100 md:text-2xl">
+                                {option.label}
+                              </p>
+                              <p className="mt-2 text-sm uppercase tracking-[0.22em] text-slate-400">
                                 {option.id}
                               </p>
                             </button>
@@ -435,7 +569,7 @@ export default function MochiSoldierSurgeClient({
                       </div>
                     </div>
 
-                    <aside className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                    <aside className="w-full max-w-[760px] rounded-2xl border border-white/10 bg-slate-900/60 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                         Skill Info
                       </p>

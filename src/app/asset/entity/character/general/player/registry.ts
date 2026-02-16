@@ -37,13 +37,21 @@ export const resolveCharacterStats = (
 });
 
 export const getCharacterProfile = (path?: string) => {
-  if (!path) return adamProfile;
-  return profiles.find((profile) => path.includes(profile.pathToken)) || adamProfile;
+  const fallbackProfile = profiles[0];
+  if (!fallbackProfile) {
+    throw new Error("No character profiles registered.");
+  }
+  if (!path) return fallbackProfile;
+  return profiles.find((profile) => path.includes(profile.pathToken)) || fallbackProfile;
 };
 
 export const getCharacterEntry = (path?: string) => {
-  if (!path) return entries[0];
-  return entries.find((entry) => path.includes(entry.profile.pathToken)) || entries[0];
+  const fallbackEntry = entries[0];
+  if (!fallbackEntry) {
+    throw new Error("No character entries registered.");
+  }
+  if (!path) return fallbackEntry;
+  return entries.find((entry) => path.includes(entry.profile.pathToken)) || fallbackEntry;
 };
 
 export const characterProfiles = profiles;

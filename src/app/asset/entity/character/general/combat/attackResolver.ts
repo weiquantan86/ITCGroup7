@@ -16,6 +16,8 @@ type PerformMeleeAttackArgs = {
   maxDistance: number;
   hitRadius?: number;
   maxHits?: number;
+  excludeTargetIds?: ReadonlySet<string>;
+  onHitTarget?: (targetId: string) => void;
 };
 
 type PerformMeleeContactAttackArgs = {
@@ -26,6 +28,8 @@ type PerformMeleeContactAttackArgs = {
   damage: number;
   radius: number;
   maxHits?: number;
+  excludeTargetIds?: ReadonlySet<string>;
+  onHitTarget?: (targetId: string) => void;
 };
 
 type ApplyExplosionDamageArgs = {
@@ -214,6 +218,8 @@ export class AttackTargetResolver {
     maxDistance,
     hitRadius = 0.45,
     maxHits = 1,
+    excludeTargetIds,
+    onHitTarget,
   }: PerformMeleeAttackArgs) {
     if (!this.attackTargets.length) return 0;
     if (damage <= 0 || maxDistance <= 0) return 0;
@@ -227,6 +233,7 @@ export class AttackTargetResolver {
     for (let i = 0; i < this.attackTargets.length; i += 1) {
       const target = this.attackTargets[i];
       if (target.isActive && !target.isActive()) continue;
+      if (excludeTargetIds?.has(target.id)) continue;
 
       target.object.updateMatrixWorld(true);
       this.attackTargetBounds.setFromObject(target.object);
@@ -275,6 +282,7 @@ export class AttackTargetResolver {
         point: hit.point.clone(),
         direction: direction.clone(),
       });
+      onHitTarget?.(hit.target.id);
       hitCount += 1;
     }
     return hitCount;
@@ -288,6 +296,8 @@ export class AttackTargetResolver {
     damage,
     radius,
     maxHits = 1,
+    excludeTargetIds,
+    onHitTarget,
   }: PerformMeleeContactAttackArgs) {
     if (!this.attackTargets.length) return 0;
     if (damage <= 0 || radius <= 0) return 0;
@@ -304,6 +314,7 @@ export class AttackTargetResolver {
     for (let i = 0; i < this.attackTargets.length; i += 1) {
       const target = this.attackTargets[i];
       if (target.isActive && !target.isActive()) continue;
+      if (excludeTargetIds?.has(target.id)) continue;
 
       target.object.updateMatrixWorld(true);
       this.attackTargetBounds.setFromObject(target.object);
@@ -334,6 +345,7 @@ export class AttackTargetResolver {
         point: hit.point.clone(),
         direction: resolvedDirection.clone(),
       });
+      onHitTarget?.(hit.target.id);
       hitCount += 1;
     }
     return hitCount;

@@ -87,6 +87,21 @@ type DemonTransitionParticleState = {
   spin: THREE.Vector3;
 };
 
+type DemonShockwaveDamageWave = {
+  startedAt: number;
+  lastTickAt: number;
+  durationMs: number;
+  tickIntervalMs: number;
+  origin: THREE.Vector3;
+  direction: THREE.Vector3;
+  travelDistance: number;
+  startRadius: number;
+  endRadius: number;
+  damage: number;
+  maxHits: number;
+  hitTargetIds: Set<string>;
+};
+
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
 const easeInOutCubic = (value: number) =>
   value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
@@ -354,7 +369,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
     minDamage: 11,
     maxDamage: 29,
     hitRadius: 0.52,
-    handContactRadius: 0.64,
+    handModelRadiusScale: 1.06,
+    handModelMinRadius: 0.76,
+    handContactRadiusFallback: 0.92,
+    handContactRadiusByCharge: 0.22,
+    handContactForwardOffsetFallback: 0.62,
+    handContactForwardOffsetByCharge: 0.24,
+    handMaxHits: 8,
   };
   const skillRConfig = {
     forwardSpawnOffset: 1.25,
@@ -386,10 +407,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
   const demonFormConfig = {
     durationMs: 10000,
-    transformInDurationMs: 3000,
-    transformOutDurationMs: 2000,
-    scaleMultiplier: 3,
-    cameraScaleMultiplier: 3,
+    transformInDurationMs: 1500,
+    transformOutDurationMs: 1000,
+    scaleMultiplier: 1.5,
+    cameraScaleMultiplier: 1.5,
     damageTakenMultiplier: 1 / 3,
     healOnEnd: 25,
     transitionParticleSpawnPerSec: 92,
@@ -409,10 +430,21 @@ export const createRuntime: CharacterRuntimeFactory = ({
     projectileEmissive: 0x6d28d9,
     projectileEmissiveIntensity: 1.32,
     projectileExplosionRadius: 2.6,
-    projectileExplosionDamage: 16,
+    projectileExplosionDamage: 0,
     projectileExplosionColor: 0xd8b4fe,
     projectileExplosionEmissive: 0x9333ea,
     projectileExplosionEmissiveIntensity: 1.42,
+    projectileShockwavePrimaryDurationMs: 420,
+    projectileShockwaveSecondaryDurationMs: 600,
+    projectileShockwaveTickIntervalMs: 72,
+    projectileShockwavePrimarySpeed: 4.2,
+    projectileShockwaveSecondarySpeed: 3.2,
+    projectileShockwavePrimaryStartRadius: 0.88,
+    projectileShockwavePrimaryEndRadius: 4.55,
+    projectileShockwaveSecondaryStartRadius: 1.3,
+    projectileShockwaveSecondaryEndRadius: 5.72,
+    projectileShockwaveDamage: 16,
+    projectileShockwaveMaxHits: 50,
     demonESummonScaleMultiplier: 0.5625,
     demonEProjectileScale: 10.7136,
     bodyColor: 0x4c1d95,
@@ -443,6 +475,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     inboundDurationMs: 0,
     attackDistance: 0,
     hitPending: false,
+    hitTargetIds: new Set<string>(),
     pendingCapture: false,
     currentCurl: 0,
     failedFromCurl: 0,
@@ -536,10 +569,19 @@ export const createRuntime: CharacterRuntimeFactory = ({
   });
   const punchAimOrigin = new THREE.Vector3();
   const punchAimDirection = new THREE.Vector3();
+  const punchContactCenter = new THREE.Vector3();
+  const punchHandBounds = new THREE.Box3();
+  const punchHandSphere = new THREE.Sphere();
   const punchAimParentQuaternion = new THREE.Quaternion();
   const punchAimAvatarQuaternion = new THREE.Quaternion();
   const demonProjectileSpawnOrigin = new THREE.Vector3();
   const demonProjectileDirection = new THREE.Vector3();
+  const demonShockwaveUp = new THREE.Vector3(0, 1, 0);
+  const demonShockwaveForwardFlat = new THREE.Vector3();
+  const demonShockwaveLateralDirection = new THREE.Vector3();
+  const demonShockwaveCenter = new THREE.Vector3();
+  const demonShockwaveHitDirection = new THREE.Vector3();
+  const demonShockwaveWaves: DemonShockwaveDamageWave[] = [];
   const demonMaterialSnapshots = new Map<THREE.Material, DemonMaterialSnapshot>();
   const demonPurpleColor = new THREE.Color(demonFormConfig.bodyColor);
   const demonPurpleEmissive = new THREE.Color(demonFormConfig.bodyEmissive);
@@ -1089,6 +1131,127 @@ export const createRuntime: CharacterRuntimeFactory = ({
     return demonProjectileDirection;
   };
 
+  const clearDemonShockwaveDamageWaves = () => {
+    demonShockwaveWaves.length = 0;
+  };
+
+  const queueDemonShockwaveDamageWaves = ({
+    now,
+    origin,
+    direction,
+  }: {
+    now: number;
+    origin: THREE.Vector3;
+    direction: THREE.Vector3;
+  }) => {
+    if (!performMeleeAttack) return;
+    demonShockwaveForwardFlat.set(direction.x, 0, direction.z);
+    if (demonShockwaveForwardFlat.lengthSq() < 0.000001) {
+      demonShockwaveForwardFlat.set(0, 0, 1);
+    } else {
+      demonShockwaveForwardFlat.normalize();
+    }
+
+    demonShockwaveLateralDirection
+      .crossVectors(demonShockwaveUp, demonShockwaveForwardFlat)
+      .setY(0);
+    if (demonShockwaveLateralDirection.lengthSq() < 0.000001) {
+      demonShockwaveLateralDirection.set(1, 0, 0);
+    } else {
+      demonShockwaveLateralDirection.normalize();
+    }
+
+    const sharedHitTargetIds = new Set<string>();
+    const baseOrigin = origin.clone();
+    const createWave = (
+      waveDirection: THREE.Vector3,
+      durationMs: number,
+      speed: number,
+      startRadius: number,
+      endRadius: number
+    ): DemonShockwaveDamageWave => ({
+      startedAt: now,
+      lastTickAt: now - demonFormConfig.projectileShockwaveTickIntervalMs,
+      durationMs: Math.max(120, durationMs),
+      tickIntervalMs: Math.max(24, demonFormConfig.projectileShockwaveTickIntervalMs),
+      origin: baseOrigin.clone(),
+      direction: waveDirection.clone(),
+      travelDistance: Math.max(0.1, speed) * Math.max(0.12, durationMs * 0.001),
+      startRadius: Math.max(0.25, startRadius),
+      endRadius: Math.max(startRadius + 0.2, endRadius),
+      damage: Math.max(1, Math.round(demonFormConfig.projectileShockwaveDamage)),
+      maxHits: Math.max(1, Math.round(demonFormConfig.projectileShockwaveMaxHits)),
+      hitTargetIds: sharedHitTargetIds,
+    });
+
+    demonShockwaveWaves.push(
+      createWave(
+        demonShockwaveLateralDirection,
+        demonFormConfig.projectileShockwavePrimaryDurationMs,
+        demonFormConfig.projectileShockwavePrimarySpeed,
+        demonFormConfig.projectileShockwavePrimaryStartRadius,
+        demonFormConfig.projectileShockwavePrimaryEndRadius
+      ),
+      createWave(
+        demonShockwaveLateralDirection.clone().multiplyScalar(-1),
+        demonFormConfig.projectileShockwaveSecondaryDurationMs,
+        demonFormConfig.projectileShockwaveSecondarySpeed,
+        demonFormConfig.projectileShockwaveSecondaryStartRadius,
+        demonFormConfig.projectileShockwaveSecondaryEndRadius
+      )
+    );
+  };
+
+  const updateDemonShockwaveDamageWaves = (now: number) => {
+    if (!performMeleeAttack) {
+      clearDemonShockwaveDamageWaves();
+      return;
+    }
+    for (let i = demonShockwaveWaves.length - 1; i >= 0; i -= 1) {
+      const wave = demonShockwaveWaves[i];
+      const durationMs = Math.max(1, wave.durationMs);
+      const progress = THREE.MathUtils.clamp((now - wave.startedAt) / durationMs, 0, 1);
+      demonShockwaveCenter
+        .copy(wave.origin)
+        .addScaledVector(wave.direction, wave.travelDistance * progress);
+      demonShockwaveHitDirection.copy(wave.direction);
+      if (demonShockwaveHitDirection.lengthSq() < 0.000001) {
+        demonShockwaveHitDirection.set(0, 0, 1);
+      } else {
+        demonShockwaveHitDirection.normalize();
+      }
+      const shockwaveRadius = THREE.MathUtils.lerp(
+        wave.startRadius,
+        wave.endRadius,
+        progress
+      );
+      const shouldTickDamage =
+        now - wave.lastTickAt >= wave.tickIntervalMs || progress >= 1;
+      if (shouldTickDamage) {
+        wave.lastTickAt = now;
+        const hitCount = performMeleeAttack({
+          damage: wave.damage,
+          maxDistance: 0.1,
+          maxHits: wave.maxHits,
+          origin: demonShockwaveCenter,
+          direction: demonShockwaveHitDirection,
+          contactCenter: demonShockwaveCenter,
+          contactRadius: shockwaveRadius,
+          excludeTargetIds: wave.hitTargetIds,
+          onHitTarget: (targetId) => {
+            wave.hitTargetIds.add(targetId);
+          },
+        });
+        if (hitCount > 0) {
+          applyMana?.(5 * hitCount);
+        }
+      }
+      if (progress >= 1) {
+        demonShockwaveWaves.splice(i, 1);
+      }
+    }
+  };
+
   const fireDemonBasicProjectile = (now = performance.now()) => {
     if (!fireProjectile) return false;
     if (now < demonFormState.projectileCooldownUntil) return false;
@@ -1108,7 +1271,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       demonProjectileSpawnOrigin.y += demonFormConfig.projectileVerticalSpawnOffset;
     }
     fireProjectile({
-      projectileType: "abilityOrb",
+      projectileType: "carrotDemonVolleyOrb",
       origin: demonProjectileSpawnOrigin.clone(),
       direction: direction.clone(),
       speed: demonFormConfig.projectileSpeed,
@@ -1121,7 +1284,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       color: demonFormConfig.projectileColor,
       emissive: demonFormConfig.projectileEmissive,
       emissiveIntensity: demonFormConfig.projectileEmissiveIntensity,
-      splitOnImpact: true,
+      splitOnImpact: false,
       explosionRadius: demonFormConfig.projectileExplosionRadius,
       explosionDamage: demonFormConfig.projectileExplosionDamage,
       explosionColor: demonFormConfig.projectileExplosionColor,
@@ -1129,6 +1292,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
       explosionEmissiveIntensity: demonFormConfig.projectileExplosionEmissiveIntensity,
       explodeOnExpire: true,
       energyGainOnHit: 0,
+      manaGainOnHit: 5,
+      grantManaOnTargetHit: true,
+      lifecycle: {
+        onRemove: ({ reason, now: removedAt, position, velocity }) => {
+          if (reason === "cleared") return;
+          queueDemonShockwaveDamageWaves({
+            now: removedAt,
+            origin: position.clone(),
+            direction: velocity.clone(),
+          });
+        },
+      },
     });
     return true;
   };
@@ -1154,6 +1329,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     demonFormState.transitionStartedAt = 0;
     demonFormState.transitionEndsAt = 0;
     demonFormState.projectileCooldownUntil = 0;
+    clearDemonShockwaveDamageWaves();
     if (demonFormState.hasAvatarBaseScale) {
       avatar.scale.copy(demonFormState.avatarBaseScale);
     } else {
@@ -1417,6 +1593,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     punchState.inboundDurationMs = 0;
     punchState.attackDistance = 0;
     punchState.hitPending = false;
+    punchState.hitTargetIds.clear();
     punchState.pendingCapture = false;
     punchState.currentCurl = 0;
     punchState.failedFromCurl = 0;
@@ -1508,24 +1685,58 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const applyPunchMeleeHit = (
     ratio: number,
     origin: THREE.Vector3,
-    direction: THREE.Vector3
+    direction: THREE.Vector3,
+    hitTargetIds?: Set<string>
   ) => {
     if (!performMeleeAttack) return 0;
     const damage = Math.round(
       THREE.MathUtils.lerp(punchConfig.minDamage, punchConfig.maxDamage, ratio)
     );
+    const resolvedRatio = THREE.MathUtils.clamp(ratio, 0, 1);
+    let contactRadius =
+      punchConfig.handContactRadiusFallback +
+      punchConfig.handContactRadiusByCharge * resolvedRatio;
+    let contactForwardOffset =
+      punchConfig.handContactForwardOffsetFallback +
+      punchConfig.handContactForwardOffsetByCharge * resolvedRatio;
+
+    if (armRig.arm) {
+      armRig.arm.updateMatrixWorld(true);
+      punchHandBounds.setFromObject(armRig.arm);
+      if (!punchHandBounds.isEmpty()) {
+        punchHandBounds.getBoundingSphere(punchHandSphere);
+        contactRadius = Math.max(
+          punchConfig.handModelMinRadius,
+          punchHandSphere.radius * punchConfig.handModelRadiusScale +
+            punchConfig.handContactRadiusByCharge * resolvedRatio
+        );
+        contactForwardOffset += contactRadius * 0.18;
+        punchContactCenter.copy(punchHandSphere.center);
+      } else {
+        punchContactCenter.copy(origin);
+      }
+    } else {
+      punchContactCenter.copy(origin);
+    }
+    punchContactCenter.addScaledVector(direction, contactForwardOffset);
+
     const hitCount = performMeleeAttack({
       damage,
       maxDistance: 0.1,
       hitRadius: punchConfig.hitRadius,
-      maxHits: 1,
+      maxHits: punchConfig.handMaxHits,
       origin,
       direction,
-      contactCenter: origin,
-      contactRadius: punchConfig.handContactRadius,
+      contactCenter: punchContactCenter,
+      contactRadius,
+      excludeTargetIds: hitTargetIds,
+      onHitTarget: (targetId) => {
+        hitTargetIds?.add(targetId);
+      },
     });
     if (hitCount > 0) {
       applyEnergy?.(5 * hitCount);
+      applyMana?.(5 * hitCount);
     }
     return hitCount;
   };
@@ -1858,6 +2069,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     punchState.inboundDurationMs = THREE.MathUtils.clamp(outboundDurationMs * 0.9, 120, 430);
     punchState.attackDistance = distance + punchConfig.forwardNudge;
     punchState.hitPending = true;
+    punchState.hitTargetIds.clear();
 
     armRig.outboundPosition.copy(armRig.chargePosition).addScaledVector(
       new THREE.Vector3(0, 0, 1),
@@ -1999,12 +2211,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
       if (punchState.hitPending && progress >= 0.08) {
         const aim = resolvePunchMeleeAim();
-        const hitCount = applyPunchMeleeHit(
+        applyPunchMeleeHit(
           punchState.chargeRatio,
           aim.origin,
-          aim.direction
+          aim.direction,
+          punchState.hitTargetIds
         );
-        if (hitCount > 0 || progress >= 0.95) {
+        if (
+          progress >= 0.95 ||
+          punchState.hitTargetIds.size >= punchConfig.handMaxHits
+        ) {
           punchState.hitPending = false;
         }
       }
@@ -2115,6 +2331,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const onTick = (args: CharacterRuntimeTickArgs) => {
     phantomModifier.onTick(args);
     updateDemonFormState(args.now);
+    updateDemonShockwaveDamageWaves(args.now);
     updatePassiveManaRegen(args.delta);
   };
 

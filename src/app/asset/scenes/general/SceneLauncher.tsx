@@ -19,6 +19,7 @@ export default function SceneLauncher({
   onSceneStateChange,
   onPlayerStateChange,
   sceneLoader,
+  deltaStartAtMs,
 }: {
   sceneId?: string;
   gameMode?: string;
@@ -32,6 +33,7 @@ export default function SceneLauncher({
   onSceneStateChange?: (state: SceneUiState) => void;
   onPlayerStateChange?: (state: PlayerUiState) => void;
   sceneLoader?: () => Promise<SceneDefinition> | SceneDefinition;
+  deltaStartAtMs?: number;
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
@@ -46,6 +48,12 @@ export default function SceneLauncher({
     let player: ReturnType<typeof createPlayer> | null = null;
     let isDisposed = false;
     let lastTime = 0;
+    let deltaClockArmed = false;
+    const MAX_FRAME_DELTA_SECONDS = 0.05;
+    const deltaTrackingStartAt =
+      typeof deltaStartAtMs === "number" && Number.isFinite(deltaStartAtMs)
+        ? deltaStartAtMs
+        : null;
 
     const handleResize = () => {
       if (!mount || !renderer || !player) return;
@@ -105,8 +113,23 @@ export default function SceneLauncher({
         const animate = () => {
           if (isDisposed || !player || !renderer) return;
           const now = performance.now();
-          const delta = (now - lastTime) / 1000 || 0.016;
+
+          if (!deltaClockArmed) {
+            if (deltaTrackingStartAt !== null && now < deltaTrackingStartAt) {
+              animationId = window.requestAnimationFrame(animate);
+              return;
+            }
+            deltaClockArmed = true;
+            lastTime = now;
+            animationId = window.requestAnimationFrame(animate);
+            return;
+          }
+
+          const elapsedSeconds = (now - lastTime) / 1000;
           lastTime = now;
+          const delta = Number.isFinite(elapsedSeconds)
+            ? Math.min(Math.max(elapsedSeconds, 0), MAX_FRAME_DELTA_SECONDS)
+            : 0.016;
           player.update(now, delta);
           player.render(renderer);
           animationId = window.requestAnimationFrame(animate);
@@ -141,6 +164,7 @@ export default function SceneLauncher({
     onSceneStateChange,
     onPlayerStateChange,
     sceneLoader,
+    deltaStartAtMs,
   ]);
 
   return (
