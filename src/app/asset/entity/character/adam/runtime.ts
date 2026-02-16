@@ -881,6 +881,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       resolveEmpoweredBasicAttackDamage(skillQVolley.speed) *
       skillQVolley.damageMultiplierFromEmpoweredBasic;
     const sideOffsets = [0, 1, -1];
+    const volleyHitGroupId = `adam-skill-q-${now.toFixed(2)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
 
     for (let i = 0; i < sideOffsets.length; i += 1) {
       const side = sideOffsets[i];
@@ -911,6 +914,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
         energyGainOnHit: 8,
         splitOnImpact: false,
         removeOnTargetHit: false,
+        singleHitPerTarget: true,
+        sharedHitGroupId: volleyHitGroupId,
         lifecycle: {
           applyForces: () => {
             entry.aura.update(performance.now());

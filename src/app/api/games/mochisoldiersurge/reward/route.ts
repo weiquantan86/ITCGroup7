@@ -7,7 +7,7 @@ import {
   createEmptySurgeSnackRewards,
   resolveSurgeRewardPacksFromKills,
   type SurgeSnackRewards,
-} from "../../../../(pages)/(games)/mochisoldiersurge/surgeConfig";
+} from "../../../../(pages)/(games)/mochiSoldierSurge/surgeConfig";
 
 type RewardRequestBody = {
   defeatedMonsters?: number;

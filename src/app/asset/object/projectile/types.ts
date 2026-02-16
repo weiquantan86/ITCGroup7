@@ -50,6 +50,8 @@ export interface Projectile extends LinearProjectileState {
   explodeOnExpire: boolean;
   removeOnTargetHit: boolean;
   removeOnWorldHit: boolean;
+  singleHitPerTarget: boolean;
+  sharedHitGroupId: string | null;
   mesh: THREE.Mesh;
   targetHitRadius: number;
   damage: number;

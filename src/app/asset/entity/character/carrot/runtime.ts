@@ -407,8 +407,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
   const demonFormConfig = {
     durationMs: 10000,
-    transformInDurationMs: 1500,
-    transformOutDurationMs: 1000,
+    transformInDurationMs: 375,
+    transformOutDurationMs: 250,
     scaleMultiplier: 1.5,
     cameraScaleMultiplier: 1.5,
     damageTakenMultiplier: 1 / 3,

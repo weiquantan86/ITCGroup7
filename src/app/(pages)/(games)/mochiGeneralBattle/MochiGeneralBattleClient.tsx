@@ -329,7 +329,7 @@ export default function MochiGeneralBattleClient({
         </div>
       ) : null}
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1500px] flex-col justify-start px-6 pb-6 pt-20">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[1800px] flex-col justify-start px-6 pb-6 pt-20">
         <section className="w-full rounded-[32px] border border-white/10 bg-white/[0.04] p-8 text-center shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
           <h1 className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-4xl font-bold text-transparent md:text-5xl">
             Mochi General Battle
@@ -469,7 +469,7 @@ export default function MochiGeneralBattleClient({
                 sceneLoader={loadSurgeScene}
                 deltaStartAtMs={deltaStartAtMs ?? undefined}
                 onSceneStateChange={handleSceneStateChange}
-                className="h-[72vh] min-h-[560px] w-full max-w-[1400px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
+                className="h-[72vh] min-h-[560px] w-full max-w-[1680px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
               />
             </div>
 

@@ -82,6 +82,9 @@ export const createProjectileSystem = ({
   const projectileRemovedReason = new Map<number, ProjectileRemoveReason>();
   const projectileForcedRemoval = new Set<number>();
   const projectileExploded = new Set<number>();
+  const projectileHitTargets = new Map<number, Set<string>>();
+  const sharedHitGroupTargets = new Map<string, Set<string>>();
+  const sharedHitGroupRefCounts = new Map<string, number>();
   const projectileUpdater = new LinearProjectileUpdater();
   const projectileFxSystem = createProjectileFxSystem({ scene });
   const projectileMeshFactory = createProjectileMeshFactory();
@@ -92,6 +95,25 @@ export const createProjectileSystem = ({
   const cameraAimOrigin = new THREE.Vector3();
   const cameraAimDirection = new THREE.Vector3();
   const cameraAimPoint = new THREE.Vector3();
+
+  const retainSharedHitGroup = (groupId: string | null) => {
+    if (!groupId) return;
+    sharedHitGroupRefCounts.set(
+      groupId,
+      (sharedHitGroupRefCounts.get(groupId) ?? 0) + 1
+    );
+  };
+
+  const releaseSharedHitGroup = (groupId: string | null) => {
+    if (!groupId) return;
+    const count = sharedHitGroupRefCounts.get(groupId) ?? 0;
+    if (count <= 1) {
+      sharedHitGroupRefCounts.delete(groupId);
+      sharedHitGroupTargets.delete(groupId);
+      return;
+    }
+    sharedHitGroupRefCounts.set(groupId, count - 1);
+  };
 
   const clear = () => {
     for (let i = 0; i < projectiles.length; i += 1) {
@@ -104,8 +126,12 @@ export const createProjectileSystem = ({
       projectileRemovedReason.delete(projectile.id);
       projectileForcedRemoval.delete(projectile.id);
       projectileExploded.delete(projectile.id);
+      projectileHitTargets.delete(projectile.id);
+      releaseSharedHitGroup(projectile.sharedHitGroupId);
     }
     projectiles.length = 0;
+    sharedHitGroupTargets.clear();
+    sharedHitGroupRefCounts.clear();
     projectileFxSystem.clear();
   };
 
@@ -165,6 +191,7 @@ export const createProjectileSystem = ({
         : Math.max(0, options.manaGainOnHit);
 
     const id = projectileId++;
+    const sharedHitGroupId = options?.sharedHitGroupId ?? null;
     projectiles.push({
       id,
       projectileType: typeDefinition.id,
@@ -188,6 +215,8 @@ export const createProjectileSystem = ({
         options?.removeOnTargetHit ?? typeDefinition.rules.removeOnTargetHit,
       removeOnWorldHit:
         options?.removeOnWorldHit ?? typeDefinition.rules.removeOnWorldHit,
+      singleHitPerTarget: Boolean(options?.singleHitPerTarget),
+      sharedHitGroupId,
       mesh,
       velocity,
       life: 0,
@@ -223,6 +252,7 @@ export const createProjectileSystem = ({
       material: meshBuild.material,
       ownsMaterial: meshBuild.ownsMaterial,
     });
+    retainSharedHitGroup(sharedHitGroupId);
 
     if (options?.lifecycle) {
       projectileLifecycleHooks.set(id, options.lifecycle);
@@ -370,8 +400,43 @@ export const createProjectileSystem = ({
         );
         const shouldUseAttackHit =
           Boolean(attackHit) && attackHit!.distance <= nearestObstacleDistance;
+        let canApplyAttackHit = shouldUseAttackHit;
 
-        if (shouldUseAttackHit && attackHit) {
+        if (
+          canApplyAttackHit &&
+          attackHit &&
+          projectile.sharedHitGroupId
+        ) {
+          let groupTargets = sharedHitGroupTargets.get(projectile.sharedHitGroupId);
+          if (!groupTargets) {
+            groupTargets = new Set<string>();
+            sharedHitGroupTargets.set(projectile.sharedHitGroupId, groupTargets);
+          }
+          if (groupTargets.has(attackHit.target.id)) {
+            canApplyAttackHit = false;
+          } else {
+            groupTargets.add(attackHit.target.id);
+          }
+        }
+
+        if (
+          canApplyAttackHit &&
+          attackHit &&
+          projectile.singleHitPerTarget
+        ) {
+          let hitTargets = projectileHitTargets.get(projectile.id);
+          if (!hitTargets) {
+            hitTargets = new Set<string>();
+            projectileHitTargets.set(projectile.id, hitTargets);
+          }
+          if (hitTargets.has(attackHit.target.id)) {
+            canApplyAttackHit = false;
+          } else {
+            hitTargets.add(attackHit.target.id);
+          }
+        }
+
+        if (canApplyAttackHit && attackHit) {
           attackRayHitPoint.copy(attackHit.point);
           attackRayDirection.copy(direction);
 
@@ -554,6 +619,8 @@ export const createProjectileSystem = ({
         projectileRemovedReason.delete(projectile.id);
         projectileForcedRemoval.delete(projectile.id);
         projectileExploded.delete(projectile.id);
+        projectileHitTargets.delete(projectile.id);
+        releaseSharedHitGroup(projectile.sharedHitGroupId);
       },
     });
 

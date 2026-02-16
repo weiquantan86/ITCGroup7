@@ -201,6 +201,8 @@ export interface FireProjectileArgs {
   explodeOnExpire?: boolean;
   removeOnTargetHit?: boolean;
   removeOnWorldHit?: boolean;
+  singleHitPerTarget?: boolean;
+  sharedHitGroupId?: string;
   lifecycle?: ProjectileLifecycleHooks;
 }
 

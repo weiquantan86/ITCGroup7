@@ -137,7 +137,7 @@ eyeR.scale.set(2, 1,  0.5);
 root.add(eyeR);
 
 const cape = new THREE.Mesh(
-  new THREE.CylinderGeometry(1.2, 0.95, 0.8, 26, 1, true),
+  new THREE.CylinderGeometry(1.3, 1.05, 0.8, 26, 1, true),
   blackMat
 );
 cape.name = "cape";
@@ -227,18 +227,18 @@ const leftPauldron = new THREE.Mesh(
   goldMat
 );
 leftPauldron.name = "leftPauldron";
-leftPauldron.position.set(-0.99, 2.5, 0.08);
+leftPauldron.position.set(0.51, 0.5, -0.04);
 leftPauldron.rotation.set(0, 0, -0.1);
-root.add(leftPauldron);
+armLeft.add(leftPauldron);
 
 const rightPauldron = new THREE.Mesh(
   new THREE.SphereGeometry(0.4, 22, 16, 0, Math.PI * 2, 0, Math.PI / 2),
   goldMat
 );
 rightPauldron.name = "rightPauldron";
-rightPauldron.position.set(0.99, 2.5, 0.08);
-leftPauldron.rotation.set(0, 0, 0.1);
-root.add(rightPauldron);
+rightPauldron.position.set(-0.51, 0.5, -0.04);
+rightPauldron.rotation.set(0, 0, 0.1);
+armRight.add(rightPauldron);
 
 const sword = new THREE.Group();
 sword.name = "generalSword";

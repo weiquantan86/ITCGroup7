@@ -7,6 +7,14 @@ import type {
   PlayerWorldTickArgs,
 } from "../../../asset/entity/character/general/player";
 import { Monster } from "../../../asset/entity/monster/general";
+import type { MochiGeneralCombatEntry } from "../../../asset/entity/monster/mochiGeneral/combatBehavior";
+import {
+  attachMochiGeneralSwordCollider,
+  createMochiGeneralCombatState,
+  resetMochiGeneralCombatState,
+  resolveMochiGeneralRig,
+  tickMochiGeneralCombat,
+} from "../../../asset/entity/monster/mochiGeneral/combatBehavior";
 import { mochiGeneralProfile } from "../../../asset/entity/monster/mochiGeneral/profile";
 import { createMochiFactoryScene } from "../../../asset/scenes/mochiFactory/sceneDefinition";
 import type {
@@ -21,12 +29,8 @@ import {
 
 type BossEntry = {
   id: string;
-  anchor: THREE.Group;
   hitbox: THREE.Mesh;
-  fallback: THREE.Mesh;
-  model: THREE.Object3D | null;
-  monster: Monster;
-};
+} & MochiGeneralCombatEntry;
 
 type EntranceSmokeParticle = {
   mesh: THREE.Mesh;
@@ -191,6 +195,7 @@ export const createMochiGeneralBattleScene = (
       disposeObjectResources(entry.model);
       entry.model = null;
     }
+    resetMochiGeneralCombatState(entry);
     if (entry.fallback.parent === entry.anchor) {
       entry.anchor.remove(entry.fallback);
     }
@@ -322,6 +327,8 @@ export const createMochiGeneralBattleScene = (
     trackObject(model);
     entry.anchor.add(model);
     entry.model = model;
+    entry.rig = resolveMochiGeneralRig(model);
+    entry.swordCollider = attachMochiGeneralSwordCollider(entry.rig.sword, trackMesh);
     entry.fallback.visible = false;
   };
 
@@ -370,6 +377,7 @@ export const createMochiGeneralBattleScene = (
       fallback,
       model: null,
       monster,
+      ...createMochiGeneralCombatState(),
     };
 
     bosses.push(entry);
@@ -404,7 +412,13 @@ export const createMochiGeneralBattleScene = (
   const bossSpawnPosition = new THREE.Vector3(0, groundY, 0);
   let bossSpawned = false;
 
-  const worldTick = ({ now, delta, currentStats }: PlayerWorldTickArgs) => {
+  const worldTick = ({
+    now,
+    delta,
+    player,
+    currentStats,
+    applyDamage,
+  }: PlayerWorldTickArgs) => {
     if (!playerDead && currentStats.health <= 0) {
       playerDead = true;
       endGame(false);
@@ -414,6 +428,21 @@ export const createMochiGeneralBattleScene = (
       bossSpawned = true;
       spawnBoss(bossSpawnPosition);
     }
+
+    for (let i = 0; i < bosses.length; i += 1) {
+      const entry = bosses[i];
+      if (!entry.monster.isAlive) continue;
+      tickMochiGeneralCombat({
+        entry,
+        now,
+        delta,
+        player,
+        gameEnded,
+        isBlocked: worldIsBlocked,
+        applyDamage,
+      });
+    }
+
     updateEntranceSmoke(delta);
     emitState();
   };

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { HpPool } from "../hpPool";
+import { HpPool } from "../../hpPool";
 
 export interface MonsterStats {
   health: number;
