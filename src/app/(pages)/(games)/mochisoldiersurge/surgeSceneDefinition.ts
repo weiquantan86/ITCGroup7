@@ -676,6 +676,10 @@ export const createMochiSoldierSurgeScene = (
       id: entry.id,
       object: anchor,
       isActive: () => entry.monster.isAlive,
+      category: "normal",
+      label: mochiSoldierProfile.label,
+      getHealth: () => entry.monster.health,
+      getMaxHealth: () => entry.monster.maxHealth,
       onHit: (hit) => {
         if (gameEnded || !entry.monster.isAlive) return;
         const dealt = entry.monster.takeDamage(Math.max(1, Math.round(hit.damage)));

@@ -17,6 +17,7 @@ import {
 import { createPlayerFrameUpdater } from "./frameUpdater";
 import { resolveWorldHooks } from "./worldHooks";
 import type {
+  PlayerAttackTarget,
   PlayerController,
   PlayerUiState,
   PlayerWorld,
@@ -102,6 +103,10 @@ export const createPlayer = ({
   const projectileColliders = resolvedWorld.projectileColliders ?? [];
   const recoveryZones = resolvedWorld.recoveryZones ?? [];
   const attackResolver = new AttackTargetResolver(attackTargets);
+  const bossDetectionRange = 200;
+  const bossDetectionRangeSq = bossDetectionRange * bossDetectionRange;
+  const bossDetectionPlayerPos = new THREE.Vector3();
+  const bossDetectionTargetPos = new THREE.Vector3();
   const emptyProjectileBlockers: THREE.Object3D[] = [];
   const avatar = new THREE.Group();
   const lookPivot = new THREE.Group();
@@ -383,6 +388,49 @@ export const createPlayer = ({
     });
   };
 
+  const updateBossHud = () => {
+    if (!attackTargets.length) {
+      statusHud.setBossInfo(null);
+      return;
+    }
+
+    avatar.getWorldPosition(bossDetectionPlayerPos);
+    let nearestBoss: PlayerAttackTarget | null = null;
+    let nearestDistanceSq = Infinity;
+
+    for (let i = 0; i < attackTargets.length; i += 1) {
+      const target = attackTargets[i];
+      if (target.category !== "boss") continue;
+      if (target.isActive && !target.isActive()) continue;
+
+      target.object.getWorldPosition(bossDetectionTargetPos);
+      const distanceSq = bossDetectionPlayerPos.distanceToSquared(
+        bossDetectionTargetPos
+      );
+      if (distanceSq > bossDetectionRangeSq) continue;
+      if (distanceSq >= nearestDistanceSq) continue;
+      nearestDistanceSq = distanceSq;
+      nearestBoss = target;
+    }
+
+    if (!nearestBoss) {
+      statusHud.setBossInfo(null);
+      return;
+    }
+
+    const health = Math.max(0, nearestBoss.getHealth?.() ?? 0);
+    const resolvedMaxHealth = nearestBoss.getMaxHealth?.();
+    const maxHealth = Math.max(
+      1,
+      resolvedMaxHealth == null ? (health > 0 ? health : 1) : resolvedMaxHealth
+    );
+    statusHud.setBossInfo({
+      name: nearestBoss.label || nearestBoss.id,
+      health,
+      maxHealth,
+    });
+  };
+
   const syncHealthFromPool = () => {
     statsState.syncHealth(healthPool.current);
   };
@@ -518,6 +566,7 @@ export const createPlayer = ({
     statsState.resetSkillCooldowns();
     survivalState?.clearRecoveryZoneCooldowns();
     clearPlayerHitFlash();
+    statusHud.setBossInfo(null);
     const spawnY = resolvedWorld.groundY + visualState.modelFootOffset;
     avatar.position.set(playerSpawn.x, spawnY, playerSpawn.z);
     avatar.rotation.y = 0;
@@ -648,6 +697,7 @@ export const createPlayer = ({
 
   const update = (now: number, delta: number) => {
     frameUpdater.update(now, delta);
+    updateBossHud();
   };
 
   const render = (renderer: THREE.WebGLRenderer) => {
@@ -665,6 +715,7 @@ export const createPlayer = ({
   const dispose = () => {
     isMounted = false;
     clearPlayerHitFlash();
+    statusHud.setBossInfo(null);
     inputBindings.dispose();
     avatarBody.geometry.dispose();
     avatarBody.material.dispose();

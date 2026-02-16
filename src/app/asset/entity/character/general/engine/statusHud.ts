@@ -6,6 +6,13 @@ export type StatusHud = {
     cooldowns: Record<SkillKey, number>,
     durations: Record<SkillKey, number>
   ) => void;
+  setBossInfo: (
+    info: {
+      name: string;
+      health: number;
+      maxHealth: number;
+    } | null
+  ) => void;
   triggerDamageFlash: () => void;
   dispose: () => void;
 };
@@ -18,6 +25,7 @@ export const createStatusHud = (
     return {
       setStats: () => {},
       setSkillCooldowns: () => {},
+      setBossInfo: () => {},
       triggerDamageFlash: () => {},
       dispose: () => {},
     };
@@ -137,7 +145,32 @@ export const createStatusHud = (
   damageOverlay.style.cssText =
     "position:absolute;inset:0;z-index:7;pointer-events:none;background:#ef4444;opacity:0;";
 
-  host.append(hud, cooldownPanel, damageOverlay);
+  const bossPanel = document.createElement("div");
+  bossPanel.style.cssText =
+    "position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:8;" +
+    "display:none;min-width:320px;max-width:min(620px,74vw);padding:8px 12px;border-radius:12px;" +
+    "background:rgba(2,6,23,0.72);border:1px solid rgba(248,250,252,0.24);" +
+    "box-shadow:0 10px 24px rgba(2,6,23,0.55);pointer-events:none;";
+  const bossName = document.createElement("div");
+  bossName.style.cssText =
+    "text-align:center;font-size:13px;font-weight:700;letter-spacing:0.12em;" +
+    "text-transform:uppercase;color:rgba(254,242,242,0.96);";
+  const bossHpTrack = document.createElement("div");
+  bossHpTrack.style.cssText =
+    "margin-top:6px;height:11px;border-radius:999px;overflow:hidden;" +
+    "background:rgba(15,23,42,0.92);border:1px solid rgba(248,250,252,0.24);";
+  const bossHpFill = document.createElement("div");
+  bossHpFill.style.cssText =
+    "height:100%;width:100%;background:linear-gradient(90deg,#ef4444,#f97316);" +
+    "box-shadow:0 0 14px rgba(239,68,68,0.55);transition:width 90ms linear;";
+  bossHpTrack.appendChild(bossHpFill);
+  const bossHpValue = document.createElement("div");
+  bossHpValue.style.cssText =
+    "margin-top:4px;text-align:center;font-size:12px;font-variant-numeric:tabular-nums;" +
+    "font-weight:700;color:rgba(248,250,252,0.95);";
+  bossPanel.append(bossName, bossHpTrack, bossHpValue);
+
+  host.append(hud, cooldownPanel, damageOverlay, bossPanel);
   updateCooldownPanelPosition();
 
   const updateFill = (
@@ -215,6 +248,22 @@ export const createStatusHud = (
       setCooldownCard("e", cooldowns.e, durations.e);
       setCooldownCard("r", cooldowns.r, durations.r);
     },
+    setBossInfo: (info) => {
+      if (!info) {
+        bossPanel.style.display = "none";
+        bossName.textContent = "";
+        bossHpValue.textContent = "";
+        bossHpFill.style.width = "0%";
+        return;
+      }
+      const maxHealth = Math.max(1, info.maxHealth);
+      const health = Math.max(0, Math.min(maxHealth, info.health));
+      const ratio = maxHealth > 0 ? health / maxHealth : 0;
+      bossPanel.style.display = "block";
+      bossName.textContent = info.name;
+      bossHpFill.style.width = `${Math.max(0, Math.min(100, ratio * 100))}%`;
+      bossHpValue.textContent = `${Math.round(health)} / ${Math.round(maxHealth)}`;
+    },
     triggerDamageFlash,
     dispose: () => {
       window.removeEventListener("resize", handleResize);
@@ -222,6 +271,7 @@ export const createStatusHud = (
       hud.parentElement?.removeChild(hud);
       cooldownPanel.parentElement?.removeChild(cooldownPanel);
       damageOverlay.parentElement?.removeChild(damageOverlay);
+      bossPanel.parentElement?.removeChild(bossPanel);
     },
   };
 };

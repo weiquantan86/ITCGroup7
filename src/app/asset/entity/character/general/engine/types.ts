@@ -28,6 +28,10 @@ export interface PlayerAttackTarget {
   id: string;
   object: THREE.Object3D;
   isActive?: () => boolean;
+  category?: "normal" | "boss";
+  label?: string;
+  getHealth?: () => number;
+  getMaxHealth?: () => number;
   onHit: (hit: PlayerAttackHit) => void;
 }
 

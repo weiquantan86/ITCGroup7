@@ -5,7 +5,7 @@ export const mochiGeneralProfile: MonsterProfile = {
   label: "Mochi General",
   pathToken: "/mochiGeneral/",
   stats: {
-    health: 180,
+    health: 10000,
     attack: 35,
     defense: 4,
     speed: 2.8,
