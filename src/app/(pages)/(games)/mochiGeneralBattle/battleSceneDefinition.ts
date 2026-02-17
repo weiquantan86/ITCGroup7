@@ -29,6 +29,8 @@ import {
 type BossEntry = {
   id: string;
   hitbox: THREE.Mesh;
+  swordThrustActive: boolean;
+  swordThrustHitTargets: Set<string>;
 } & MochiGeneralCombatEntry;
 
 type EntranceSmokeParticle = {
@@ -55,6 +57,20 @@ const fallbackBounds: Bounds = {
   minZ: -50,
   maxZ: 50,
 };
+
+const BOSS_SWORD_THRUST_DAMAGE = 30;
+const BOSS_SWORD_THRUST_PLAYER_TARGET_ID = "player";
+const BOSS_SWORD_THRUST_ATTACK_WEIGHT_THRESHOLD = 0.45;
+const BOSS_SWORD_THRUST_SWING_THRESHOLD = 0.08;
+const BOSS_SWORD_THRUST_BLADE_RADIUS = 0.5;
+const BOSS_SWORD_THRUST_PLAYER_RADIUS = 0.55;
+const BOSS_SWORD_THRUST_PLAYER_HEIGHT_OFFSET = 0.95;
+
+const swordBaseWorld = new THREE.Vector3();
+const swordTipWorld = new THREE.Vector3();
+const swordClosestPoint = new THREE.Vector3();
+const playerHitProbeWorld = new THREE.Vector3();
+const swordBladeSegment = new THREE.Line3();
 
 export const createMochiGeneralBattleScene = (
   scene: THREE.Scene,
@@ -302,6 +318,62 @@ export const createMochiGeneralBattleScene = (
     }
   };
 
+  const updateBossSwordThrustCollision = ({
+    entry,
+    player,
+    applyDamage,
+  }: {
+    entry: BossEntry;
+    player: THREE.Object3D;
+    applyDamage: (amount: number) => number;
+  }) => {
+    const thrustActive =
+      entry.swordAttackPoseWeight >= BOSS_SWORD_THRUST_ATTACK_WEIGHT_THRESHOLD &&
+      entry.swordHandSwing >= BOSS_SWORD_THRUST_SWING_THRESHOLD;
+
+    if (!thrustActive) {
+      entry.swordThrustActive = false;
+      return;
+    }
+
+    if (!entry.swordThrustActive) {
+      entry.swordThrustActive = true;
+      entry.swordThrustHitTargets.clear();
+    }
+
+    if (entry.swordThrustHitTargets.has(BOSS_SWORD_THRUST_PLAYER_TARGET_ID)) return;
+
+    const sword = entry.rig?.sword;
+    const swordTip = entry.rig?.swordTip;
+    if (!sword || !swordTip) return;
+
+    sword.getWorldPosition(swordBaseWorld);
+    swordTip.getWorldPosition(swordTipWorld);
+    if (swordBaseWorld.distanceToSquared(swordTipWorld) <= 0.00001) return;
+
+    player.getWorldPosition(playerHitProbeWorld);
+    playerHitProbeWorld.y += BOSS_SWORD_THRUST_PLAYER_HEIGHT_OFFSET;
+
+    swordBladeSegment.set(swordBaseWorld, swordTipWorld);
+    swordBladeSegment.closestPointToPoint(
+      playerHitProbeWorld,
+      true,
+      swordClosestPoint
+    );
+
+    const collisionDistance =
+      BOSS_SWORD_THRUST_BLADE_RADIUS + BOSS_SWORD_THRUST_PLAYER_RADIUS;
+    if (
+      swordClosestPoint.distanceToSquared(playerHitProbeWorld) >
+      collisionDistance * collisionDistance
+    ) {
+      return;
+    }
+
+    entry.swordThrustHitTargets.add(BOSS_SWORD_THRUST_PLAYER_TARGET_ID);
+    applyDamage(BOSS_SWORD_THRUST_DAMAGE);
+  };
+
   const handleBossDefeated = (entry: BossEntry) => {
     if (gameEnded) return;
     aliveMonsters = Math.max(0, aliveMonsters - 1);
@@ -372,6 +444,8 @@ export const createMochiGeneralBattleScene = (
       id,
       anchor,
       hitbox,
+      swordThrustActive: false,
+      swordThrustHitTargets: new Set<string>(),
       fallback,
       model: null,
       monster,
@@ -415,6 +489,7 @@ export const createMochiGeneralBattleScene = (
     delta,
     player,
     currentStats,
+    applyDamage,
   }: PlayerWorldTickArgs) => {
     if (!playerDead && currentStats.health <= 0) {
       playerDead = true;
@@ -436,6 +511,13 @@ export const createMochiGeneralBattleScene = (
         gameEnded,
         isBlocked: worldIsBlocked,
       });
+      if (gameEnded) break;
+      updateBossSwordThrustCollision({
+        entry,
+        player,
+        applyDamage,
+      });
+      if (gameEnded) break;
     }
 
     updateEntranceSmoke(delta);
