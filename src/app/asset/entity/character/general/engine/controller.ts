@@ -166,6 +166,11 @@ export const createPlayer = ({
   const playerHitFlashMaterialFlagKey = "__playerHitFlashActive";
   let playerHitFlashUntil = 0;
   let playerHitFlashTimer: ReturnType<typeof setTimeout> | null = null;
+  let cachedPlayerHitMaterials: THREE.Material[] | null = null;
+
+  const invalidatePlayerHitMaterialCache = () => {
+    cachedPlayerHitMaterials = null;
+  };
 
   const isColorMaterial = (
     material: THREE.Material
@@ -206,6 +211,9 @@ export const createPlayer = ({
   };
 
   const collectPlayerHitMaterials = (): THREE.Material[] => {
+    if (cachedPlayerHitMaterials) {
+      return cachedPlayerHitMaterials;
+    }
     const materials = new Set<THREE.Material>();
     const collectFromObject = (object: THREE.Object3D | null | undefined) => {
       if (!object) return;
@@ -224,7 +232,8 @@ export const createPlayer = ({
     collectFromObject(visualState.avatarModel);
     collectFromObject(avatarBody);
     collectFromObject(avatarGlow);
-    return Array.from(materials);
+    cachedPlayerHitMaterials = Array.from(materials);
+    return cachedPlayerHitMaterials;
   };
 
   const restorePlayerHitFlash = () => {
@@ -635,6 +644,7 @@ export const createPlayer = ({
       groundY: resolvedWorld.groundY,
       previousModel: visualState.avatarModel,
       onLoaded: (nextVisualState) => {
+        invalidatePlayerHitMaterialCache();
         visualState.avatarModel = nextVisualState.avatarModel;
         visualState.arms = nextVisualState.arms;
         visualState.legLeft = nextVisualState.legLeft;
@@ -732,6 +742,7 @@ export const createPlayer = ({
     scene.remove(avatar);
     statusHud.dispose();
     playerHitFlashOriginalState.clear();
+    cachedPlayerHitMaterials = null;
   };
 
   return {

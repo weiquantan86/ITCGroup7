@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { resolveProjectileBlockHit } from "../../object/projectile/blocking";
 import { LinearProjectileUpdater } from "../../object/projectile/linearUpdater";
 import { tryReflectLinearProjectile } from "../../object/projectile/reflection";
 import type {
@@ -8,6 +9,7 @@ import type {
   PlayerWorldTickArgs,
 } from "../../entity/character/general/player";
 import { Monster } from "../../entity/monster/general";
+import { createSceneResourceTracker } from "../general/resourceTracker";
 import type { SceneSetupContext, SceneSetupResult } from "../general/sceneTypes";
 
 export const createTrainingScene = (
@@ -44,37 +46,15 @@ export const createTrainingScene = (
     (manaCenter.z + hpCenter.z) / 2
   );
 
-  const geometries = new Set<THREE.BufferGeometry>();
-  const materials = new Set<THREE.Material>();
-  const trackMesh = (mesh: THREE.Mesh) => {
-    geometries.add(mesh.geometry);
-    if (Array.isArray(mesh.material)) {
-      mesh.material.forEach((material) => materials.add(material));
-    } else {
-      materials.add(mesh.material);
-    }
-  };
-  const trackObject = (object: THREE.Object3D) => {
-    object.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      trackMesh(mesh);
-    });
-  };
-  const disposeObjectResources = (object: THREE.Object3D) => {
-    object.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.geometry?.dispose?.();
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((material) => material.dispose());
-      } else {
-        mesh.material?.dispose?.();
-      }
-    });
-  };
+  const resourceTracker = createSceneResourceTracker();
+  const {
+    trackGeometry,
+    trackMaterial,
+    trackMesh,
+    trackObject,
+    disposeObjectResources,
+    disposeTrackedResources,
+  } = resourceTracker;
 
   const trainingGroup = new THREE.Group();
   scene.add(trainingGroup);
@@ -463,8 +443,8 @@ export const createTrainingScene = (
     emissive: 0x38bdf8,
     emissiveIntensity: 0.65,
   });
-  geometries.add(testerExplosionGeometry);
-  materials.add(testerExplosionMaterial);
+  trackGeometry(testerExplosionGeometry);
+  trackMaterial(testerExplosionMaterial);
   const testerExplosionOrigin = new THREE.Vector3();
   const testerExplosionDirection = new THREE.Vector3();
   let testerRespawnAt = 0;
@@ -529,8 +509,8 @@ export const createTrainingScene = (
     roughness: 0.28,
     metalness: 0.22,
   });
-  geometries.add(targetDebrisGeometry);
-  materials.add(targetDebrisMaterial);
+  trackGeometry(targetDebrisGeometry);
+  trackMaterial(targetDebrisMaterial);
   const targetDebrisOrigin = new THREE.Vector3();
   const targetDebrisDirection = new THREE.Vector3();
 
@@ -599,8 +579,8 @@ export const createTrainingScene = (
     emissiveIntensity: 0.35,
   });
   const launcherArrowUpdater = new LinearProjectileUpdater();
-  geometries.add(launcherArrowGeometry);
-  materials.add(launcherArrowMaterial);
+  trackGeometry(launcherArrowGeometry);
+  trackMaterial(launcherArrowMaterial);
   const launcherOrigin = new THREE.Vector3();
   const launcherAimDirection = new THREE.Vector3();
   const launcherArrowForward = new THREE.Vector3(0, 0, 1);
@@ -791,21 +771,34 @@ export const createTrainingScene = (
         raycaster,
         remove
       ) => {
-        if (!projectileBlockers.length) return;
-        raycaster.set(origin, direction);
-        raycaster.far = distance + arrow.radius;
-        const hits = raycaster.intersectObjects(projectileBlockers, true);
-        if (!hits.length) return;
-        const reflected = tryReflectLauncherArrow({
-          arrow,
-          blockerHit: hits[0],
+        const blockResolution = resolveProjectileBlockHit({
           now: travelNow,
+          projectile: arrow,
           origin,
           direction,
           travelDistance: distance,
           nextPosition,
+          projectileBlockers,
+          raycaster,
+          handleProjectileBlockHit: ({
+            blockerHit,
+            now: blockNow,
+            origin: blockOrigin,
+            direction: blockDirection,
+            travelDistance: blockTravelDistance,
+            nextPosition: blockNextPosition,
+          }) =>
+            tryReflectLauncherArrow({
+              arrow,
+              blockerHit,
+              now: blockNow,
+              origin: blockOrigin,
+              direction: blockDirection,
+              travelDistance: blockTravelDistance,
+              nextPosition: blockNextPosition,
+            }),
         });
-        if (!reflected) {
+        if (blockResolution === "blocked") {
           remove();
         }
       },
@@ -887,7 +880,7 @@ export const createTrainingScene = (
 
       const testerModel = gltf.scene;
       testerAnchor.add(testerModel);
-      trackObject(testerModel);
+      trackObject(testerModel, { castShadow: true, receiveShadow: true });
 
       const modelBounds = new THREE.Box3().setFromObject(testerModel);
       const modelHeight = Math.max(0.001, modelBounds.max.y - modelBounds.min.y);
@@ -900,6 +893,7 @@ export const createTrainingScene = (
       testerModel.updateMatrixWorld(true);
 
       testerAnchor.remove(testerFallback);
+      testerMonster.invalidateHitFlashMaterialCache();
     },
     undefined,
     () => {}
@@ -980,8 +974,7 @@ export const createTrainingScene = (
     context?.onStateChange?.({});
     clearTrainingTransientObjects();
     scene.remove(trainingGroup);
-    geometries.forEach((geometry) => geometry.dispose());
-    materials.forEach((material) => material.dispose());
+    disposeTrackedResources();
   };
 
   return { world, dispose };

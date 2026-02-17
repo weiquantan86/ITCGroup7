@@ -3,12 +3,14 @@ import {
   resolveProjectileBlockHit,
   type ProjectileBlockHitHandler,
 } from "../../blocking";
+import { LinearProjectileUpdater } from "../../linearUpdater";
 
 type MochiGeneralSkill1Projectile = {
   mesh: THREE.Mesh;
   velocity: THREE.Vector3;
   radius: number;
   life: number;
+  maxLife: number;
 };
 
 export type MochiGeneralSkill1BurstRuntime = {
@@ -39,10 +41,6 @@ const BOSS_SKILL1_PROJECTILE_MIN_DIRECTION_Y = -0.05;
 
 const burstOriginWorld = new THREE.Vector3();
 const projectileDirectionWorld = new THREE.Vector3();
-const projectileTravelOriginWorld = new THREE.Vector3();
-const projectileNextPositionWorld = new THREE.Vector3();
-const projectileTravelDirectionWorld = new THREE.Vector3();
-const projectileRaycaster = new THREE.Raycaster();
 const playerProbeWorld = new THREE.Vector3();
 
 export const createMochiGeneralSkill1BurstRuntime = (
@@ -57,6 +55,7 @@ export const createMochiGeneralSkill1BurstRuntime = (
     emissiveIntensity: 0.22,
   });
   const projectiles: MochiGeneralSkill1Projectile[] = [];
+  const projectileUpdater = new LinearProjectileUpdater();
 
   const removeProjectileAt = (index: number) => {
     const projectile = projectiles[index];
@@ -113,7 +112,8 @@ export const createMochiGeneralSkill1BurstRuntime = (
         mesh: projectileMesh,
         velocity: projectileDirectionWorld.clone().multiplyScalar(speed),
         radius: BOSS_SKILL1_PROJECTILE_RADIUS,
-        life: BOSS_SKILL1_PROJECTILE_LIFETIME,
+        life: 0,
+        maxLife: BOSS_SKILL1_PROJECTILE_LIFETIME,
       });
     }
   };
@@ -140,55 +140,49 @@ export const createMochiGeneralSkill1BurstRuntime = (
     player.getWorldPosition(playerProbeWorld);
     playerProbeWorld.y += BOSS_SKILL1_PROJECTILE_PLAYER_HEIGHT_OFFSET;
 
-    for (let i = projectiles.length - 1; i >= 0; i -= 1) {
-      const projectile = projectiles[i];
-      projectile.life -= delta;
-      if (projectile.life <= 0) {
-        removeProjectileAt(i);
-        continue;
-      }
-
-      projectileTravelOriginWorld.copy(projectile.mesh.position);
-      const travelDistance = projectile.velocity.length() * Math.max(0, delta);
-      if (travelDistance > 0.000001) {
-        projectileTravelDirectionWorld.copy(projectile.velocity).normalize();
-        projectileNextPositionWorld
-          .copy(projectileTravelOriginWorld)
-          .addScaledVector(projectile.velocity, delta);
-
-        if (projectileBlockers.length) {
-          const blockResolution = resolveProjectileBlockHit({
-            now,
-            projectile,
-            origin: projectileTravelOriginWorld,
-            direction: projectileTravelDirectionWorld,
-            travelDistance,
-            nextPosition: projectileNextPositionWorld,
-            projectileBlockers,
-            raycaster: projectileRaycaster,
-            handleProjectileBlockHit,
-          });
-          if (blockResolution === "blocked") {
-            removeProjectileAt(i);
-            continue;
-          }
+    projectileUpdater.update(projectiles, now, delta, {
+      getObject: (projectile) => projectile.mesh,
+      onTravel: (
+        projectile,
+        travelNow,
+        _travelDelta,
+        origin,
+        nextPosition,
+        direction,
+        distance,
+        raycaster,
+        remove
+      ) => {
+        const blockResolution = resolveProjectileBlockHit({
+          now: travelNow,
+          projectile,
+          origin,
+          direction,
+          travelDistance: distance,
+          nextPosition,
+          projectileBlockers,
+          raycaster,
+          handleProjectileBlockHit,
+        });
+        if (blockResolution === "blocked") {
+          remove();
         }
-      } else {
-        projectileNextPositionWorld.copy(projectileTravelOriginWorld);
-      }
-
-      projectile.mesh.position.copy(projectileNextPositionWorld);
-      projectile.velocity.multiplyScalar(0.997);
-
-      const collisionDistance = projectile.radius + BOSS_SKILL1_PROJECTILE_PLAYER_RADIUS;
-      if (
-        projectile.mesh.position.distanceToSquared(playerProbeWorld) <=
-        collisionDistance * collisionDistance
-      ) {
-        applyDamage(BOSS_SKILL1_PROJECTILE_DAMAGE);
-        removeProjectileAt(i);
-      }
-    }
+      },
+      onAfterMove: (projectile, _stepNow, _stepDelta, remove) => {
+        projectile.velocity.multiplyScalar(0.997);
+        const collisionDistance = projectile.radius + BOSS_SKILL1_PROJECTILE_PLAYER_RADIUS;
+        if (
+          projectile.mesh.position.distanceToSquared(playerProbeWorld) <=
+          collisionDistance * collisionDistance
+        ) {
+          applyDamage(BOSS_SKILL1_PROJECTILE_DAMAGE);
+          remove();
+        }
+      },
+      onRemove: (projectile) => {
+        projectile.mesh.removeFromParent();
+      },
+    });
   };
 
   return {

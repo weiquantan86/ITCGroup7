@@ -20,6 +20,8 @@ export default function SceneLauncher({
   onPlayerStateChange,
   sceneLoader,
   deltaStartAtMs,
+  maxPixelRatio = 2,
+  useDefaultLights = true,
 }: {
   sceneId?: string;
   gameMode?: string;
@@ -34,6 +36,8 @@ export default function SceneLauncher({
   onPlayerStateChange?: (state: PlayerUiState) => void;
   sceneLoader?: () => Promise<SceneDefinition> | SceneDefinition;
   deltaStartAtMs?: number;
+  maxPixelRatio?: number;
+  useDefaultLights?: boolean;
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
@@ -50,6 +54,8 @@ export default function SceneLauncher({
     let lastTime = 0;
     let deltaClockArmed = false;
     const MAX_FRAME_DELTA_SECONDS = 0.05;
+    const resolvedMaxPixelRatio =
+      Number.isFinite(maxPixelRatio) && maxPixelRatio > 0 ? maxPixelRatio : 2;
     const deltaTrackingStartAt =
       typeof deltaStartAtMs === "number" && Number.isFinite(deltaStartAtMs)
         ? deltaStartAtMs
@@ -57,6 +63,9 @@ export default function SceneLauncher({
 
     const handleResize = () => {
       if (!mount || !renderer || !player) return;
+      renderer.setPixelRatio(
+        Math.min(window.devicePixelRatio || 1, resolvedMaxPixelRatio)
+      );
       renderer.setSize(mount.clientWidth, mount.clientHeight);
       player.resize(mount.clientWidth, mount.clientHeight);
     };
@@ -74,28 +83,32 @@ export default function SceneLauncher({
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(mount.clientWidth, mount.clientHeight);
-        renderer.setPixelRatio(window.devicePixelRatio || 1);
+        renderer.setPixelRatio(
+          Math.min(window.devicePixelRatio || 1, resolvedMaxPixelRatio)
+        );
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         mount.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.8);
-        const keyLight = new THREE.SpotLight(
-          0xe2e8f0,
-          1.5,
-          40,
-          Math.PI / 4,
-          0.45,
-          1
-        );
-        keyLight.position.set(4, 8, 4);
-        keyLight.castShadow = true;
-        keyLight.shadow.mapSize.width = 1024;
-        keyLight.shadow.mapSize.height = 1024;
-        const hemiLight = new THREE.HemisphereLight(0x1e293b, 0x0b0f1a, 0.85);
-        const fillLight = new THREE.DirectionalLight(0xcbd5f5, 0.6);
-        fillLight.position.set(-4, 6, -2);
-        scene.add(ambientLight, keyLight, hemiLight, fillLight);
+        if (useDefaultLights) {
+          const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.8);
+          const keyLight = new THREE.SpotLight(
+            0xe2e8f0,
+            1.5,
+            40,
+            Math.PI / 4,
+            0.45,
+            1
+          );
+          keyLight.position.set(4, 8, 4);
+          keyLight.castShadow = true;
+          keyLight.shadow.mapSize.width = 1024;
+          keyLight.shadow.mapSize.height = 1024;
+          const hemiLight = new THREE.HemisphereLight(0x1e293b, 0x0b0f1a, 0.85);
+          const fillLight = new THREE.DirectionalLight(0xcbd5f5, 0.6);
+          fillLight.position.set(-4, 6, -2);
+          scene.add(ambientLight, keyLight, hemiLight, fillLight);
+        }
 
         player = createPlayer({
           scene,
@@ -165,6 +178,8 @@ export default function SceneLauncher({
     onPlayerStateChange,
     sceneLoader,
     deltaStartAtMs,
+    maxPixelRatio,
+    useDefaultLights,
   ]);
 
   return (

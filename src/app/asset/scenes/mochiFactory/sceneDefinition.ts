@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createSceneResourceTracker } from "../general/resourceTracker";
 import type { SceneSetupResult } from "../general/sceneTypes";
 
 type BoxCollider = {
@@ -22,22 +23,13 @@ export const createMochiFactoryScene = (scene: THREE.Scene): SceneSetupResult =>
   };
   const fieldSize = { width: 48, depth: 48 };
 
-  const geometries = new Set<THREE.BufferGeometry>();
-  const materials = new Set<THREE.Material>();
+  const resourceTracker = createSceneResourceTracker();
+  const { trackMesh, disposeTrackedResources } = resourceTracker;
   const colliders: BoxCollider[] = [];
 
   const factoryGroup = new THREE.Group();
   factoryGroup.name = "mochiFactoryScene";
   scene.add(factoryGroup);
-
-  const trackMesh = (mesh: THREE.Mesh) => {
-    geometries.add(mesh.geometry);
-    if (Array.isArray(mesh.material)) {
-      mesh.material.forEach((material) => materials.add(material));
-    } else {
-      materials.add(mesh.material);
-    }
-  };
 
   const addCollider = (
     x: number,
@@ -400,10 +392,8 @@ export const createMochiFactoryScene = (scene: THREE.Scene): SceneSetupResult =>
 
   const dispose = () => {
     scene.remove(factoryGroup);
-    geometries.forEach((geometry) => geometry.dispose());
-    materials.forEach((material) => material.dispose());
+    disposeTrackedResources();
   };
 
   return { world, dispose };
 };
-

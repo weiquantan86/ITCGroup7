@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { clampToBounds, resolveInputDirection } from "../player/movement";
+import { filterWorldOnlyProjectileBlockers } from "../../../../object/projectile/blocking";
 import type { PlayerLookState } from "./input";
 import type { CharacterRuntime, CharacterStats } from "../types";
 import type { CharacterVisualState } from "./characterLoader";
@@ -226,15 +227,7 @@ export const createPlayerFrameUpdater = ({
     });
 
     const runtimeProjectileBlockers = getProjectileBlockers();
-    projectileSystemBlockers.length = 0;
-    for (let i = 0; i < runtimeProjectileBlockers.length; i += 1) {
-      const blocker = runtimeProjectileBlockers[i];
-      const blockerUserData = blocker.userData as {
-        worldOnlyBlocker?: boolean;
-      };
-      if (blockerUserData.worldOnlyBlocker) continue;
-      projectileSystemBlockers.push(blocker);
-    }
+    filterWorldOnlyProjectileBlockers(runtimeProjectileBlockers, projectileSystemBlockers);
     survivalState?.applyRecoveryZones(now);
     projectileSystem.update({
       now,

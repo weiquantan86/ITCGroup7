@@ -1,5 +1,9 @@
 import * as THREE from "three";
 import { LinearProjectileUpdater } from "../../../../object/projectile/linearUpdater";
+import {
+  findNearestProjectileBlockHit,
+  resolveProjectileBlockHit,
+} from "../../../../object/projectile/blocking";
 import { getProjectileTypeDefinition } from "../../../../object/projectile/projectile/registry";
 import { createProjectileFxSystem } from "../../../../object/projectile/projectile/shared/fxSystem";
 import { createProjectileMeshFactory } from "../../../../object/projectile/projectile/shared/meshFactory";
@@ -384,15 +388,14 @@ export const createProjectileSystem = ({
           }
         }
 
-        let blockerHit: THREE.Intersection | null = null;
-        if (projectileBlockers.length) {
-          raycaster.set(origin, direction);
-          raycaster.far = reach;
-          const blockerHits = raycaster.intersectObjects(projectileBlockers, true);
-          if (blockerHits.length) {
-            blockerHit = blockerHits[0];
-          }
-        }
+        const blockerHit = findNearestProjectileBlockHit({
+          origin,
+          direction,
+          travelDistance: distance,
+          projectileRadius: projectile.radius,
+          projectileBlockers,
+          raycaster,
+        });
 
         const nearestObstacleDistance = Math.min(
           worldHit?.distance ?? Infinity,
@@ -502,17 +505,19 @@ export const createProjectileSystem = ({
           (!worldHit || blockerHit!.distance <= worldHit.distance);
 
         if (blockerIsNearest && blockerHit) {
-          const handledByRuntime =
-            handleProjectileBlockHit?.({
-              now: travelNow,
-              projectile,
-              blockerHit,
-              origin,
-              direction,
-              travelDistance: distance,
-              nextPosition,
-            }) ?? false;
-          if (handledByRuntime) {
+          const blockResolution = resolveProjectileBlockHit({
+            now: travelNow,
+            projectile,
+            origin,
+            direction,
+            travelDistance: distance,
+            nextPosition,
+            projectileBlockers,
+            raycaster,
+            handleProjectileBlockHit,
+            blockerHit,
+          });
+          if (blockResolution === "handled") {
             return;
           }
         }

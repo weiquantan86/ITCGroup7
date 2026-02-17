@@ -16,6 +16,7 @@ import {
 import { createMochiGeneralCombatRuntime } from "../../../asset/entity/monster/mochiGeneral/combatRuntime";
 import { mochiGeneralProfile } from "../../../asset/entity/monster/mochiGeneral/profile";
 import { createMochiFactoryScene } from "../../../asset/scenes/mochiFactory/sceneDefinition";
+import { createSceneResourceTracker } from "../../../asset/scenes/general/resourceTracker";
 import type {
   SceneSetupContext,
   SceneSetupResult,
@@ -75,40 +76,15 @@ export const createMochiGeneralBattleScene = (
   smokeGroup.name = "mochiGeneralEntranceSmoke";
   scene.add(smokeGroup);
 
-  const extraGeometries = new Set<THREE.BufferGeometry>();
-  const extraMaterials = new Set<THREE.Material>();
-
-  const trackMesh = (mesh: THREE.Mesh) => {
-    extraGeometries.add(mesh.geometry);
-    if (Array.isArray(mesh.material)) {
-      mesh.material.forEach((material) => extraMaterials.add(material));
-    } else {
-      extraMaterials.add(mesh.material);
-    }
-  };
-
-  const trackObject = (object: THREE.Object3D) => {
-    object.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      trackMesh(mesh);
-    });
-  };
-
-  const disposeObjectResources = (object: THREE.Object3D) => {
-    object.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.geometry?.dispose?.();
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((material) => material.dispose());
-      } else {
-        mesh.material?.dispose?.();
-      }
-    });
-  };
+  const resourceTracker = createSceneResourceTracker();
+  const {
+    trackGeometry,
+    trackMaterial,
+    trackMesh,
+    trackObject,
+    disposeObjectResources,
+    disposeTrackedResources,
+  } = resourceTracker;
 
   const fallbackGeometry = new THREE.CapsuleGeometry(2.1375, 3.0375, 7, 16);
   const fallbackMaterialTemplate = new THREE.MeshStandardMaterial({
@@ -136,12 +112,12 @@ export const createMochiGeneralBattleScene = (
     emissive: 0x111827,
     emissiveIntensity: 0.24,
   });
-  extraGeometries.add(fallbackGeometry);
-  extraGeometries.add(hitboxGeometry);
-  extraGeometries.add(smokeGeometry);
-  extraMaterials.add(fallbackMaterialTemplate);
-  extraMaterials.add(hitboxMaterialTemplate);
-  extraMaterials.add(smokeMaterialTemplate);
+  trackGeometry(fallbackGeometry);
+  trackGeometry(hitboxGeometry);
+  trackGeometry(smokeGeometry);
+  trackMaterial(fallbackMaterialTemplate);
+  trackMaterial(hitboxMaterialTemplate);
+  trackMaterial(smokeMaterialTemplate);
 
   const bosses: BossEntry[] = [];
   const entranceSmokeParticles: EntranceSmokeParticle[] = [];
@@ -325,11 +301,12 @@ export const createMochiGeneralBattleScene = (
     model.position.set(0, 0, 0);
     model.rotation.set(0, 0, 0);
     model.scale.copy(mochiGeneralPrototype.scale);
-    trackObject(model);
+    trackObject(model, { castShadow: true, receiveShadow: true });
     entry.anchor.add(model);
     entry.model = model;
     entry.rig = resolveMochiGeneralRig(model);
     entry.fallback.visible = false;
+    entry.monster.invalidateHitFlashMaterialCache();
   };
 
   const spawnBoss = (position: THREE.Vector3) => {
@@ -480,7 +457,10 @@ export const createMochiGeneralBattleScene = (
       mochiGeneralPrototype.position.y -= modelBounds.min.y;
       mochiGeneralPrototype.updateMatrixWorld(true);
 
-      trackObject(mochiGeneralPrototype);
+      trackObject(mochiGeneralPrototype, {
+        castShadow: true,
+        receiveShadow: true,
+      });
       for (let i = 0; i < bosses.length; i += 1) {
         attachPrototypeToBoss(bosses[i]);
       }
@@ -534,8 +514,7 @@ export const createMochiGeneralBattleScene = (
     attackTargets.length = 0;
     scene.remove(bossesGroup);
     scene.remove(smokeGroup);
-    extraGeometries.forEach((geometry) => geometry.dispose());
-    extraMaterials.forEach((material) => material.dispose());
+    disposeTrackedResources();
     factorySetup.dispose?.();
   };
 

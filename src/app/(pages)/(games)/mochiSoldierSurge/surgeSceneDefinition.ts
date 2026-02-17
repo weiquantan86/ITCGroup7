@@ -11,6 +11,7 @@ import {
   mochiSoldierCombatConfig,
   mochiSoldierProfile,
 } from "../../../asset/entity/monster/mochiSoldier/profile";
+import { createSceneResourceTracker } from "../../../asset/scenes/general/resourceTracker";
 import { createMochiStreetScene } from "../../../asset/scenes/mochiStreet/sceneDefinition";
 import type {
   SceneSetupContext,
@@ -97,37 +98,15 @@ export const createMochiSoldierSurgeScene = (
   const monstersGroup = new THREE.Group();
   scene.add(monstersGroup);
 
-  const extraGeometries = new Set<THREE.BufferGeometry>();
-  const extraMaterials = new Set<THREE.Material>();
-  const trackMesh = (mesh: THREE.Mesh) => {
-    extraGeometries.add(mesh.geometry);
-    if (Array.isArray(mesh.material)) {
-      mesh.material.forEach((material) => extraMaterials.add(material));
-    } else {
-      extraMaterials.add(mesh.material);
-    }
-  };
-  const trackObject = (object: THREE.Object3D) => {
-    object.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      trackMesh(mesh);
-    });
-  };
-  const disposeObjectResources = (object: THREE.Object3D) => {
-    object.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.geometry?.dispose?.();
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((material) => material.dispose());
-      } else {
-        mesh.material?.dispose?.();
-      }
-    });
-  };
+  const resourceTracker = createSceneResourceTracker();
+  const {
+    trackGeometry,
+    trackMaterial,
+    trackMesh,
+    trackObject,
+    disposeObjectResources,
+    disposeTrackedResources,
+  } = resourceTracker;
 
   const fallbackGeometry = new THREE.CapsuleGeometry(0.58, 1.15, 6, 14);
   const fallbackMaterialTemplate = new THREE.MeshStandardMaterial({
@@ -145,11 +124,11 @@ export const createMochiSoldierSurgeScene = (
     opacity: 0,
     depthWrite: false,
   });
-  extraGeometries.add(fallbackGeometry);
-  extraGeometries.add(hitboxGeometry);
-  extraGeometries.add(edgeHitboxGeometry);
-  extraMaterials.add(fallbackMaterialTemplate);
-  extraMaterials.add(hitboxMaterialTemplate);
+  trackGeometry(fallbackGeometry);
+  trackGeometry(hitboxGeometry);
+  trackGeometry(edgeHitboxGeometry);
+  trackMaterial(fallbackMaterialTemplate);
+  trackMaterial(hitboxMaterialTemplate);
 
   const monsters: SurgeMonsterEntry[] = [];
   const attackTargets: PlayerAttackTarget[] = [];
@@ -599,10 +578,11 @@ export const createMochiSoldierSurgeScene = (
     const model = cloneSkeleton(mochiSoldierPrototype);
     cloneObjectMaterials(model);
     entry.anchor.add(model);
-    trackObject(model);
+    trackObject(model, { castShadow: true, receiveShadow: true });
     entry.model = model;
     entry.rig = resolveMonsterRig(model);
     entry.fallback.visible = false;
+    entry.monster.invalidateHitFlashMaterialCache();
   };
 
   const handleMonsterDefeated = () => {
@@ -906,7 +886,10 @@ export const createMochiSoldierSurgeScene = (
       mochiSoldierPrototype.position.y -= modelBounds.min.y;
       mochiSoldierPrototype.updateMatrixWorld(true);
 
-      trackObject(mochiSoldierPrototype);
+      trackObject(mochiSoldierPrototype, {
+        castShadow: true,
+        receiveShadow: true,
+      });
       monsters.forEach((monsterEntry) => attachPrototypeToMonster(monsterEntry));
     },
     undefined,
@@ -946,8 +929,7 @@ export const createMochiSoldierSurgeScene = (
     monsters.length = 0;
     attackTargets.length = 0;
     scene.remove(monstersGroup);
-    extraGeometries.forEach((geometry) => geometry.dispose());
-    extraMaterials.forEach((material) => material.dispose());
+    disposeTrackedResources();
     streetSetup.dispose?.();
   };
 

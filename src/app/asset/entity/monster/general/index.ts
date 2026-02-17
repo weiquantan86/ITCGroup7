@@ -71,6 +71,7 @@ export class Monster {
     }
   >();
   private readonly activeHitFlashMaterials = new Set<THREE.Material>();
+  private cachedHitFlashMaterials: THREE.Material[] | null = null;
   private hitFlashUntil = 0;
   private hitFlashTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -129,6 +130,10 @@ export class Monster {
 
   clearTarget() {
     this.target = null;
+  }
+
+  invalidateHitFlashMaterialCache() {
+    this.cachedHitFlashMaterials = null;
   }
 
   takeDamage(amount: number) {
@@ -204,20 +209,24 @@ export class Monster {
   }
 
   private collectMeshMaterials(): THREE.Material[] {
-    const materials: THREE.Material[] = [];
+    if (this.cachedHitFlashMaterials) {
+      return this.cachedHitFlashMaterials;
+    }
+    const materials = new Set<THREE.Material>();
     this.model.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (!mesh.isMesh) return;
       if (Array.isArray(mesh.material)) {
         for (let i = 0; i < mesh.material.length; i += 1) {
           const material = mesh.material[i];
-          if (material) materials.push(material);
+          if (material) materials.add(material);
         }
       } else if (mesh.material) {
-        materials.push(mesh.material);
+        materials.add(mesh.material);
       }
     });
-    return materials;
+    this.cachedHitFlashMaterials = Array.from(materials);
+    return this.cachedHitFlashMaterials;
   }
 
   private saveMaterialState(material: THREE.Material) {
@@ -304,5 +313,6 @@ export class Monster {
   dispose() {
     this.clearHitFlash();
     this.hitFlashOriginalState.clear();
+    this.cachedHitFlashMaterials = null;
   }
 }

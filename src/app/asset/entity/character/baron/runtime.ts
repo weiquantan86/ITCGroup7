@@ -6,6 +6,7 @@ import {
   tryReflectLinearProjectile,
   type ProjectileReflector,
 } from "../../../object/projectile/reflection";
+import { pickArm } from "./runtime/armSelection";
 import type { CharacterRuntime, CharacterRuntimeFactory } from "../general/types";
 import { profile } from "./profile";
 
@@ -993,36 +994,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillEShotDirection = new THREE.Vector3();
   const skillEShotOrigin = new THREE.Vector3();
   const skillEUp = new THREE.Vector3(0, 1, 0);
-
-  const scoreArmCandidate = (
-    arm: THREE.Object3D,
-    side: "right" | "left"
-  ) => {
-    const name = (arm.name || "").toLowerCase();
-    let score = 0;
-    if (name.includes(side)) score += 10;
-    if (name.includes("arm")) score += 5;
-    if (name.includes("upper") || name.includes("shoulder")) score += 3;
-    if (name.includes("hand") || name.includes("fore") || name.includes("lower")) {
-      score -= 6;
-    }
-    if (name === `arm${side}` || name === `${side}arm`) score += 6;
-    return score;
-  };
-
-  const pickArm = (arms: THREE.Object3D[], side: "right" | "left") => {
-    let best: THREE.Object3D | null = null;
-    let bestScore = -Infinity;
-    for (let i = 0; i < arms.length; i += 1) {
-      const arm = arms[i];
-      const score = scoreArmCandidate(arm, side);
-      if (score > bestScore) {
-        best = arm;
-        bestScore = score;
-      }
-    }
-    return best;
-  };
 
   const captureArmNeutralIfNeeded = (
     rightArm: THREE.Object3D,
