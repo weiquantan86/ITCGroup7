@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Projectile as CharacterProjectile } from "../../../../object/projectile/types";
+import type { ProjectileBlockHitHandler } from "../../../../object/projectile/blocking";
 import type { CharacterStats, SkillKey } from "../types";
 
 export type RecoveryZoneType = "health" | "mana" | "energy" | "both";
@@ -44,6 +45,7 @@ export interface PlayerWorldTickArgs {
   maxStats: CharacterStats;
   applyDamage: (amount: number) => number;
   projectileBlockers: THREE.Object3D[];
+  handleProjectileBlockHit?: ProjectileBlockHitHandler;
 }
 
 export type PlayerDeathResolution = "handled" | "reset" | "ignore";
@@ -83,6 +85,8 @@ export interface PlayerWorld {
 export interface PlayerUiState {
   cooldowns: Record<SkillKey, number>;
   cooldownDurations: Record<SkillKey, number>;
+  staminaCurrent: number;
+  staminaMax: number;
   manaCurrent: number;
   manaMax: number;
   energyCurrent: number;

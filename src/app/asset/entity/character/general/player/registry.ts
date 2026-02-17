@@ -26,7 +26,12 @@ const entries: CharacterEntry[] = [
   { profile: grantProfile, createRuntime: createGrantRuntime },
   { profile: harperProfile, createRuntime: createHarperRuntime },
 ];
-const defaultStats: CharacterStats = { health: 100, mana: 100, energy: 100 };
+const defaultStats: CharacterStats = {
+  health: 100,
+  stamina: 100,
+  mana: 100,
+  energy: 100,
+};
 const profiles: CharacterProfile[] = entries.map((entry) => entry.profile);
 
 export const resolveCharacterStats = (

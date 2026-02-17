@@ -70,9 +70,10 @@ export const createStatusHud = (
   };
 
   const healthBar = createBar("HP", "#ef4444", "rgba(239,68,68,0.65)");
+  const staminaBar = createBar("ST", "#f59e0b", "rgba(245,158,11,0.6)");
   const manaBar = createBar("MP", "#38bdf8", "rgba(56,189,248,0.6)");
   const energyBar = createBar("EN", "#22c55e", "rgba(34,197,94,0.62)");
-  hud.append(healthBar.row, manaBar.row, energyBar.row);
+  hud.append(healthBar.row, staminaBar.row, manaBar.row, energyBar.row);
 
   const cooldownPanel = document.createElement("div");
   cooldownPanel.style.cssText =
@@ -240,6 +241,7 @@ export const createStatusHud = (
   return {
     setStats: (current: CharacterStats, max: CharacterStats) => {
       updateFill(healthBar.fillBar, healthBar.value, current.health, max.health);
+      updateFill(staminaBar.fillBar, staminaBar.value, current.stamina, max.stamina);
       updateFill(manaBar.fillBar, manaBar.value, current.mana, max.mana);
       updateFill(energyBar.fillBar, energyBar.value, current.energy, max.energy);
     },

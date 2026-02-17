@@ -12,8 +12,8 @@ import {
   createMochiGeneralCombatState,
   resetMochiGeneralCombatState,
   resolveMochiGeneralRig,
-  tickMochiGeneralCombat,
 } from "../../../asset/entity/monster/mochiGeneral/combatBehavior";
+import { createMochiGeneralCombatRuntime } from "../../../asset/entity/monster/mochiGeneral/combatRuntime";
 import { mochiGeneralProfile } from "../../../asset/entity/monster/mochiGeneral/profile";
 import { createMochiFactoryScene } from "../../../asset/scenes/mochiFactory/sceneDefinition";
 import type {
@@ -29,8 +29,6 @@ import {
 type BossEntry = {
   id: string;
   hitbox: THREE.Mesh;
-  swordThrustActive: boolean;
-  swordThrustHitTargets: Set<string>;
 } & MochiGeneralCombatEntry;
 
 type EntranceSmokeParticle = {
@@ -57,20 +55,6 @@ const fallbackBounds: Bounds = {
   minZ: -50,
   maxZ: 50,
 };
-
-const BOSS_SWORD_THRUST_DAMAGE = 30;
-const BOSS_SWORD_THRUST_PLAYER_TARGET_ID = "player";
-const BOSS_SWORD_THRUST_ATTACK_WEIGHT_THRESHOLD = 0.45;
-const BOSS_SWORD_THRUST_SWING_THRESHOLD = 0.08;
-const BOSS_SWORD_THRUST_BLADE_RADIUS = 0.5;
-const BOSS_SWORD_THRUST_PLAYER_RADIUS = 0.55;
-const BOSS_SWORD_THRUST_PLAYER_HEIGHT_OFFSET = 0.95;
-
-const swordBaseWorld = new THREE.Vector3();
-const swordTipWorld = new THREE.Vector3();
-const swordClosestPoint = new THREE.Vector3();
-const playerHitProbeWorld = new THREE.Vector3();
-const swordBladeSegment = new THREE.Line3();
 
 export const createMochiGeneralBattleScene = (
   scene: THREE.Scene,
@@ -162,6 +146,7 @@ export const createMochiGeneralBattleScene = (
   const bosses: BossEntry[] = [];
   const entranceSmokeParticles: EntranceSmokeParticle[] = [];
   const attackTargets: PlayerAttackTarget[] = [];
+  const bossCombatRuntime = createMochiGeneralCombatRuntime(scene);
 
   let spawnedMonsters = 0;
   let aliveMonsters = 0;
@@ -221,6 +206,7 @@ export const createMochiGeneralBattleScene = (
 
   const removeBossEntry = (entry: BossEntry) => {
     removeAttackTarget(entry.id);
+    bossCombatRuntime.onBossRemoved(entry);
     clearBossVisual(entry);
     entry.monster.dispose();
     if (entry.anchor.parent === bossesGroup) {
@@ -318,62 +304,6 @@ export const createMochiGeneralBattleScene = (
     }
   };
 
-  const updateBossSwordThrustCollision = ({
-    entry,
-    player,
-    applyDamage,
-  }: {
-    entry: BossEntry;
-    player: THREE.Object3D;
-    applyDamage: (amount: number) => number;
-  }) => {
-    const thrustActive =
-      entry.swordAttackPoseWeight >= BOSS_SWORD_THRUST_ATTACK_WEIGHT_THRESHOLD &&
-      entry.swordHandSwing >= BOSS_SWORD_THRUST_SWING_THRESHOLD;
-
-    if (!thrustActive) {
-      entry.swordThrustActive = false;
-      return;
-    }
-
-    if (!entry.swordThrustActive) {
-      entry.swordThrustActive = true;
-      entry.swordThrustHitTargets.clear();
-    }
-
-    if (entry.swordThrustHitTargets.has(BOSS_SWORD_THRUST_PLAYER_TARGET_ID)) return;
-
-    const sword = entry.rig?.sword;
-    const swordTip = entry.rig?.swordTip;
-    if (!sword || !swordTip) return;
-
-    sword.getWorldPosition(swordBaseWorld);
-    swordTip.getWorldPosition(swordTipWorld);
-    if (swordBaseWorld.distanceToSquared(swordTipWorld) <= 0.00001) return;
-
-    player.getWorldPosition(playerHitProbeWorld);
-    playerHitProbeWorld.y += BOSS_SWORD_THRUST_PLAYER_HEIGHT_OFFSET;
-
-    swordBladeSegment.set(swordBaseWorld, swordTipWorld);
-    swordBladeSegment.closestPointToPoint(
-      playerHitProbeWorld,
-      true,
-      swordClosestPoint
-    );
-
-    const collisionDistance =
-      BOSS_SWORD_THRUST_BLADE_RADIUS + BOSS_SWORD_THRUST_PLAYER_RADIUS;
-    if (
-      swordClosestPoint.distanceToSquared(playerHitProbeWorld) >
-      collisionDistance * collisionDistance
-    ) {
-      return;
-    }
-
-    entry.swordThrustHitTargets.add(BOSS_SWORD_THRUST_PLAYER_TARGET_ID);
-    applyDamage(BOSS_SWORD_THRUST_DAMAGE);
-  };
-
   const handleBossDefeated = (entry: BossEntry) => {
     if (gameEnded) return;
     aliveMonsters = Math.max(0, aliveMonsters - 1);
@@ -444,8 +374,6 @@ export const createMochiGeneralBattleScene = (
       id,
       anchor,
       hitbox,
-      swordThrustActive: false,
-      swordThrustHitTargets: new Set<string>(),
       fallback,
       model: null,
       monster,
@@ -490,6 +418,8 @@ export const createMochiGeneralBattleScene = (
     player,
     currentStats,
     applyDamage,
+    projectileBlockers,
+    handleProjectileBlockHit,
   }: PlayerWorldTickArgs) => {
     if (!playerDead && currentStats.health <= 0) {
       playerDead = true;
@@ -504,22 +434,26 @@ export const createMochiGeneralBattleScene = (
     for (let i = 0; i < bosses.length; i += 1) {
       const entry = bosses[i];
       if (!entry.monster.isAlive) continue;
-      tickMochiGeneralCombat({
+      bossCombatRuntime.tickBoss({
         entry,
         delta,
         player,
         gameEnded,
         isBlocked: worldIsBlocked,
-      });
-      if (gameEnded) break;
-      updateBossSwordThrustCollision({
-        entry,
-        player,
         applyDamage,
       });
       if (gameEnded) break;
     }
 
+    bossCombatRuntime.update({
+      now,
+      delta,
+      player,
+      applyDamage,
+      gameEnded,
+      projectileBlockers,
+      handleProjectileBlockHit,
+    });
     updateEntranceSmoke(delta);
     emitState();
   };
@@ -593,6 +527,7 @@ export const createMochiGeneralBattleScene = (
       particle.material.dispose();
     }
     entranceSmokeParticles.length = 0;
+    bossCombatRuntime.dispose();
     while (bosses.length > 0) {
       removeBossEntry(bosses[0]);
     }

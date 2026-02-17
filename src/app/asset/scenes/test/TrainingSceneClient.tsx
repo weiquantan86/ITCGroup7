@@ -33,6 +33,8 @@ export default function TrainingScenePage({
   const [playerUi, setPlayerUi] = useState<PlayerUiState>({
     cooldowns: { q: 0, e: 0, r: 0 },
     cooldownDurations: { q: 0, e: 0, r: 0 },
+    staminaCurrent: 0,
+    staminaMax: 0,
     manaCurrent: 0,
     manaMax: 0,
     energyCurrent: 0,
@@ -134,6 +136,9 @@ export default function TrainingScenePage({
               <div className="flex items-center justify-between">
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
                   Q / E / R Cooldown
+                </p>
+                <p className="text-[11px] font-semibold tabular-nums text-amber-200">
+                  ST {Math.round(playerUi.staminaCurrent)}/{Math.round(playerUi.staminaMax)}
                 </p>
                 <p className="text-[11px] font-semibold tabular-nums text-cyan-200">
                   MP {Math.round(playerUi.manaCurrent)}/{Math.round(playerUi.manaMax)}

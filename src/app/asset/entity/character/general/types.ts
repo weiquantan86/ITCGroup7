@@ -1,5 +1,8 @@
 import type * as THREE from "three";
-import type { Projectile as RuntimeProjectile } from "../../../object/projectile/types";
+import type {
+  ProjectileBlockHitContext,
+  ProjectileBlockHitHandler,
+} from "../../../object/projectile/blocking";
 
 export type ThreeModule = typeof import("three");
 
@@ -51,6 +54,7 @@ export interface SlashConfig {
 
 export interface CharacterStats {
   health: number;
+  stamina: number;
   mana: number;
   energy: number;
 }
@@ -101,7 +105,7 @@ export interface CharacterProfile {
   id: string;
   label: string;
   pathToken: string;
-  stats?: CharacterStats;
+  stats?: Partial<CharacterStats>;
   energy?: CharacterEnergyConfig;
   mana?: CharacterManaConfig;
   movement?: CharacterMovementConfig;
@@ -219,15 +223,7 @@ export interface MeleeAttackArgs {
   contactRadius?: number;
 }
 
-export interface ProjectileBlockHitArgs {
-  now: number;
-  projectile: RuntimeProjectile;
-  blockerHit: THREE.Intersection;
-  origin: THREE.Vector3;
-  direction: THREE.Vector3;
-  travelDistance: number;
-  nextPosition: THREE.Vector3;
-}
+export type ProjectileBlockHitArgs = ProjectileBlockHitContext;
 
 export interface SkillUseModifier {
   allow?: boolean;
@@ -252,7 +248,7 @@ export interface CharacterRuntime {
   handleSkillE?: () => boolean;
   handleSkillR?: () => boolean;
   getProjectileBlockers?: () => THREE.Object3D[];
-  handleProjectileBlockHit?: (args: ProjectileBlockHitArgs) => boolean;
+  handleProjectileBlockHit?: ProjectileBlockHitHandler;
   getMovementSpeedMultiplier?: () => number;
   getCameraScaleMultiplier?: () => number;
   isBasicAttackLocked?: () => boolean;

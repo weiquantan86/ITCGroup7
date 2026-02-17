@@ -77,11 +77,13 @@ export const createPlayerFrameUpdater = ({
   const right = new THREE.Vector3();
   const worldTickCurrentStatsSnapshot: CharacterStats = {
     health: 0,
+    stamina: 0,
     mana: 0,
     energy: 0,
   };
   const worldTickMaxStatsSnapshot: CharacterStats = {
     health: 0,
+    stamina: 0,
     mana: 0,
     energy: 0,
   };
@@ -115,6 +117,7 @@ export const createPlayerFrameUpdater = ({
           right,
         });
     const shiftHeld = pressedKeys.has("shift");
+    const canSprint = shiftHeld && statsState.currentStats.stamina > 0;
     const miniOrbitYawInput =
       (pressedKeys.has("z") ? 1 : 0) + (pressedKeys.has("x") ? -1 : 0);
     if (miniOrbitYawInput !== 0) {
@@ -142,7 +145,7 @@ export const createPlayerFrameUpdater = ({
     let isMoving = false;
 
     if (hasMoveInput) {
-      const speedBoost = shiftHeld ? statsState.movementConfig.sprintMultiplier : 1;
+      const speedBoost = canSprint ? statsState.movementConfig.sprintMultiplier : 1;
       const moveSpeedMultiplier = getMovementSpeedMultiplier(runtime);
       const moveSpeed =
         statsState.movementConfig.baseSpeed *
@@ -158,7 +161,7 @@ export const createPlayerFrameUpdater = ({
         isMoving = true;
       }
     }
-    const isSprinting = isMoving && shiftHeld;
+    const isSprinting = isMoving && canSprint;
 
     velocityY += gravity * delta;
     avatar.position.y += velocityY * delta;
@@ -242,9 +245,11 @@ export const createPlayerFrameUpdater = ({
 
     if (worldTick) {
       worldTickCurrentStatsSnapshot.health = statsState.currentStats.health;
+      worldTickCurrentStatsSnapshot.stamina = statsState.currentStats.stamina;
       worldTickCurrentStatsSnapshot.mana = statsState.currentStats.mana;
       worldTickCurrentStatsSnapshot.energy = statsState.currentStats.energy;
       worldTickMaxStatsSnapshot.health = statsState.maxStats.health;
+      worldTickMaxStatsSnapshot.stamina = statsState.maxStats.stamina;
       worldTickMaxStatsSnapshot.mana = statsState.maxStats.mana;
       worldTickMaxStatsSnapshot.energy = statsState.maxStats.energy;
       worldTick({
@@ -256,10 +261,11 @@ export const createPlayerFrameUpdater = ({
         maxStats: worldTickMaxStatsSnapshot,
         applyDamage: (amount) => survivalState?.applyDamageToPlayer(amount) ?? 0,
         projectileBlockers: runtimeProjectileBlockers,
+        handleProjectileBlockHit: runtime?.handleProjectileBlockHit,
       });
     }
 
-    statsState.applyPassiveRegen(delta, isMoving);
+    statsState.applyPassiveRegen(delta, isMoving, isSprinting);
     statsState.syncHud();
     emitUiState(now);
   };

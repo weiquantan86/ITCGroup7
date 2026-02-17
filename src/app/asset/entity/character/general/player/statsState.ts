@@ -80,6 +80,8 @@ const resolveCameraConfig = (
 });
 
 type SkillCost = number | "all";
+const STAMINA_DRAIN_PER_SECOND = 15;
+const STAMINA_RECOVERY_PER_SECOND = 10;
 
 export const createPlayerStatsState = ({
   profile,
@@ -169,6 +171,28 @@ export const createPlayerStatsState = ({
       markDirty();
     }
     return applied;
+  };
+
+  const applyStamina = (amount: number) => {
+    if (maxStats.stamina <= 0 || amount <= 0) return 0;
+    const next = Math.min(maxStats.stamina, currentStats.stamina + amount);
+    const gained = next - currentStats.stamina;
+    if (gained > 0) {
+      currentStats.stamina = next;
+      markDirty();
+    }
+    return gained;
+  };
+
+  const spendStamina = (amount: number) => {
+    if (amount <= 0 || currentStats.stamina <= 0) return 0;
+    const next = Math.max(0, currentStats.stamina - amount);
+    const spent = currentStats.stamina - next;
+    if (spent > 0) {
+      currentStats.stamina = next;
+      markDirty();
+    }
+    return spent;
   };
 
   const applyEnergy = (amount: number) => {
@@ -331,7 +355,19 @@ export const createPlayerStatsState = ({
     return skillCooldownDurations[key];
   };
 
-  const applyPassiveRegen = (delta: number, isMoving: boolean) => {
+  const applyPassiveRegen = (
+    delta: number,
+    isMoving: boolean,
+    isSprinting: boolean
+  ) => {
+    if (maxStats.stamina > 0) {
+      if (isSprinting) {
+        spendStamina(STAMINA_DRAIN_PER_SECOND * delta);
+      } else {
+        applyStamina(STAMINA_RECOVERY_PER_SECOND * delta);
+      }
+    }
+
     if (infiniteFire) {
       if (maxStats.mana > 0 && currentStats.mana < maxStats.mana) {
         currentStats.mana = maxStats.mana;
@@ -372,6 +408,13 @@ export const createPlayerStatsState = ({
     return true;
   };
 
+  const restoreFullStamina = () => {
+    if (currentStats.stamina >= maxStats.stamina) return false;
+    currentStats.stamina = maxStats.stamina;
+    markDirty();
+    return true;
+  };
+
   const restoreFullEnergy = () => {
     if (currentStats.energy >= maxStats.energy) return false;
     currentStats.energy = maxStats.energy;
@@ -398,6 +441,8 @@ export const createPlayerStatsState = ({
     const payload: PlayerUiState = {
       cooldowns,
       cooldownDurations,
+      staminaCurrent: currentStats.stamina,
+      staminaMax: maxStats.stamina,
       manaCurrent: currentStats.mana,
       manaMax: maxStats.mana,
       energyCurrent: currentStats.energy,
@@ -411,6 +456,8 @@ export const createPlayerStatsState = ({
       cooldownDurations.q.toFixed(2),
       cooldownDurations.e.toFixed(2),
       cooldownDurations.r.toFixed(2),
+      Math.round(currentStats.stamina),
+      Math.round(maxStats.stamina),
       Math.round(currentStats.mana),
       Math.round(maxStats.mana),
       Math.round(currentStats.energy),
@@ -443,6 +490,8 @@ export const createPlayerStatsState = ({
     damageHealth,
     healHealth,
     resetCurrentToMax,
+    applyStamina,
+    spendStamina,
     applyEnergy,
     spendEnergy,
     applyMana,
@@ -457,6 +506,7 @@ export const createPlayerStatsState = ({
     getSkillCooldownDurationMs,
     applyPassiveRegen,
     restoreFullHealth,
+    restoreFullStamina,
     restoreFullMana,
     restoreFullEnergy,
     syncHud,

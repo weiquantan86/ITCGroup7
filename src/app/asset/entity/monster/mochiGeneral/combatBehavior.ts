@@ -7,6 +7,7 @@ export type MochiGeneralRig = {
   armRight: THREE.Object3D | null;
   sword: THREE.Object3D | null;
   swordTip: THREE.Object3D | null;
+  heldMochi: THREE.Object3D | null;
   leftForeArm: THREE.Object3D | null;
   leftHand: THREE.Object3D | null;
   legLeft: THREE.Object3D | null;
@@ -59,8 +60,25 @@ export type MochiGeneralCombatEntry = {
   headLookYaw: number;
   headLookPitch: number;
   swordFeintTimer: number;
+  swordFeintLocked: boolean;
+  swordFeintLockWeight: number;
   swordAttackPoseWeight: number;
   swordHandSwing: number;
+  skill1CooldownRemaining: number;
+  skill1Casting: boolean;
+  skill1CastTimer: number;
+  skill1CastBlend: number;
+  skill1ProjectileBurstFired: boolean;
+  skill1ProjectileBurstRequested: boolean;
+  skill1ProjectileBurstPendingCount: number;
+  skill1BurstCountFired: number;
+  skill1NextBurstAt: number;
+  skill2CooldownRemaining: number;
+  skill2WindupActive: boolean;
+  skill2WindupTimer: number;
+  skill2WindupBlend: number;
+  skill2ThrowRequested: boolean;
+  skill2ProjectileActive: boolean;
   rig: MochiGeneralRig | null;
 };
 
@@ -70,12 +88,14 @@ const MOCHI_GENERAL_SWORD_FRONT_EXTRA_RANGE = 1.2;
 const MOCHI_GENERAL_SWORD_FRONT_BLEND_DISTANCE = 1.25;
 const MOCHI_GENERAL_SWORD_FEINT_MAX_YAW_OFFSET = 0.28;
 const MOCHI_GENERAL_SWORD_FEINT_REVERSE_MULTIPLIER = 3;
+const MOCHI_GENERAL_SWORD_FEINT_REVERSE_AMPLITUDE_MULTIPLIER = 2;
 const MOCHI_GENERAL_SWORD_FEINT_REVERSE_DURATION =
   0.3 * MOCHI_GENERAL_SWORD_FEINT_REVERSE_MULTIPLIER;
-const MOCHI_GENERAL_SWORD_FEINT_FORWARD_DURATION = 0.3;
+const MOCHI_GENERAL_SWORD_FEINT_FORWARD_DURATION = 0.3 / 3;
 const MOCHI_GENERAL_SWORD_FEINT_HOLD_DURATION = 0.3;
 const MOCHI_GENERAL_SWORD_FEINT_RECOVER_DURATION = 0.3;
 const MOCHI_GENERAL_SWORD_FEINT_IDLE_DURATION = 0.3;
+const MOCHI_GENERAL_SWORD_FEINT_START_WEIGHT = 0.72;
 const MOCHI_GENERAL_SWORD_HAND_SWING_MULTIPLIER = 2.5;
 const MOCHI_GENERAL_SWORD_FEINT_INTERVAL =
   MOCHI_GENERAL_SWORD_FEINT_REVERSE_DURATION +
@@ -83,6 +103,27 @@ const MOCHI_GENERAL_SWORD_FEINT_INTERVAL =
   MOCHI_GENERAL_SWORD_FEINT_HOLD_DURATION +
   MOCHI_GENERAL_SWORD_FEINT_RECOVER_DURATION +
   MOCHI_GENERAL_SWORD_FEINT_IDLE_DURATION;
+const MOCHI_GENERAL_SKILL1_COOLDOWN = 10;
+const MOCHI_GENERAL_SKILL1_CAST_WINDUP = 1.6;
+const MOCHI_GENERAL_SKILL1_BURST_COUNT = 3;
+const MOCHI_GENERAL_SKILL1_BURST_INTERVAL = 0.5;
+const MOCHI_GENERAL_SKILL1_CAST_RECOVER_DURATION = 0.3;
+const MOCHI_GENERAL_SKILL1_CAST_DURATION =
+  MOCHI_GENERAL_SKILL1_CAST_WINDUP +
+  (MOCHI_GENERAL_SKILL1_BURST_COUNT - 1) * MOCHI_GENERAL_SKILL1_BURST_INTERVAL +
+  MOCHI_GENERAL_SKILL1_CAST_RECOVER_DURATION;
+const MOCHI_GENERAL_SKILL1_TRIGGER_CHANCE_PER_SECOND = 0.24;
+const MOCHI_GENERAL_SKILL1_SIDE_TURN_DURATION = 1;
+const MOCHI_GENERAL_SKILL1_SIDE_TURN_MAX_OFFSET = Math.PI * 0.25;
+const MOCHI_GENERAL_SKILL1_ARM_RIGHT_X = -0.2;
+const MOCHI_GENERAL_SKILL1_ARM_RIGHT_Y = -0.58;
+const MOCHI_GENERAL_SKILL1_ARM_RIGHT_Z = 0.08;
+const MOCHI_GENERAL_SKILL2_COOLDOWN = 10;
+const MOCHI_GENERAL_SKILL2_WINDUP_DURATION = 1.7;
+const MOCHI_GENERAL_SKILL2_TRIGGER_CHANCE_PER_SECOND = 0.18;
+const MOCHI_GENERAL_SKILL2_ARM_RIGHT_X = -1.38;
+const MOCHI_GENERAL_SKILL2_ARM_RIGHT_Y = -0.28;
+const MOCHI_GENERAL_SKILL2_ARM_RIGHT_Z = 0.52;
 
 const moveTargetPosition = new THREE.Vector3();
 const headLookTargetWorld = new THREE.Vector3();
@@ -101,6 +142,8 @@ const swordParentWorldRotation = new THREE.Quaternion();
 const swordParentWorldRotationInverse = new THREE.Quaternion();
 const anchorWorldRotation = new THREE.Quaternion();
 const anchorForwardWorld = new THREE.Vector3();
+const skill1HeldMochiWorld = new THREE.Vector3();
+const skill1HeldMochiLocal = new THREE.Vector3();
 
 export const createMochiGeneralCombatState = () => ({
   walkPhase: Math.random() * Math.PI * 2,
@@ -108,8 +151,25 @@ export const createMochiGeneralCombatState = () => ({
   headLookYaw: 0,
   headLookPitch: 0,
   swordFeintTimer: 0,
+  swordFeintLocked: false,
+  swordFeintLockWeight: 0,
   swordAttackPoseWeight: 0,
   swordHandSwing: 0,
+  skill1CooldownRemaining: Math.random() * 3.4,
+  skill1Casting: false,
+  skill1CastTimer: 0,
+  skill1CastBlend: 0,
+  skill1ProjectileBurstFired: false,
+  skill1ProjectileBurstRequested: false,
+  skill1ProjectileBurstPendingCount: 0,
+  skill1BurstCountFired: 0,
+  skill1NextBurstAt: MOCHI_GENERAL_SKILL1_CAST_WINDUP,
+  skill2CooldownRemaining: Math.random() * 2.8,
+  skill2WindupActive: false,
+  skill2WindupTimer: 0,
+  skill2WindupBlend: 0,
+  skill2ThrowRequested: false,
+  skill2ProjectileActive: false,
   rig: null as MochiGeneralRig | null,
 });
 
@@ -119,8 +179,25 @@ export const resetMochiGeneralCombatState = (entry: MochiGeneralCombatEntry) => 
   entry.headLookPitch = 0;
   entry.walkBlend = 0;
   entry.swordFeintTimer = 0;
+  entry.swordFeintLocked = false;
+  entry.swordFeintLockWeight = 0;
   entry.swordAttackPoseWeight = 0;
   entry.swordHandSwing = 0;
+  entry.skill1CooldownRemaining = 0;
+  entry.skill1Casting = false;
+  entry.skill1CastTimer = 0;
+  entry.skill1CastBlend = 0;
+  entry.skill1ProjectileBurstFired = false;
+  entry.skill1ProjectileBurstRequested = false;
+  entry.skill1ProjectileBurstPendingCount = 0;
+  entry.skill1BurstCountFired = 0;
+  entry.skill1NextBurstAt = MOCHI_GENERAL_SKILL1_CAST_WINDUP;
+  entry.skill2CooldownRemaining = 0;
+  entry.skill2WindupActive = false;
+  entry.skill2WindupTimer = 0;
+  entry.skill2WindupBlend = 0;
+  entry.skill2ThrowRequested = false;
+  entry.skill2ProjectileActive = false;
 };
 
 export const resolveMochiGeneralRig = (
@@ -131,6 +208,7 @@ export const resolveMochiGeneralRig = (
   let armRight: THREE.Object3D | null = null;
   let sword: THREE.Object3D | null = null;
   let swordTip: THREE.Object3D | null = null;
+  let heldMochi: THREE.Object3D | null = null;
   let leftForeArm: THREE.Object3D | null = null;
   let leftHand: THREE.Object3D | null = null;
   let legLeft: THREE.Object3D | null = null;
@@ -159,6 +237,9 @@ export const resolveMochiGeneralRig = (
     }
     if (!swordTip && name.includes("swordtip")) {
       swordTip = child;
+    }
+    if (!heldMochi && name.includes("heldmochi")) {
+      heldMochi = child;
     }
     if (!leftForeArm && name.includes("leftforearm")) {
       leftForeArm = child;
@@ -223,6 +304,7 @@ export const resolveMochiGeneralRig = (
     armRight,
     sword,
     swordTip,
+    heldMochi,
     leftForeArm,
     leftHand,
     legLeft,
@@ -366,14 +448,8 @@ const updateBossHeadLook = (
   );
 };
 
-const sampleSwordFeintMotion = (
-  entry: MochiGeneralCombatEntry,
-  delta: number,
-  maxYawOffset: number,
-  active: boolean
-) => {
-  if (!active || maxYawOffset <= 0.00001) {
-    entry.swordFeintTimer = 0;
+const sampleSwordFeintMotion = (time: number, maxYawOffset: number) => {
+  if (maxYawOffset <= 0.00001) {
     return {
       yawOffset: 0,
       attackPoseWeight: 0,
@@ -381,15 +457,15 @@ const sampleSwordFeintMotion = (
     };
   }
 
-  entry.swordFeintTimer =
-    (entry.swordFeintTimer + delta) % MOCHI_GENERAL_SWORD_FEINT_INTERVAL;
   const reverseMaxYawOffset =
-    maxYawOffset * MOCHI_GENERAL_SWORD_FEINT_REVERSE_MULTIPLIER;
+    maxYawOffset *
+    MOCHI_GENERAL_SWORD_FEINT_REVERSE_MULTIPLIER *
+    MOCHI_GENERAL_SWORD_FEINT_REVERSE_AMPLITUDE_MULTIPLIER;
   const reverseEnd = MOCHI_GENERAL_SWORD_FEINT_REVERSE_DURATION;
   const forwardEnd = reverseEnd + MOCHI_GENERAL_SWORD_FEINT_FORWARD_DURATION;
   const holdEnd = forwardEnd + MOCHI_GENERAL_SWORD_FEINT_HOLD_DURATION;
   const recoverEnd = holdEnd + MOCHI_GENERAL_SWORD_FEINT_RECOVER_DURATION;
-  const t = entry.swordFeintTimer;
+  const t = THREE.MathUtils.clamp(time, 0, MOCHI_GENERAL_SWORD_FEINT_INTERVAL);
 
   if (t <= reverseEnd) {
     const phase = THREE.MathUtils.smoothstep(
@@ -445,6 +521,163 @@ const sampleSwordFeintMotion = (
   };
 };
 
+const updateBossSkill1State = ({
+  entry,
+  delta,
+  canAttemptStart,
+  forceStop,
+}: {
+  entry: MochiGeneralCombatEntry;
+  delta: number;
+  canAttemptStart: boolean;
+  forceStop: boolean;
+}) => {
+  entry.skill1ProjectileBurstRequested = false;
+
+  if (forceStop) {
+    entry.skill1Casting = false;
+    entry.skill1CastTimer = 0;
+    entry.skill1CastBlend = 0;
+    entry.skill1ProjectileBurstFired = false;
+    entry.skill1ProjectileBurstPendingCount = 0;
+    entry.skill1BurstCountFired = 0;
+    entry.skill1NextBurstAt = MOCHI_GENERAL_SKILL1_CAST_WINDUP;
+    return;
+  }
+
+  entry.skill1CooldownRemaining = Math.max(0, entry.skill1CooldownRemaining - delta);
+
+  if (!entry.skill1Casting && canAttemptStart && entry.skill1CooldownRemaining <= 0) {
+    const chance =
+      1 - Math.exp(-MOCHI_GENERAL_SKILL1_TRIGGER_CHANCE_PER_SECOND * Math.max(0, delta));
+    if (Math.random() < chance) {
+      entry.skill1Casting = true;
+      entry.skill1CastTimer = 0;
+      entry.skill1CastBlend = 0;
+      entry.skill1ProjectileBurstFired = false;
+      entry.skill1ProjectileBurstPendingCount = 0;
+      entry.skill1BurstCountFired = 0;
+      entry.skill1NextBurstAt = MOCHI_GENERAL_SKILL1_CAST_WINDUP;
+      entry.skill1CooldownRemaining = MOCHI_GENERAL_SKILL1_COOLDOWN;
+    }
+  }
+
+  if (!entry.skill1Casting) {
+    entry.skill1CastTimer = 0;
+    entry.skill1CastBlend = 0;
+    entry.skill1ProjectileBurstFired = false;
+    entry.skill1ProjectileBurstPendingCount = 0;
+    entry.skill1BurstCountFired = 0;
+    entry.skill1NextBurstAt = MOCHI_GENERAL_SKILL1_CAST_WINDUP;
+    return;
+  }
+
+  entry.skill1CastTimer += delta;
+  const windupBlend = THREE.MathUtils.clamp(
+    entry.skill1CastTimer / Math.max(0.00001, MOCHI_GENERAL_SKILL1_CAST_WINDUP),
+    0,
+    1
+  );
+  const recoverBlend = THREE.MathUtils.clamp(
+    (MOCHI_GENERAL_SKILL1_CAST_DURATION - entry.skill1CastTimer) / 0.2,
+    0,
+    1
+  );
+  entry.skill1CastBlend = Math.min(windupBlend, recoverBlend);
+
+  while (
+    entry.skill1BurstCountFired < MOCHI_GENERAL_SKILL1_BURST_COUNT &&
+    entry.skill1CastTimer >= entry.skill1NextBurstAt
+  ) {
+    entry.skill1ProjectileBurstFired = true;
+    entry.skill1ProjectileBurstRequested = true;
+    entry.skill1ProjectileBurstPendingCount += 1;
+    entry.skill1BurstCountFired += 1;
+    entry.skill1NextBurstAt += MOCHI_GENERAL_SKILL1_BURST_INTERVAL;
+  }
+
+  if (entry.skill1CastTimer >= MOCHI_GENERAL_SKILL1_CAST_DURATION) {
+    entry.skill1Casting = false;
+    entry.skill1CastTimer = 0;
+    entry.skill1CastBlend = 0;
+    entry.skill1ProjectileBurstFired = false;
+    entry.skill1ProjectileBurstRequested = false;
+    entry.skill1ProjectileBurstPendingCount = 0;
+    entry.skill1BurstCountFired = 0;
+    entry.skill1NextBurstAt = MOCHI_GENERAL_SKILL1_CAST_WINDUP;
+  }
+};
+
+const updateBossSkill2State = ({
+  entry,
+  delta,
+  canAttemptStart,
+  forceStop,
+}: {
+  entry: MochiGeneralCombatEntry;
+  delta: number;
+  canAttemptStart: boolean;
+  forceStop: boolean;
+}) => {
+  entry.skill2ThrowRequested = false;
+
+  if (forceStop) {
+    entry.skill2WindupActive = false;
+    entry.skill2WindupTimer = 0;
+    entry.skill2WindupBlend = 0;
+    entry.skill2CooldownRemaining = 0;
+    return;
+  }
+
+  entry.skill2CooldownRemaining = Math.max(0, entry.skill2CooldownRemaining - delta);
+
+  if (
+    !entry.skill2WindupActive &&
+    !entry.skill2ProjectileActive &&
+    canAttemptStart &&
+    entry.skill2CooldownRemaining <= 0
+  ) {
+    const chance =
+      1 - Math.exp(-MOCHI_GENERAL_SKILL2_TRIGGER_CHANCE_PER_SECOND * Math.max(0, delta));
+    if (Math.random() < chance) {
+      entry.skill2WindupActive = true;
+      entry.skill2WindupTimer = 0;
+      entry.skill2CooldownRemaining = MOCHI_GENERAL_SKILL2_COOLDOWN;
+    }
+  }
+
+  if (!entry.skill2WindupActive) {
+    entry.skill2WindupTimer = 0;
+    entry.skill2WindupBlend = THREE.MathUtils.damp(
+      entry.skill2WindupBlend,
+      0,
+      15,
+      delta
+    );
+    return;
+  }
+
+  entry.skill2WindupTimer += delta;
+  const rawWindupBlend = THREE.MathUtils.clamp(
+    entry.skill2WindupTimer / Math.max(0.00001, MOCHI_GENERAL_SKILL2_WINDUP_DURATION),
+    0,
+    1
+  );
+  entry.skill2WindupBlend = THREE.MathUtils.damp(
+    entry.skill2WindupBlend,
+    rawWindupBlend,
+    18,
+    delta
+  );
+
+  if (entry.skill2WindupTimer >= MOCHI_GENERAL_SKILL2_WINDUP_DURATION) {
+    entry.skill2WindupActive = false;
+    entry.skill2WindupTimer = 0;
+    entry.skill2ThrowRequested = true;
+    entry.skill2ProjectileActive = true;
+  }
+};
+
 const faceBossTowardPlayer = (
   entry: MochiGeneralCombatEntry,
   player: THREE.Object3D,
@@ -456,30 +689,100 @@ const faceBossTowardPlayer = (
   const dz = moveTargetPosition.z - entry.anchor.position.z;
   const horizontalDistance = Math.hypot(dx, dz);
   if (horizontalDistance <= 0.00001) {
+    entry.swordFeintTimer = 0;
+    entry.swordFeintLocked = false;
+    entry.swordFeintLockWeight = 0;
     entry.swordAttackPoseWeight = 0;
     entry.swordHandSwing = 0;
     return;
   }
 
   const baseYaw = Math.atan2(dx, dz);
+  if (entry.skill1Casting) {
+    entry.swordFeintTimer = 0;
+    entry.swordFeintLocked = false;
+    entry.swordFeintLockWeight = 0;
+    entry.swordAttackPoseWeight = 0;
+    entry.swordHandSwing = 0;
+    let skill1Yaw = baseYaw;
+    const heldMochi = entry.rig?.heldMochi;
+    if (heldMochi) {
+      // Face the mochi-holding side toward the player during skill 1.
+      entry.anchor.updateWorldMatrix(true, false);
+      heldMochi.getWorldPosition(skill1HeldMochiWorld);
+      skill1HeldMochiLocal.copy(skill1HeldMochiWorld);
+      entry.anchor.worldToLocal(skill1HeldMochiLocal);
+      const mochiSideSign = skill1HeldMochiLocal.x >= 0 ? 1 : -1;
+      const sideTurnProgress = THREE.MathUtils.clamp(
+        entry.skill1CastTimer / Math.max(0.00001, MOCHI_GENERAL_SKILL1_SIDE_TURN_DURATION),
+        0,
+        1
+      );
+      skill1Yaw =
+        baseYaw -
+        mochiSideSign *
+          MOCHI_GENERAL_SKILL1_SIDE_TURN_MAX_OFFSET *
+          sideTurnProgress;
+    }
+    entry.anchor.rotation.y = skill1Yaw;
+    return;
+  }
+
+  if (entry.skill2WindupActive) {
+    entry.swordFeintTimer = 0;
+    entry.swordFeintLocked = false;
+    entry.swordFeintLockWeight = 0;
+    entry.swordAttackPoseWeight = 0;
+    entry.swordHandSwing = 0;
+    entry.anchor.rotation.y = baseYaw;
+    return;
+  }
+
   const swordFrontStartDistance = attackRange + MOCHI_GENERAL_SWORD_FRONT_EXTRA_RANGE;
-  const swordFrontWeight = THREE.MathUtils.clamp(
+  const rawSwordFrontWeight = THREE.MathUtils.clamp(
     (swordFrontStartDistance - horizontalDistance) /
       MOCHI_GENERAL_SWORD_FRONT_BLEND_DISTANCE,
     0,
     1
   );
-  const swordFrontYawOffset =
-    MOCHI_GENERAL_SWORD_FRONT_MAX_YAW_OFFSET * swordFrontWeight;
-  const swordFeintMotion = sampleSwordFeintMotion(
-    entry,
-    delta,
-    MOCHI_GENERAL_SWORD_FEINT_MAX_YAW_OFFSET * swordFrontWeight,
-    swordFrontWeight > 0.35
-  );
+
+  const canStartFeint = rawSwordFrontWeight >= MOCHI_GENERAL_SWORD_FEINT_START_WEIGHT;
+  if (canStartFeint && !entry.swordFeintLocked) {
+    entry.swordFeintLocked = true;
+    entry.swordFeintLockWeight = rawSwordFrontWeight;
+    entry.swordFeintTimer = 0;
+  }
+
+  const feintWeight = entry.swordFeintLocked
+    ? Math.max(MOCHI_GENERAL_SWORD_FEINT_START_WEIGHT, entry.swordFeintLockWeight)
+    : rawSwordFrontWeight;
+  const swordFrontYawOffset = MOCHI_GENERAL_SWORD_FRONT_MAX_YAW_OFFSET * feintWeight;
+
+  const swordFeintMotion = entry.swordFeintLocked
+    ? sampleSwordFeintMotion(
+        entry.swordFeintTimer,
+        MOCHI_GENERAL_SWORD_FEINT_MAX_YAW_OFFSET * feintWeight
+      )
+    : {
+        yawOffset: 0,
+        attackPoseWeight: 0,
+        handSwing: 0,
+      };
   entry.swordAttackPoseWeight =
-    swordFeintMotion.attackPoseWeight * swordFrontWeight;
-  entry.swordHandSwing = swordFeintMotion.handSwing * swordFrontWeight;
+    swordFeintMotion.attackPoseWeight * feintWeight;
+  entry.swordHandSwing = swordFeintMotion.handSwing * feintWeight;
+
+  if (entry.swordFeintLocked) {
+    entry.swordFeintTimer += delta;
+    if (entry.swordFeintTimer >= MOCHI_GENERAL_SWORD_FEINT_INTERVAL) {
+      entry.swordFeintTimer = 0;
+      entry.swordFeintLocked = false;
+      entry.swordFeintLockWeight = 0;
+    }
+  } else {
+    entry.swordFeintTimer = 0;
+    entry.swordFeintLockWeight = 0;
+  }
 
   // Shift yaw at close range so the sword-side stance becomes the frontal pose.
   entry.anchor.rotation.y =
@@ -569,6 +872,8 @@ const applyBossAnimation = (
   const commandLean = -0.16 * entry.walkBlend;
   const swordAttackPose = THREE.MathUtils.clamp(entry.swordAttackPoseWeight, 0, 1);
   const swordHandSwing = THREE.MathUtils.clamp(entry.swordHandSwing, -1, 1);
+  const skill1CastPose = THREE.MathUtils.clamp(entry.skill1CastBlend, 0, 1);
+  const skill2WindupPose = THREE.MathUtils.clamp(entry.skill2WindupBlend, 0, 1);
 
   if (!entry.model || !entry.rig) {
     entry.fallback.position.y = 2.745;
@@ -586,9 +891,45 @@ const applyBossAnimation = (
     rig.body.rotation.z = rig.bodyBaseRotZ + commandSway * 0.32;
   }
   if (rig.armRight) {
-    rig.armRight.rotation.x = rig.armRightBaseX + stride * 0.96;
-    rig.armRight.rotation.y = rig.armRightBaseY + commandSway * 0.2;
-    rig.armRight.rotation.z = rig.armRightBaseZ + stride * 0.24;
+    const armRightDefaultX = rig.armRightBaseX + stride * 0.96;
+    const armRightDefaultY = rig.armRightBaseY + commandSway * 0.2;
+    const armRightDefaultZ = rig.armRightBaseZ + stride * 0.24;
+    const armRightSkillX = rig.armRightBaseX + MOCHI_GENERAL_SKILL1_ARM_RIGHT_X;
+    const armRightSkillY = rig.armRightBaseY + MOCHI_GENERAL_SKILL1_ARM_RIGHT_Y;
+    const armRightSkillZ = rig.armRightBaseZ + MOCHI_GENERAL_SKILL1_ARM_RIGHT_Z;
+    const armRightSkill2X = rig.armRightBaseX + MOCHI_GENERAL_SKILL2_ARM_RIGHT_X;
+    const armRightSkill2Y = rig.armRightBaseY + MOCHI_GENERAL_SKILL2_ARM_RIGHT_Y;
+    const armRightSkill2Z = rig.armRightBaseZ + MOCHI_GENERAL_SKILL2_ARM_RIGHT_Z;
+    const armRightSkill1BlendedX = THREE.MathUtils.lerp(
+      armRightDefaultX,
+      armRightSkillX,
+      skill1CastPose
+    );
+    const armRightSkill1BlendedY = THREE.MathUtils.lerp(
+      armRightDefaultY,
+      armRightSkillY,
+      skill1CastPose
+    );
+    const armRightSkill1BlendedZ = THREE.MathUtils.lerp(
+      armRightDefaultZ,
+      armRightSkillZ,
+      skill1CastPose
+    );
+    rig.armRight.rotation.x = THREE.MathUtils.lerp(
+      armRightSkill1BlendedX,
+      armRightSkill2X,
+      skill2WindupPose
+    );
+    rig.armRight.rotation.y = THREE.MathUtils.lerp(
+      armRightSkill1BlendedY,
+      armRightSkill2Y,
+      skill2WindupPose
+    );
+    rig.armRight.rotation.z = THREE.MathUtils.lerp(
+      armRightSkill1BlendedZ,
+      armRightSkill2Z,
+      skill2WindupPose
+    );
   }
   if (rig.armLeft) {
     const armLeftDefaultX = rig.armLeftBaseX - stride * 0.3;
@@ -709,9 +1050,39 @@ export const tickMochiGeneralCombat = ({
   const attackRange = Math.max(3.2, entry.monster.stats.attackRange + 0.7);
   let distance = entry.monster.distanceTo(player);
   const trackingActive = !gameEnded && distance <= MOCHI_GENERAL_TRACK_RANGE;
+  const swordThrustInProgress =
+    entry.swordFeintLocked ||
+    entry.swordFeintTimer > 0.0001 ||
+    entry.swordAttackPoseWeight > 0.0001;
+  const chasingTarget = trackingActive && distance > attackRange;
+  const skill2Busy = entry.skill2WindupActive || entry.skill2ProjectileActive;
+
+  updateBossSkill1State({
+    entry,
+    delta,
+    canAttemptStart: chasingTarget && !swordThrustInProgress && !skill2Busy,
+    forceStop: gameEnded,
+  });
+
+  updateBossSkill2State({
+    entry,
+    delta,
+    canAttemptStart:
+      chasingTarget &&
+      !swordThrustInProgress &&
+      !entry.skill1Casting &&
+      !entry.skill2WindupActive &&
+      !entry.skill2ProjectileActive,
+    forceStop: gameEnded,
+  });
 
   if (trackingActive) {
-    if (distance > attackRange) {
+    if (
+      distance > attackRange &&
+      !entry.skill1Casting &&
+      !entry.skill2WindupActive &&
+      !swordThrustInProgress
+    ) {
       const movedDistance = moveBossTowardPlayer(entry, player, delta, isBlocked);
       isMoving = movedDistance > 0.0001;
       distance = entry.monster.distanceTo(player);
@@ -720,6 +1091,8 @@ export const tickMochiGeneralCombat = ({
     faceBossTowardPlayer(entry, player, attackRange, delta);
   } else {
     entry.swordFeintTimer = 0;
+    entry.swordFeintLocked = false;
+    entry.swordFeintLockWeight = 0;
     entry.swordAttackPoseWeight = 0;
     entry.swordHandSwing = 0;
   }

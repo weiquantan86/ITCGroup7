@@ -7,6 +7,11 @@ export interface LinearProjectileState {
   radius: number;
 }
 
+export interface ProjectileLike {
+  velocity: THREE.Vector3;
+  radius: number;
+}
+
 export type RemoveLinearProjectile = () => void;
 
 export interface LinearProjectileHooks<
