@@ -23,6 +23,8 @@ type CharacterRuntimeObjectInit = {
   getSkillCooldownDurationMs?: CharacterRuntime["getSkillCooldownDurationMs"];
   beforeSkillUse?: CharacterRuntime["beforeSkillUse"];
   beforeDamage?: CharacterRuntime["beforeDamage"];
+  beforeStatusApply?: CharacterRuntime["beforeStatusApply"];
+  isImmuneToStatus?: CharacterRuntime["isImmuneToStatus"];
   onTick?: CharacterRuntime["onTick"];
   resetState?: CharacterRuntime["resetState"];
 };
@@ -50,6 +52,8 @@ export class CharacterRuntimeObject implements CharacterRuntime {
   readonly getSkillCooldownDurationMs?: CharacterRuntime["getSkillCooldownDurationMs"];
   readonly beforeSkillUse?: CharacterRuntime["beforeSkillUse"];
   readonly beforeDamage?: CharacterRuntime["beforeDamage"];
+  readonly beforeStatusApply?: CharacterRuntime["beforeStatusApply"];
+  readonly isImmuneToStatus?: CharacterRuntime["isImmuneToStatus"];
   readonly onTick?: CharacterRuntime["onTick"];
   readonly resetState?: CharacterRuntime["resetState"];
 
@@ -76,6 +80,8 @@ export class CharacterRuntimeObject implements CharacterRuntime {
     this.getSkillCooldownDurationMs = init.getSkillCooldownDurationMs;
     this.beforeSkillUse = init.beforeSkillUse;
     this.beforeDamage = init.beforeDamage;
+    this.beforeStatusApply = init.beforeStatusApply;
+    this.isImmuneToStatus = init.isImmuneToStatus;
     this.onTick = init.onTick;
     this.resetState = init.resetState;
   }

@@ -368,6 +368,7 @@ export const createProjectileSystem = ({
         remove
       ) => {
         if (projectileForcedRemoval.has(projectile.id)) return;
+        const lifecycle = projectileLifecycleHooks.get(projectile.id);
 
         const typeDefinition = getProjectileTypeDefinition(projectile.projectileType);
         const reach = distance + projectile.radius;
@@ -495,6 +496,28 @@ export const createProjectileSystem = ({
             removeProjectile: removeTargetProjectile,
           });
 
+          if (lifecycle?.onTargetHit) {
+            lifecycle.onTargetHit({
+              now: travelNow,
+              projectile,
+              targetId: attackHit.target.id,
+              point: attackRayHitPoint.clone(),
+              direction: attackRayDirection.clone(),
+              removeProjectile: removeTargetProjectile,
+              triggerExplosion: (primaryTargetId) => {
+                const resolvedPrimaryTargetId =
+                  primaryTargetId === undefined ? attackHit.target.id : primaryTargetId;
+                triggerProjectileExplosion(
+                  travelNow,
+                  projectile,
+                  attackRayHitPoint,
+                  attackRayDirection,
+                  resolvedPrimaryTargetId
+                );
+              },
+            });
+          }
+
           if (targetRemoved) {
             return;
           }
@@ -553,6 +576,24 @@ export const createProjectileSystem = ({
           },
           removeProjectile: removeWorldProjectile,
         });
+        if (lifecycle?.onWorldHit) {
+          lifecycle.onWorldHit({
+            now: travelNow,
+            projectile,
+            point: attackRayHitPoint.clone(),
+            direction: attackRayDirection.clone(),
+            triggerExplosion: (primaryTargetId) => {
+              triggerProjectileExplosion(
+                travelNow,
+                projectile,
+                attackRayHitPoint,
+                attackRayDirection,
+                primaryTargetId ?? null
+              );
+            },
+            removeProjectile: removeWorldProjectile,
+          });
+        }
       },
       shouldExpire: (projectile) => {
         if (projectileForcedRemoval.has(projectile.id)) {

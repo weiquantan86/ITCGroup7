@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { Projectile as CharacterProjectile } from "../../../../object/projectile/types";
 import type { ProjectileBlockHitHandler } from "../../../../object/projectile/blocking";
-import type { CharacterStats, SkillKey } from "../types";
+import type { CharacterStats, SkillKey, StatusEffectApplication } from "../types";
 
 export type RecoveryZoneType = "health" | "mana" | "energy" | "both";
 
@@ -44,6 +44,8 @@ export interface PlayerWorldTickArgs {
   currentStats: CharacterStats;
   maxStats: CharacterStats;
   applyDamage: (amount: number) => number;
+  applyStatusEffect: (effect: StatusEffectApplication) => boolean;
+  clearStatusEffectsBySource: (source: string) => number;
   projectileBlockers: THREE.Object3D[];
   handleProjectileBlockHit?: ProjectileBlockHitHandler;
 }

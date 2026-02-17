@@ -3,7 +3,10 @@ import type { MochiGeneralCombatEntry } from "./combatBehavior";
 import { tickMochiGeneralCombat } from "./combatBehavior";
 import { createMochiGeneralSkill1Runtime } from "./skill1Runtime";
 import { createMochiGeneralSkill2Runtime } from "./skill2Runtime";
+import { createMochiGeneralSkill3Runtime } from "./skill3Runtime";
+import { createMochiGeneralSkill4Runtime } from "./skill4Runtime";
 import type { ProjectileBlockHitHandler } from "../../../object/projectile/blocking";
+import type { StatusEffectApplication } from "../../character/general/types";
 
 type SwordThrustState = {
   active: boolean;
@@ -18,12 +21,17 @@ export type MochiGeneralCombatRuntime = {
     gameEnded: boolean;
     isBlocked: (x: number, z: number) => boolean;
     applyDamage: (amount: number) => number;
+    summonSkill3Soldier: (args: {
+      entry: MochiGeneralCombatEntry;
+      position: THREE.Vector3;
+    }) => void;
   }) => void;
   update: (args: {
     now: number;
     delta: number;
     player: THREE.Object3D;
     applyDamage: (amount: number) => number;
+    applyStatusEffect: (effect: StatusEffectApplication) => boolean;
     gameEnded: boolean;
     projectileBlockers: THREE.Object3D[];
     handleProjectileBlockHit?: ProjectileBlockHitHandler;
@@ -51,6 +59,8 @@ export const createMochiGeneralCombatRuntime = (
 ): MochiGeneralCombatRuntime => {
   const skill1Runtime = createMochiGeneralSkill1Runtime(scene);
   const skill2Runtime = createMochiGeneralSkill2Runtime(scene);
+  const skill3Runtime = createMochiGeneralSkill3Runtime();
+  const skill4Runtime = createMochiGeneralSkill4Runtime(scene);
   const swordThrustStateByEntry = new WeakMap<
     MochiGeneralCombatEntry,
     SwordThrustState
@@ -77,7 +87,9 @@ export const createMochiGeneralCombatRuntime = (
   }) => {
     const thrustActive =
       entry.swordAttackPoseWeight >= BOSS_SWORD_THRUST_ATTACK_WEIGHT_THRESHOLD &&
-      entry.swordHandSwing >= BOSS_SWORD_THRUST_SWING_THRESHOLD;
+      entry.swordHandSwing >= BOSS_SWORD_THRUST_SWING_THRESHOLD &&
+      !entry.skill4WindupActive &&
+      !entry.skill4SwordActive;
     const state = resolveSwordThrustState(entry);
 
     if (!thrustActive) {
@@ -132,6 +144,7 @@ export const createMochiGeneralCombatRuntime = (
       gameEnded,
       isBlocked,
       applyDamage,
+      summonSkill3Soldier,
     }) => {
       tickMochiGeneralCombat({
         entry,
@@ -147,6 +160,16 @@ export const createMochiGeneralCombatRuntime = (
         player,
         gameEnded,
       });
+      skill3Runtime.onBossTick({
+        entry,
+        gameEnded,
+        isBlocked,
+        summonAt: summonSkill3Soldier,
+      });
+      skill4Runtime.onBossTick({
+        entry,
+        gameEnded,
+      });
       updateSwordThrustCollision({
         entry,
         player,
@@ -158,6 +181,7 @@ export const createMochiGeneralCombatRuntime = (
       delta,
       player,
       applyDamage,
+      applyStatusEffect,
       gameEnded,
       projectileBlockers,
       handleProjectileBlockHit,
@@ -174,17 +198,28 @@ export const createMochiGeneralCombatRuntime = (
         delta,
         player,
         applyDamage,
+        applyStatusEffect,
+        gameEnded,
+      });
+      skill4Runtime.update({
+        delta,
+        player,
+        applyDamage,
         gameEnded,
       });
     },
     onBossRemoved: (entry) => {
       skill1Runtime.onBossRemoved(entry);
       skill2Runtime.onBossRemoved(entry);
+      skill3Runtime.onBossRemoved(entry);
+      skill4Runtime.onBossRemoved(entry);
       swordThrustStateByEntry.delete(entry);
     },
     dispose: () => {
       skill1Runtime.dispose();
       skill2Runtime.dispose();
+      skill3Runtime.dispose();
+      skill4Runtime.dispose();
     },
   };
 };

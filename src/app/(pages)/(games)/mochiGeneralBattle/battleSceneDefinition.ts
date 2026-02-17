@@ -15,6 +15,16 @@ import {
 } from "../../../asset/entity/monster/mochiGeneral/combatBehavior";
 import { createMochiGeneralCombatRuntime } from "../../../asset/entity/monster/mochiGeneral/combatRuntime";
 import { mochiGeneralProfile } from "../../../asset/entity/monster/mochiGeneral/profile";
+import { mochiSoldierProfile } from "../../../asset/entity/monster/mochiSoldier/profile";
+import {
+  attachMochiSoldierPrototype,
+  clearMochiSoldierVisual,
+  createMochiSoldierRuntimeState,
+  createMochiSoldierSummonFxRuntime,
+  normalizeMochiSoldierPrototype,
+  tickMochiSoldierCombat,
+  type MochiSoldierRuntimeState,
+} from "../../../asset/entity/monster/mochiSoldier/runtime";
 import { createMochiFactoryScene } from "../../../asset/scenes/mochiFactory/sceneDefinition";
 import { createSceneResourceTracker } from "../../../asset/scenes/general/resourceTracker";
 import type {
@@ -31,6 +41,15 @@ type BossEntry = {
   id: string;
   hitbox: THREE.Mesh;
 } & MochiGeneralCombatEntry;
+
+type SummonedSoldierEntry = {
+  id: string;
+  anchor: THREE.Group;
+  hitbox: THREE.Mesh;
+  fallback: THREE.Mesh;
+  model: THREE.Object3D | null;
+  monster: Monster;
+} & MochiSoldierRuntimeState;
 
 type EntranceSmokeParticle = {
   mesh: THREE.Mesh;
@@ -72,6 +91,9 @@ export const createMochiGeneralBattleScene = (
   const bossesGroup = new THREE.Group();
   bossesGroup.name = "mochiGeneralBosses";
   scene.add(bossesGroup);
+  const summonedSoldiersGroup = new THREE.Group();
+  summonedSoldiersGroup.name = "mochiGeneralSummonedSoldiers";
+  scene.add(summonedSoldiersGroup);
   const smokeGroup = new THREE.Group();
   smokeGroup.name = "mochiGeneralEntranceSmoke";
   scene.add(smokeGroup);
@@ -95,6 +117,15 @@ export const createMochiGeneralBattleScene = (
     emissiveIntensity: 0.18,
   });
   const hitboxGeometry = new THREE.CapsuleGeometry(2.8125, 4.32, 7, 14);
+  const summonedSoldierFallbackGeometry = new THREE.CapsuleGeometry(0.58, 1.15, 6, 14);
+  const summonedSoldierFallbackMaterialTemplate = new THREE.MeshStandardMaterial({
+    color: 0xf8d2a6,
+    roughness: 0.38,
+    metalness: 0.08,
+    emissive: 0x7c2d12,
+    emissiveIntensity: 0.16,
+  });
+  const summonedSoldierHitboxGeometry = new THREE.CapsuleGeometry(0.9, 1.56, 6, 12);
   const hitboxMaterialTemplate = new THREE.MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
@@ -114,15 +145,21 @@ export const createMochiGeneralBattleScene = (
   });
   trackGeometry(fallbackGeometry);
   trackGeometry(hitboxGeometry);
+  trackGeometry(summonedSoldierFallbackGeometry);
+  trackGeometry(summonedSoldierHitboxGeometry);
   trackGeometry(smokeGeometry);
   trackMaterial(fallbackMaterialTemplate);
+  trackMaterial(summonedSoldierFallbackMaterialTemplate);
   trackMaterial(hitboxMaterialTemplate);
   trackMaterial(smokeMaterialTemplate);
 
   const bosses: BossEntry[] = [];
+  const summonedSoldiers: SummonedSoldierEntry[] = [];
   const entranceSmokeParticles: EntranceSmokeParticle[] = [];
   const attackTargets: PlayerAttackTarget[] = [];
   const bossCombatRuntime = createMochiGeneralCombatRuntime(scene);
+  const summonedSoldierFxRuntime = createMochiSoldierSummonFxRuntime(scene);
+  let summonedSoldierCounter = 0;
 
   let spawnedMonsters = 0;
   let aliveMonsters = 0;
@@ -292,6 +329,131 @@ export const createMochiGeneralBattleScene = (
     }
   };
 
+  const removeSummonedSoldierEntry = (entry: SummonedSoldierEntry) => {
+    removeAttackTarget(entry.id);
+    clearMochiSoldierVisual({
+      entry,
+      disposeObjectResources,
+    });
+    if (entry.hitbox.parent === entry.anchor) {
+      entry.anchor.remove(entry.hitbox);
+    }
+    entry.monster.dispose();
+    if (entry.anchor.parent === summonedSoldiersGroup) {
+      summonedSoldiersGroup.remove(entry.anchor);
+    }
+    const index = summonedSoldiers.indexOf(entry);
+    if (index >= 0) {
+      summonedSoldiers.splice(index, 1);
+    }
+  };
+
+  let mochiSoldierPrototype: THREE.Object3D | null = null;
+  const attachPrototypeToSummonedSoldier = (entry: SummonedSoldierEntry) => {
+    if (!mochiSoldierPrototype) return;
+    attachMochiSoldierPrototype({
+      entry,
+      prototype: mochiSoldierPrototype,
+      trackObject,
+    });
+  };
+
+  const spawnSummonedSoldier = (position: THREE.Vector3) => {
+    summonedSoldierCounter += 1;
+    const id = `mochi-general-summon-${summonedSoldierCounter}`;
+    const anchor = new THREE.Group();
+    anchor.name = `${id}-anchor`;
+    anchor.position.copy(position);
+    summonedSoldiersGroup.add(anchor);
+
+    const fallback = new THREE.Mesh(
+      summonedSoldierFallbackGeometry,
+      summonedSoldierFallbackMaterialTemplate.clone()
+    );
+    fallback.name = `${id}-fallback`;
+    fallback.position.set(0, 1.16, 0);
+    fallback.castShadow = true;
+    fallback.receiveShadow = true;
+    anchor.add(fallback);
+
+    const hitbox = new THREE.Mesh(
+      summonedSoldierHitboxGeometry,
+      hitboxMaterialTemplate.clone()
+    );
+    hitbox.name = `${id}-hitbox`;
+    hitbox.position.set(0, 1.16, 0);
+    hitbox.castShadow = false;
+    hitbox.receiveShadow = false;
+    anchor.add(hitbox);
+
+    trackMesh(fallback);
+    trackMesh(hitbox);
+
+    const entry: SummonedSoldierEntry = {
+      id,
+      anchor,
+      hitbox,
+      fallback,
+      model: null,
+      monster: new Monster({
+        model: anchor,
+        profile: mochiSoldierProfile,
+      }),
+      ...createMochiSoldierRuntimeState(),
+    };
+    summonedSoldiers.push(entry);
+
+    attackTargets.push({
+      id: entry.id,
+      object: hitbox,
+      isActive: () => !gameEnded && entry.monster.isAlive,
+      category: "normal",
+      label: mochiSoldierProfile.label,
+      getHealth: () => entry.monster.health,
+      getMaxHealth: () => entry.monster.maxHealth,
+      onHit: (hit) => {
+        if (gameEnded || !entry.monster.isAlive) return;
+        const applied = entry.monster.takeDamage(Math.max(1, Math.round(hit.damage)));
+        if (applied <= 0) return;
+        if (!entry.monster.isAlive) {
+          removeSummonedSoldierEntry(entry);
+        }
+      },
+    });
+
+    attachPrototypeToSummonedSoldier(entry);
+    summonedSoldierFxRuntime.spawn(position);
+  };
+
+  const updateSummonedSoldiers = ({
+    now,
+    delta,
+    player,
+    applyDamage,
+  }: {
+    now: number;
+    delta: number;
+    player: THREE.Object3D;
+    applyDamage: (amount: number) => number;
+  }) => {
+    for (let i = summonedSoldiers.length - 1; i >= 0; i -= 1) {
+      const entry = summonedSoldiers[i];
+      if (!entry.monster.isAlive) {
+        removeSummonedSoldierEntry(entry);
+        continue;
+      }
+      tickMochiSoldierCombat({
+        entry,
+        now,
+        delta,
+        player,
+        gameEnded,
+        isBlocked: worldIsBlocked,
+        applyDamage,
+      });
+    }
+  };
+
   let mochiGeneralPrototype: THREE.Object3D | null = null;
   const attachPrototypeToBoss = (entry: BossEntry) => {
     if (!mochiGeneralPrototype || entry.model || !entry.monster.isAlive) return;
@@ -395,6 +557,7 @@ export const createMochiGeneralBattleScene = (
     player,
     currentStats,
     applyDamage,
+    applyStatusEffect,
     projectileBlockers,
     handleProjectileBlockHit,
   }: PlayerWorldTickArgs) => {
@@ -418,15 +581,27 @@ export const createMochiGeneralBattleScene = (
         gameEnded,
         isBlocked: worldIsBlocked,
         applyDamage,
+        summonSkill3Soldier: ({ position }) => {
+          spawnSummonedSoldier(position);
+        },
       });
       if (gameEnded) break;
     }
+
+    updateSummonedSoldiers({
+      now,
+      delta,
+      player,
+      applyDamage,
+    });
+    summonedSoldierFxRuntime.update(delta);
 
     bossCombatRuntime.update({
       now,
       delta,
       player,
       applyDamage,
+      applyStatusEffect,
       gameEnded,
       projectileBlockers,
       handleProjectileBlockHit,
@@ -463,6 +638,30 @@ export const createMochiGeneralBattleScene = (
       });
       for (let i = 0; i < bosses.length; i += 1) {
         attachPrototypeToBoss(bosses[i]);
+      }
+    },
+    undefined,
+    () => {}
+  );
+
+  loader.load(
+    "/assets/monsters/mochiSoldier/mochiSoldier.glb",
+    (gltf) => {
+      if (!gltf?.scene) return;
+      if (isDisposed) {
+        disposeObjectResources(gltf.scene);
+        return;
+      }
+
+      mochiSoldierPrototype = gltf.scene;
+      normalizeMochiSoldierPrototype(mochiSoldierPrototype);
+
+      trackObject(mochiSoldierPrototype, {
+        castShadow: true,
+        receiveShadow: true,
+      });
+      for (let i = 0; i < summonedSoldiers.length; i += 1) {
+        attachPrototypeToSummonedSoldier(summonedSoldiers[i]);
       }
     },
     undefined,
@@ -511,8 +710,13 @@ export const createMochiGeneralBattleScene = (
     while (bosses.length > 0) {
       removeBossEntry(bosses[0]);
     }
+    while (summonedSoldiers.length > 0) {
+      removeSummonedSoldierEntry(summonedSoldiers[0]);
+    }
+    summonedSoldierFxRuntime.dispose();
     attackTargets.length = 0;
     scene.remove(bossesGroup);
+    scene.remove(summonedSoldiersGroup);
     scene.remove(smokeGroup);
     disposeTrackedResources();
     factorySetup.dispose?.();

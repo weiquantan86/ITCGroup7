@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { createCharacterRuntime } from "../general/runtime/runtimeBase";
 import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
 import type {
+  CharacterRuntime,
   CharacterRuntimeFactory,
   CharacterRuntimeTickArgs,
   SkillKey,
@@ -422,7 +423,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     projectileVerticalSpawnOffset: 3.6,
     projectileSpeed: 24,
     projectileLifetime: 2.2,
-    projectileDamage: 26,
+    projectileDamage: 50,
     projectileRadius: 0.24,
     projectileTargetHitRadius: 1.12,
     projectileScale: 2.8,
@@ -430,7 +431,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     projectileEmissive: 0x6d28d9,
     projectileEmissiveIntensity: 1.32,
     projectileExplosionRadius: 2.6,
-    projectileExplosionDamage: 0,
+    projectileExplosionDamage: 50,
+    projectileExplosionMinDamage: 20,
     projectileExplosionColor: 0xd8b4fe,
     projectileExplosionEmissive: 0x9333ea,
     projectileExplosionEmissiveIntensity: 1.42,
@@ -1287,6 +1289,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       splitOnImpact: false,
       explosionRadius: demonFormConfig.projectileExplosionRadius,
       explosionDamage: demonFormConfig.projectileExplosionDamage,
+      explosionMinDamage: demonFormConfig.projectileExplosionMinDamage,
       explosionColor: demonFormConfig.projectileExplosionColor,
       explosionEmissive: demonFormConfig.projectileExplosionEmissive,
       explosionEmissiveIntensity: demonFormConfig.projectileExplosionEmissiveIntensity,
@@ -1294,16 +1297,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
       energyGainOnHit: 0,
       manaGainOnHit: 5,
       grantManaOnTargetHit: true,
-      lifecycle: {
-        onRemove: ({ reason, now: removedAt, position, velocity }) => {
-          if (reason === "cleared") return;
-          queueDemonShockwaveDamageWaves({
-            now: removedAt,
-            origin: position.clone(),
-            direction: velocity.clone(),
-          });
-        },
-      },
     });
     return true;
   };
@@ -2328,6 +2321,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     return { amount: resolvedAmount };
   };
 
+  const isImmuneToStatus: NonNullable<CharacterRuntime["isImmuneToStatus"]> = ({
+    now,
+  }) => phantomModifier.isStatusImmune(now);
+
   const onTick = (args: CharacterRuntimeTickArgs) => {
     phantomModifier.onTick(args);
     updateDemonFormState(args.now);
@@ -2358,6 +2355,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     getSkillCooldownDurationMs: baseRuntime.getSkillCooldownDurationMs,
     beforeSkillUse,
     beforeDamage,
+    isImmuneToStatus,
     onTick,
     resetState,
     update: (args) => {

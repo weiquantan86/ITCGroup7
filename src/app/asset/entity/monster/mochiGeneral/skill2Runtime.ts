@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { MochiGeneralCombatEntry } from "./combatBehavior";
+import type { StatusEffectApplication } from "../../character/general/types";
 
 type ThrownMochiState = {
   entry: MochiGeneralCombatEntry;
@@ -66,13 +67,14 @@ export type MochiGeneralSkill2Runtime = {
     delta: number;
     player: THREE.Object3D;
     applyDamage: (amount: number) => number;
+    applyStatusEffect: (effect: StatusEffectApplication) => boolean;
     gameEnded: boolean;
   }) => void;
   onBossRemoved: (entry: MochiGeneralCombatEntry) => void;
   dispose: () => void;
 };
 
-const SKILL2_OUTBOUND_SPEED = 9.8 * 0.75;
+const SKILL2_OUTBOUND_SPEED = 9.8 * 0.75 * 0.8;
 const SKILL2_OUTBOUND_TURN_RATE = 6.4;
 const SKILL2_OUTBOUND_MAX_DURATION = 10;
 const SKILL2_RETURN_SPEED = 11.5;
@@ -173,10 +175,8 @@ export const createMochiGeneralSkill2Runtime = (
   const thrownStates = new Map<MochiGeneralCombatEntry, ThrownMochiState>();
   const throwFlashParticles: ThrowFlashParticle[] = [];
   const throwShockwaves: ThrowShockwave[] = [];
-  let slowRemaining = 0;
+  let stickyFxRemaining = 0;
   let stickyFxState: StickyFxState | null = null;
-  let hasLastPlayerPosition = false;
-  const lastPlayerPosition = new THREE.Vector3();
 
   const resolveHeldMochiOrigin = (entry: MochiGeneralCombatEntry, out: THREE.Vector3) => {
     const heldMochi = entry.rig?.heldMochi;
@@ -522,11 +522,13 @@ export const createMochiGeneralSkill2Runtime = (
     delta,
     player,
     applyDamage,
+    applyStatusEffect,
     gameEnded,
   }: {
     delta: number;
     player: THREE.Object3D;
     applyDamage: (amount: number) => number;
+    applyStatusEffect: (effect: StatusEffectApplication) => boolean;
     gameEnded: boolean;
   }) => {
     player.getWorldPosition(playerWorldProbe);
@@ -567,8 +569,18 @@ export const createMochiGeneralSkill2Runtime = (
           thrownState.hitPlayer = true;
           thrownState.returning = true;
           applyDamage(SKILL2_HIT_DAMAGE);
-          slowRemaining = Math.max(slowRemaining, SKILL2_SLOW_DURATION);
-          ensureStickyFx(player);
+          if (
+            applyStatusEffect({
+              type: "slow",
+              source: "mochiGeneral.skill2",
+              tag: "mochiGeneral.skill2.slow",
+              durationSec: SKILL2_SLOW_DURATION,
+              moveSpeedMultiplier: SKILL2_SLOW_SPEED_MULTIPLIER,
+            })
+          ) {
+            stickyFxRemaining = Math.max(stickyFxRemaining, SKILL2_SLOW_DURATION);
+            ensureStickyFx(player);
+          }
         }
 
         if (thrownState.age >= SKILL2_OUTBOUND_MAX_DURATION) {
@@ -607,39 +619,20 @@ export const createMochiGeneralSkill2Runtime = (
     }
   };
 
-  const applyPlayerSlow = ({
+  const updateStickyDebuffFx = ({
     delta,
-    player,
   }: {
     delta: number;
-    player: THREE.Object3D;
   }) => {
-    if (!hasLastPlayerPosition) {
-      lastPlayerPosition.copy(player.position);
-      hasLastPlayerPosition = true;
-    }
-
-    if (slowRemaining > 0) {
-      const dx = player.position.x - lastPlayerPosition.x;
-      const dz = player.position.z - lastPlayerPosition.z;
-      const displacementSq = dx * dx + dz * dz;
-      if (displacementSq <= 64) {
-        player.position.x =
-          lastPlayerPosition.x + dx * SKILL2_SLOW_SPEED_MULTIPLIER;
-        player.position.z =
-          lastPlayerPosition.z + dz * SKILL2_SLOW_SPEED_MULTIPLIER;
-      }
-
-      slowRemaining = Math.max(0, slowRemaining - delta);
+    if (stickyFxRemaining > 0) {
+      stickyFxRemaining = Math.max(0, stickyFxRemaining - delta);
       updateStickyFx(delta);
-      if (slowRemaining <= 0) {
+      if (stickyFxRemaining <= 0) {
         disposeStickyFx();
       }
     } else if (stickyFxState) {
       disposeStickyFx();
     }
-
-    lastPlayerPosition.copy(player.position);
   };
 
   return {
@@ -652,17 +645,17 @@ export const createMochiGeneralSkill2Runtime = (
         gameEnded,
       });
     },
-    update: ({ delta, player, applyDamage, gameEnded }) => {
+    update: ({ delta, player, applyDamage, applyStatusEffect, gameEnded }) => {
       updateThrowFx(delta);
       updateThrownMochiStates({
         delta,
         player,
         applyDamage,
+        applyStatusEffect,
         gameEnded,
       });
-      applyPlayerSlow({
+      updateStickyDebuffFx({
         delta,
-        player,
       });
     },
     onBossRemoved: (entry) => {
@@ -692,8 +685,7 @@ export const createMochiGeneralSkill2Runtime = (
       throwFlashMaterialTemplate.dispose();
       throwShockwaveGeometry.dispose();
       throwShockwaveMaterialTemplate.dispose();
-      slowRemaining = 0;
-      hasLastPlayerPosition = false;
+      stickyFxRemaining = 0;
     },
   };
 };

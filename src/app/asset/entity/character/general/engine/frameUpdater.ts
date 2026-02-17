@@ -9,11 +9,13 @@ import type { createPlayerStatsState } from "../player/statsState";
 import type { createPlayerCameraRig } from "./cameraRig";
 import type { createProjectileSystem } from "../combat/projectileSystem";
 import type { createPlayerSurvivalState } from "../combat/survival";
+import type { createPlayerStatusEffectState } from "../combat/statusEffects";
 
 type PlayerStatsState = ReturnType<typeof createPlayerStatsState>;
 type PlayerCameraRig = ReturnType<typeof createPlayerCameraRig>;
 type PlayerProjectileSystem = ReturnType<typeof createProjectileSystem>;
 type PlayerSurvivalState = ReturnType<typeof createPlayerSurvivalState>;
+type PlayerStatusEffectState = ReturnType<typeof createPlayerStatusEffectState>;
 
 type CreatePlayerFrameUpdaterArgs = {
   avatar: THREE.Group;
@@ -35,6 +37,7 @@ type CreatePlayerFrameUpdaterArgs = {
   getRuntime: () => CharacterRuntime | null;
   getVisualState: () => CharacterVisualState;
   getSurvivalState: () => PlayerSurvivalState | null;
+  getStatusEffectState: () => PlayerStatusEffectState | null;
   getProjectileBlockers: () => THREE.Object3D[];
   isBlocked: (x: number, z: number) => boolean;
   worldTick?: (args: PlayerWorldTickArgs) => void;
@@ -56,6 +59,7 @@ export const createPlayerFrameUpdater = ({
   getRuntime,
   getVisualState,
   getSurvivalState,
+  getStatusEffectState,
   getProjectileBlockers,
   isBlocked,
   worldTick,
@@ -107,6 +111,8 @@ export const createPlayerFrameUpdater = ({
     const runtime = getRuntime();
     const visualState = getVisualState();
     const survivalState = getSurvivalState();
+    const statusEffectState = getStatusEffectState();
+    statusEffectState?.update(now, delta);
     const movementLocked = Boolean(runtime?.isMovementLocked?.());
     const hasMoveInput = movementLocked
       ? false
@@ -148,10 +154,13 @@ export const createPlayerFrameUpdater = ({
     if (hasMoveInput) {
       const speedBoost = canSprint ? statsState.movementConfig.sprintMultiplier : 1;
       const moveSpeedMultiplier = getMovementSpeedMultiplier(runtime);
+      const statusMovementSpeedMultiplier =
+        statusEffectState?.getMovementSpeedMultiplier(now) ?? 1;
       const moveSpeed =
         statsState.movementConfig.baseSpeed *
         speedBoost *
         moveSpeedMultiplier *
+        statusMovementSpeedMultiplier *
         delta;
       const nextX = avatar.position.x + moveDir.x * moveSpeed;
       const nextZ = avatar.position.z + moveDir.z * moveSpeed;
@@ -253,6 +262,10 @@ export const createPlayerFrameUpdater = ({
         currentStats: worldTickCurrentStatsSnapshot,
         maxStats: worldTickMaxStatsSnapshot,
         applyDamage: (amount) => survivalState?.applyDamageToPlayer(amount) ?? 0,
+        applyStatusEffect: (effect) =>
+          statusEffectState?.apply(effect, now) ?? false,
+        clearStatusEffectsBySource: (source) =>
+          statusEffectState?.clearBySource(source) ?? 0,
         projectileBlockers: runtimeProjectileBlockers,
         handleProjectileBlockHit: runtime?.handleProjectileBlockHit,
       });

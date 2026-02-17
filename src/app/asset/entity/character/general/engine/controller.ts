@@ -10,6 +10,7 @@ import { createProjectileSystem } from "../combat/projectileSystem";
 import { createPlayerStatsState } from "../player/statsState";
 import { createPlayerSkillState } from "../combat/skills";
 import { createPlayerSurvivalState } from "../combat/survival";
+import { createPlayerStatusEffectState } from "../combat/statusEffects";
 import {
   createCharacterLoader,
   type CharacterVisualState,
@@ -544,6 +545,10 @@ export const createPlayer = ({
   };
 
   let survivalState: ReturnType<typeof createPlayerSurvivalState> | null = null;
+  const statusEffectState = createPlayerStatusEffectState({
+    getRuntime: () => characterRuntime,
+    applyDamage: (amount) => survivalState?.applyDamageToPlayer(amount) ?? 0,
+  });
   const frameUpdater = createPlayerFrameUpdater({
     avatar,
     lookPivot,
@@ -559,6 +564,7 @@ export const createPlayer = ({
     getRuntime: () => characterRuntime,
     getVisualState: () => visualState,
     getSurvivalState: () => survivalState,
+    getStatusEffectState: () => statusEffectState,
     getProjectileBlockers: getRuntimeProjectileBlockers,
     isBlocked: (x, z) => (resolvedWorld.isBlocked ? resolvedWorld.isBlocked(x, z) : false),
     worldTick,
@@ -574,6 +580,7 @@ export const createPlayer = ({
     lookState.pitch = 0;
     statsState.resetSkillCooldowns();
     survivalState?.clearRecoveryZoneCooldowns();
+    statusEffectState.clear();
     clearPlayerHitFlash();
     statusHud.setBossInfo(null);
     const spawnY = resolvedWorld.groundY + visualState.modelFootOffset;
@@ -618,6 +625,7 @@ export const createPlayer = ({
       characterRuntime.dispose();
       characterRuntime = null;
     }
+    statusEffectState.clear();
     characterEntry = nextEntry;
     statsState.setProfile(characterEntry.profile);
     healthPool.reset(statsState.maxStats.health, statsState.maxStats.health);
@@ -738,6 +746,7 @@ export const createPlayer = ({
       clearActiveProjectiles();
       characterRuntime.dispose();
     }
+    statusEffectState.clear();
     projectileSystem.dispose();
     scene.remove(avatar);
     statusHud.dispose();

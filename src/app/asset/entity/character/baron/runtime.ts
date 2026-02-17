@@ -966,6 +966,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
     explosionRadius: 5.2,
     explosionDamage: 48,
   };
+  const skillEHitCutConfig = {
+    lifeMs: 340,
+    minSpeed: 2.2,
+    maxSpeed: 3.9,
+    minScale: 0.58,
+    maxScale: 0.92,
+    forwardOffset: 0.08,
+    lateralOffset: 0.14,
+    yOffset: 0.24,
+  };
   const skillESideOffsets = [-1, 0, 1];
   const skillEVolley = {
     active: false,
@@ -1928,6 +1938,70 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   };
 
+  const launchSkillEHitCutWave = (
+    now: number,
+    point: THREE.Vector3,
+    direction: THREE.Vector3,
+    scaleMultiplier = 1
+  ) => {
+    const entry = acquireSkillRDanceWave();
+    clearSkillRDanceWaveEntry(entry);
+    entry.active = true;
+    entry.launchedAt = now;
+    entry.maxLifeMs = skillEHitCutConfig.lifeMs;
+    entry.speed = THREE.MathUtils.lerp(
+      skillEHitCutConfig.minSpeed,
+      skillEHitCutConfig.maxSpeed,
+      Math.random()
+    );
+    entry.baseScale =
+      THREE.MathUtils.lerp(
+        skillEHitCutConfig.minScale,
+        skillEHitCutConfig.maxScale,
+        Math.random()
+      ) * THREE.MathUtils.clamp(scaleMultiplier, 0.75, 1.5);
+    entry.side = Math.random() < 0.5 ? -1 : 1;
+    entry.spinRate = THREE.MathUtils.lerp(8.8, 12.6, Math.random());
+
+    skillRDanceWaveDirection.copy(direction);
+    skillRDanceWaveDirection.y *= 0.22;
+    if (skillRDanceWaveDirection.lengthSq() < 0.000001) {
+      skillRDanceWaveDirection.copy(skillEBaseDirection);
+      if (skillRDanceWaveDirection.lengthSq() < 0.000001) {
+        skillRDanceWaveDirection.set(0, 0, 1);
+      }
+    }
+    skillRDanceWaveDirection.normalize();
+
+    skillRDanceWaveRight.crossVectors(skillRDanceWaveUp, skillRDanceWaveDirection);
+    if (skillRDanceWaveRight.lengthSq() < 0.000001) {
+      skillRDanceWaveRight.set(1, 0, 0);
+    } else {
+      skillRDanceWaveRight.normalize();
+    }
+
+    entry.direction.copy(skillRDanceWaveDirection);
+    entry.right.copy(skillRDanceWaveRight);
+    entry.origin
+      .copy(point)
+      .addScaledVector(entry.direction, skillEHitCutConfig.forwardOffset)
+      .addScaledVector(entry.right, entry.side * skillEHitCutConfig.lateralOffset);
+    entry.origin.y += skillEHitCutConfig.yOffset;
+
+    const host = avatar.parent ?? avatar;
+    if (entry.mesh.parent !== host) {
+      entry.mesh.removeFromParent();
+      host.add(entry.mesh);
+    }
+    entry.mesh.visible = true;
+    entry.mesh.position.copy(entry.origin);
+    entry.mesh.quaternion.setFromUnitVectors(projectileForward, entry.direction);
+    entry.mesh.rotateZ(entry.side * 0.45);
+    entry.mesh.scale.setScalar(entry.baseScale * 0.62);
+    entry.material.opacity = 0.96;
+    entry.material.emissiveIntensity = 1.9;
+  };
+
   const applySkillRDanceBodyMotion = (
     now: number,
     avatarModel: THREE.Object3D | null,
@@ -2676,7 +2750,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const trailHead = new THREE.Vector3();
     const launchAt = performance.now();
     let convergeRemovalRequested = false;
-    let explodeOnRemove = false;
 
     const trailHost = avatar.parent ?? avatar;
     if (entry.trail.parent !== trailHost) {
@@ -2701,13 +2774,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
       targetHitRadius: skillEVolley.targetHitRadius * scaleMultiplier,
       damage: Math.round(skillEConfig.damage * damageMultiplier),
       energyGainOnHit: 4,
-      splitOnImpact: true,
-      explosionRadius: skillEVolley.explosionRadius,
-      explosionDamage: skillEVolley.explosionDamage,
-      explosionColor: 0x60a5fa,
-      explosionEmissive: 0x2563eb,
-      explosionEmissiveIntensity: 1.05,
+      splitOnImpact: false,
+      explodeOnTargetHit: false,
+      explodeOnWorldHit: false,
+      explodeOnExpire: false,
+      removeOnTargetHit: true,
+      removeOnWorldHit: true,
       lifecycle: {
+        onTargetHit: ({ now, point, direction }) => {
+          launchSkillEHitCutWave(now, point, direction, cloneBuffActive ? 1.18 : 1);
+        },
         applyForces: ({ velocity, delta, removeProjectile }) => {
           if (velocity.lengthSq() < 0.000001) return;
 
@@ -2727,7 +2803,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
           if (distanceToFocus <= snapDistance) {
             if (!convergeRemovalRequested) {
               convergeRemovalRequested = true;
-              explodeOnRemove = true;
               removeProjectile("expired");
             }
             return;
@@ -2773,11 +2848,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
           trailHead.copy(entry.mesh.position).addScaledVector(velocity, delta);
           pushShurikenTrailPoint(entry, trailHead);
         },
-        onRemove: ({ reason, triggerExplosion }) => {
-          if (reason !== "impact" && (explodeOnRemove || reason === "expired")) {
-            entry.mesh.position.copy(focusPoint);
-            triggerExplosion();
-          }
+        onRemove: () => {
           entry.trail.visible = false;
           entry.trail.removeFromParent();
           resetShurikenTrail(entry, entry.mesh.position);
@@ -2870,13 +2941,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
         targetHitRadius: shotHitRadius,
         damage: shotDamage,
         energyGainOnHit: 0,
-        splitOnImpact: true,
-        explosionRadius: skillEVolley.explosionRadius,
-        explosionDamage: skillEVolley.explosionDamage,
-        explosionColor: 0x60a5fa,
-        explosionEmissive: 0x2563eb,
-        explosionEmissiveIntensity: 1.05,
+        splitOnImpact: false,
+        explodeOnTargetHit: false,
+        explodeOnWorldHit: false,
+        explodeOnExpire: false,
+        removeOnTargetHit: true,
+        removeOnWorldHit: true,
         lifecycle: {
+          onTargetHit: ({ now, point, direction }) => {
+            launchSkillEHitCutWave(now, point, direction, 1.22);
+          },
           applyForces: ({ velocity, delta }) => {
             if (velocity.lengthSq() < 0.000001) return;
             currentDirection.copy(velocity).normalize();
@@ -2890,10 +2964,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
             trailHead.copy(entry.mesh.position).addScaledVector(velocity, delta);
             pushShurikenTrailPoint(entry, trailHead);
           },
-          onRemove: ({ reason, triggerExplosion }) => {
-            if (reason === "expired") {
-              triggerExplosion();
-            }
+          onRemove: () => {
             entry.trail.visible = false;
             entry.trail.removeFromParent();
             resetShurikenTrail(entry, entry.mesh.position);

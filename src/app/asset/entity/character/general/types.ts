@@ -3,6 +3,7 @@ import type {
   ProjectileBlockHitContext,
   ProjectileBlockHitHandler,
 } from "../../../object/projectile/blocking";
+import type { Projectile } from "../../../object/projectile/types";
 
 export type ThreeModule = typeof import("three");
 
@@ -165,6 +166,23 @@ export interface ProjectileLifecycleHooks {
     } | null;
     removeProjectile: (reason?: ProjectileRemoveReason) => void;
   }) => void;
+  onTargetHit?: (args: {
+    now: number;
+    projectile: Projectile;
+    targetId: string;
+    point: THREE.Vector3;
+    direction: THREE.Vector3;
+    removeProjectile: () => void;
+    triggerExplosion: (primaryTargetId?: string | null) => void;
+  }) => void;
+  onWorldHit?: (args: {
+    now: number;
+    projectile: Projectile;
+    point: THREE.Vector3;
+    direction: THREE.Vector3;
+    removeProjectile: () => void;
+    triggerExplosion: (primaryTargetId?: string | null) => void;
+  }) => void;
   onRemove?: (args: {
     reason: ProjectileRemoveReason;
     now: number;
@@ -237,6 +255,27 @@ export interface IncomingDamageModifier {
   amount: number;
 }
 
+export type StatusEffectType = "slow" | "root" | "dot";
+
+export interface StatusEffectApplyArgs {
+  type: StatusEffectType;
+  source?: string;
+  tag?: string;
+  durationSec: number;
+  moveSpeedMultiplier?: number;
+  dotDamagePerSecond?: number;
+  now: number;
+}
+
+export type StatusEffectApplication = Omit<StatusEffectApplyArgs, "now">;
+
+export interface StatusEffectApplyModifier {
+  allow?: boolean;
+  durationScale?: number;
+  moveSpeedMultiplier?: number;
+  dotDamagePerSecond?: number;
+}
+
 export interface CharacterRuntime {
   setProfile: (nextProfile: CharacterProfile) => void;
   triggerSlash: (facing: CharacterFacing) => void;
@@ -263,6 +302,14 @@ export interface CharacterRuntime {
     amount: number;
     now: number;
   }) => IncomingDamageModifier | number | void;
+  beforeStatusApply?: (
+    args: StatusEffectApplyArgs
+  ) => StatusEffectApplyModifier | boolean | void;
+  isImmuneToStatus?: (args: {
+    type: StatusEffectType;
+    source?: string;
+    now: number;
+  }) => boolean;
   onTick?: (args: CharacterRuntimeTickArgs) => void;
   resetState?: () => void;
   update: (args: CharacterRuntimeUpdate) => void;

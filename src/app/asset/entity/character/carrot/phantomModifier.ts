@@ -1240,6 +1240,11 @@ export const createCarrotPhantomModifier = ({
     return isDeepActive(now);
   };
 
+  const isStatusImmune = (now = performance.now()) => {
+    updatePhantomPhase(now);
+    return phantomState.phase === "shallow" || isDeepActive(now);
+  };
+
   const exitDeepPhase = (now = performance.now()) => {
     updatePhantomPhase(now);
     if (!isDeepActive(now)) return false;
@@ -1278,6 +1283,7 @@ export const createCarrotPhantomModifier = ({
     beforeDamage,
     onTick,
     isDeepPhaseActive,
+    isStatusImmune,
     exitDeepPhase,
     triggerDeepVolley,
     setAimDirectionWorld,
