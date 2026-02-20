@@ -65,12 +65,16 @@ const createShurikenChargeHud = (mount?: HTMLElement): ChargeHud => {
     "g"
   );
   const shuriken = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  const shurikenFillBase = "rgba(148,163,184,0.28)";
+  const shurikenStrokeBase = "rgba(186,230,253,0.95)";
+  const shurikenCoreFillBase = "rgba(186,230,253,0.85)";
+  const shurikenCoreStrokeBase = "rgba(59,130,246,0.9)";
   shuriken.setAttribute(
     "points",
     "90,24 106,70 154,90 106,110 90,156 74,110 26,90 74,70"
   );
-  shuriken.setAttribute("fill", "rgba(148,163,184,0.28)");
-  shuriken.setAttribute("stroke", "rgba(186,230,253,0.95)");
+  shuriken.setAttribute("fill", shurikenFillBase);
+  shuriken.setAttribute("stroke", shurikenStrokeBase);
   shuriken.setAttribute("stroke-width", "4");
 
   const shurikenCore = document.createElementNS(
@@ -80,8 +84,8 @@ const createShurikenChargeHud = (mount?: HTMLElement): ChargeHud => {
   shurikenCore.setAttribute("cx", "90");
   shurikenCore.setAttribute("cy", "90");
   shurikenCore.setAttribute("r", "14");
-  shurikenCore.setAttribute("fill", "rgba(186,230,253,0.85)");
-  shurikenCore.setAttribute("stroke", "rgba(59,130,246,0.9)");
+  shurikenCore.setAttribute("fill", shurikenCoreFillBase);
+  shurikenCore.setAttribute("stroke", shurikenCoreStrokeBase);
   shurikenCore.setAttribute("stroke-width", "3");
 
   shurikenGroup.appendChild(shuriken);
@@ -99,12 +103,43 @@ const createShurikenChargeHud = (mount?: HTMLElement): ChargeHud => {
       fill.style.strokeDasharray = `${ringLength}`;
     }
     const clamped = THREE.MathUtils.clamp(ratio, 0, 1);
+    const fullGlow = THREE.MathUtils.smoothstep(clamped, 0.98, 1);
     fill.style.strokeDashoffset = `${ringLength * (1 - clamped)}`;
     shurikenGroup.setAttribute(
       "transform",
       `translate(90 90) rotate(${clamped * 300}) scale(${0.9 + clamped * 0.12}) translate(-90 -90)`
     );
     shurikenCore.setAttribute("r", `${14 + clamped * 4}`);
+    shuriken.setAttribute(
+      "fill",
+      fullGlow > 0
+        ? `rgba(186,230,253,${(0.32 + fullGlow * 0.22).toFixed(3)})`
+        : shurikenFillBase
+    );
+    shuriken.setAttribute(
+      "stroke",
+      fullGlow > 0
+        ? `rgba(224,242,254,${(0.95 + fullGlow * 0.05).toFixed(3)})`
+        : shurikenStrokeBase
+    );
+    shurikenCore.setAttribute(
+      "fill",
+      fullGlow > 0
+        ? `rgba(224,242,254,${(0.88 + fullGlow * 0.12).toFixed(3)})`
+        : shurikenCoreFillBase
+    );
+    shurikenCore.setAttribute(
+      "stroke",
+      fullGlow > 0
+        ? `rgba(125,211,252,${(0.9 + fullGlow * 0.1).toFixed(3)})`
+        : shurikenCoreStrokeBase
+    );
+    shurikenGroup.setAttribute(
+      "style",
+      fullGlow > 0
+        ? `filter:drop-shadow(0 0 ${(8 + fullGlow * 6).toFixed(2)}px rgba(125,211,252,${(0.45 + fullGlow * 0.28).toFixed(3)}));`
+        : ""
+    );
   };
 
   const setVisible = (visible: boolean) => {
@@ -321,6 +356,12 @@ type SwordWaveEntry = {
   spinDirection: number;
 };
 
+type ChargedSwordWaveEntry = {
+  mesh: THREE.Mesh;
+  material: THREE.MeshStandardMaterial;
+  spinDirection: 1 | -1;
+};
+
 type SkillRDanceWaveEntry = {
   mesh: THREE.Mesh;
   material: THREE.MeshStandardMaterial;
@@ -418,6 +459,36 @@ const createSwordWaveEntry = (
     material,
     baseScale: 1,
     spinDirection: 1,
+  };
+};
+
+const createChargedSwordWaveEntry = (
+  geometry: THREE.BufferGeometry
+): ChargedSwordWaveEntry => {
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xe0f2fe,
+    roughness: 0.14,
+    metalness: 0.2,
+    emissive: 0x38bdf8,
+    emissiveIntensity: 1.2,
+    transparent: true,
+    opacity: 0.78,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+  });
+  material.depthWrite = false;
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.visible = false;
+  mesh.renderOrder = 8;
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  mesh.frustumCulled = false;
+
+  return {
+    mesh,
+    material,
+    spinDirection: Math.random() > 0.5 ? 1 : -1,
   };
 };
 
@@ -714,6 +785,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
     energyGainOnReflect: 15,
     energyGainOnHit: 30,
   };
+  const chargedSwordWaveConfig = {
+    fullChargeThreshold: 0.999,
+    damageMultiplier: 2,
+    speed: 24,
+    lifetime: 0.92,
+    radius: 0.42,
+    targetHitRadius: 0.56,
+    spawnForward: 1.26,
+    spawnHeight: 1.24,
+  };
   const primaryReflectVolumeConfig = {
     minDepth: 1.55,
     maxDepth: 3.05,
@@ -770,6 +851,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const swordWaveGeometry = createSwordWaveGeometry();
   const swordWavePool: SwordWaveEntry[] = Array.from({ length: 8 }, () =>
     createSwordWaveEntry(swordWaveGeometry)
+  );
+  const chargedSwordWaveGeometry = createSwordWaveGeometry();
+  const chargedSwordWavePool: ChargedSwordWaveEntry[] = Array.from(
+    { length: 4 },
+    () => createChargedSwordWaveEntry(chargedSwordWaveGeometry)
   );
   const skillRDanceWaveGeometry = createSkillRDanceWaveGeometry();
   const skillRDanceWavePool: SkillRDanceWaveEntry[] = Array.from(
@@ -1004,6 +1090,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillEShotDirection = new THREE.Vector3();
   const skillEShotOrigin = new THREE.Vector3();
   const skillEUp = new THREE.Vector3(0, 1, 0);
+  const chargedSwordWaveOrigin = new THREE.Vector3();
+  const chargedSwordWaveDirection = new THREE.Vector3();
+  const chargedSwordWaveVelocityDirection = new THREE.Vector3();
 
   const captureArmNeutralIfNeeded = (
     rightArm: THREE.Object3D,
@@ -1798,6 +1887,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
     return entry;
   };
 
+  const acquireChargedSwordWave = () => {
+    for (let i = 0; i < chargedSwordWavePool.length; i += 1) {
+      const entry = chargedSwordWavePool[i];
+      if (!entry.mesh.parent) return entry;
+    }
+    const entry = createChargedSwordWaveEntry(chargedSwordWaveGeometry);
+    chargedSwordWavePool.push(entry);
+    return entry;
+  };
+
   const acquireShuriken = () => {
     for (let i = 0; i < shurikenPool.length; i += 1) {
       const entry = shurikenPool[i];
@@ -1944,62 +2043,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     direction: THREE.Vector3,
     scaleMultiplier = 1
   ) => {
-    const entry = acquireSkillRDanceWave();
-    clearSkillRDanceWaveEntry(entry);
-    entry.active = true;
-    entry.launchedAt = now;
-    entry.maxLifeMs = skillEHitCutConfig.lifeMs;
-    entry.speed = THREE.MathUtils.lerp(
-      skillEHitCutConfig.minSpeed,
-      skillEHitCutConfig.maxSpeed,
-      Math.random()
-    );
-    entry.baseScale =
-      THREE.MathUtils.lerp(
-        skillEHitCutConfig.minScale,
-        skillEHitCutConfig.maxScale,
-        Math.random()
-      ) * THREE.MathUtils.clamp(scaleMultiplier, 0.75, 1.5);
-    entry.side = Math.random() < 0.5 ? -1 : 1;
-    entry.spinRate = THREE.MathUtils.lerp(8.8, 12.6, Math.random());
-
-    skillRDanceWaveDirection.copy(direction);
-    skillRDanceWaveDirection.y *= 0.22;
-    if (skillRDanceWaveDirection.lengthSq() < 0.000001) {
-      skillRDanceWaveDirection.copy(skillEBaseDirection);
-      if (skillRDanceWaveDirection.lengthSq() < 0.000001) {
-        skillRDanceWaveDirection.set(0, 0, 1);
-      }
-    }
-    skillRDanceWaveDirection.normalize();
-
-    skillRDanceWaveRight.crossVectors(skillRDanceWaveUp, skillRDanceWaveDirection);
-    if (skillRDanceWaveRight.lengthSq() < 0.000001) {
-      skillRDanceWaveRight.set(1, 0, 0);
-    } else {
-      skillRDanceWaveRight.normalize();
-    }
-
-    entry.direction.copy(skillRDanceWaveDirection);
-    entry.right.copy(skillRDanceWaveRight);
-    entry.origin
-      .copy(point)
-      .addScaledVector(entry.direction, skillEHitCutConfig.forwardOffset)
-      .addScaledVector(entry.right, entry.side * skillEHitCutConfig.lateralOffset);
-    entry.origin.y += skillEHitCutConfig.yOffset;
-
-    const host = avatar.parent ?? avatar;
-    if (entry.mesh.parent !== host) {
-      entry.mesh.removeFromParent();
-      host.add(entry.mesh);
-    }
-    entry.mesh.visible = true;
-    entry.mesh.position.copy(entry.origin);
-    entry.mesh.quaternion.setFromUnitVectors(projectileForward, entry.direction);
-    entry.mesh.rotateZ(entry.side * 0.45);
-    entry.mesh.scale.setScalar(entry.baseScale * 0.62);
-    entry.material.opacity = 0.96;
-    entry.material.emissiveIntensity = 1.9;
+    // Intentionally disabled: E hit should no longer leave crescent-shaped object.
+    void now;
+    void point;
+    void direction;
+    void scaleMultiplier;
   };
 
   const applySkillRDanceBodyMotion = (
@@ -3108,6 +3156,90 @@ export const createRuntime: CharacterRuntimeFactory = ({
     applyMana?.(manaGainOnReflectOrBasicDamage);
   };
 
+  const fireChargedSwordWave = (baseDamage: number) => {
+    if (!fireProjectile) return;
+    const resolvedBaseDamage = Math.max(1, Math.round(baseDamage));
+    const entry = acquireChargedSwordWave();
+
+    chargedSwordWaveDirection.copy(skillEAimDirection);
+    chargedSwordWaveDirection.y = 0;
+    if (chargedSwordWaveDirection.lengthSq() < 0.000001) {
+      chargedSwordWaveDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
+      chargedSwordWaveDirection.y = 0;
+    }
+    if (chargedSwordWaveDirection.lengthSq() < 0.000001) {
+      chargedSwordWaveDirection.set(0, 0, 1);
+    } else {
+      chargedSwordWaveDirection.normalize();
+    }
+
+    avatar.updateMatrixWorld(true);
+    avatar.getWorldPosition(chargedSwordWaveOrigin);
+    chargedSwordWaveOrigin.y += chargedSwordWaveConfig.spawnHeight;
+    chargedSwordWaveOrigin.addScaledVector(
+      chargedSwordWaveDirection,
+      chargedSwordWaveConfig.spawnForward
+    );
+
+    entry.mesh.visible = true;
+    entry.mesh.position.copy(chargedSwordWaveOrigin);
+    entry.mesh.scale.setScalar(1.02);
+    entry.mesh.quaternion.setFromUnitVectors(
+      projectileForward,
+      chargedSwordWaveDirection
+    );
+    entry.material.opacity = 0.78;
+    entry.material.emissiveIntensity = 1.34;
+    entry.spinDirection = Math.random() > 0.5 ? 1 : -1;
+
+    fireProjectile({
+      projectileType: "shuriken",
+      mesh: entry.mesh,
+      origin: chargedSwordWaveOrigin,
+      direction: chargedSwordWaveDirection,
+      speed: chargedSwordWaveConfig.speed,
+      lifetime: chargedSwordWaveConfig.lifetime,
+      gravity: 0,
+      radius: chargedSwordWaveConfig.radius,
+      targetHitRadius: chargedSwordWaveConfig.targetHitRadius,
+      damage: Math.round(
+        resolvedBaseDamage * chargedSwordWaveConfig.damageMultiplier
+      ),
+      splitOnImpact: false,
+      explodeOnTargetHit: false,
+      explodeOnWorldHit: false,
+      explodeOnExpire: false,
+      removeOnTargetHit: false,
+      removeOnWorldHit: true,
+      singleHitPerTarget: true,
+      grantEnergyOnTargetHit: false,
+      grantManaOnTargetHit: false,
+      energyGainOnHit: 0,
+      manaGainOnHit: 0,
+      lifecycle: {
+        applyForces: ({ velocity, delta }) => {
+          if (velocity.lengthSq() < 0.000001) return;
+          chargedSwordWaveVelocityDirection.copy(velocity).normalize();
+          entry.mesh.quaternion.setFromUnitVectors(
+            projectileForward,
+            chargedSwordWaveVelocityDirection
+          );
+          entry.mesh.rotateZ(entry.spinDirection * delta * 2.2);
+          entry.mesh.rotation.y += delta * 0.95;
+          entry.material.emissiveIntensity =
+            1.22 + Math.sin(performance.now() * 0.02) * 0.18;
+        },
+        onRemove: () => {
+          entry.mesh.visible = false;
+          entry.mesh.rotation.set(0, 0, 0);
+          entry.mesh.scale.setScalar(1);
+          entry.material.opacity = 0.78;
+          entry.material.emissiveIntensity = 1.2;
+        },
+      },
+    });
+  };
+
   const handleRightClick: CharacterRuntime["handleRightClick"] = (facing) => {
     if (skillRState.active) return;
     baseRuntime.handleRightClick(facing);
@@ -3209,6 +3341,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (hitCount > 0) {
       applyEnergy?.(hitCount * primarySwingConfig.energyGainOnHit);
     }
+    if (ratio >= chargedSwordWaveConfig.fullChargeThreshold) {
+      fireChargedSwordWave(damage);
+    }
 
     startPrimarySwing(now, ratio);
   };
@@ -3242,6 +3377,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
       entry.mesh.visible = false;
       entry.mesh.rotation.set(0, 0, 0);
       entry.mesh.scale.setScalar(1);
+    });
+    chargedSwordWavePool.forEach((entry) => {
+      entry.mesh.removeFromParent();
+      entry.mesh.visible = false;
+      entry.mesh.rotation.set(0, 0, 0);
+      entry.mesh.scale.setScalar(1);
+      entry.material.opacity = 0.78;
+      entry.material.emissiveIntensity = 1.2;
     });
     shurikenPool.forEach((entry) => {
       entry.mesh.removeFromParent();
@@ -3556,6 +3699,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
         entry.material.dispose();
       });
       swordWaveGeometry.dispose();
+      chargedSwordWavePool.forEach((entry) => {
+        entry.mesh.removeFromParent();
+        entry.material.dispose();
+      });
+      chargedSwordWaveGeometry.dispose();
       shurikenPool.forEach((entry) => {
         entry.mesh.removeFromParent();
         entry.trail.removeFromParent();

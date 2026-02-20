@@ -497,10 +497,36 @@ export const createProjectileSystem = ({
           });
 
           if (lifecycle?.onTargetHit) {
+            const lifecycleDamagePoint = new THREE.Vector3();
+            const lifecycleDamageDirection = new THREE.Vector3();
+            const lifecycleBaseDirection = attackRayDirection.clone();
+            const isTargetActive = () =>
+              attackHit.target.isActive ? attackHit.target.isActive() : true;
+            const dealDamageToTarget = (damage: number, damageNow = performance.now()) => {
+              if (damage <= 0 || !isTargetActive()) return;
+              attackHit.target.object.updateMatrixWorld(true);
+              attackHit.target.object.getWorldPosition(lifecycleDamagePoint);
+              lifecycleDamageDirection.copy(lifecycleBaseDirection);
+              if (lifecycleDamageDirection.lengthSq() < 0.000001) {
+                lifecycleDamageDirection.set(0, 0, 1);
+              } else {
+                lifecycleDamageDirection.normalize();
+              }
+              attackHit.target.onHit({
+                now: damageNow,
+                source: "projectile",
+                damage: Math.max(1, Math.round(damage)),
+                point: lifecycleDamagePoint.clone(),
+                direction: lifecycleDamageDirection.clone(),
+              });
+            };
             lifecycle.onTargetHit({
               now: travelNow,
               projectile,
               targetId: attackHit.target.id,
+              targetObject: attackHit.target.object,
+              isTargetActive,
+              dealDamageToTarget,
               point: attackRayHitPoint.clone(),
               direction: attackRayDirection.clone(),
               removeProjectile: removeTargetProjectile,

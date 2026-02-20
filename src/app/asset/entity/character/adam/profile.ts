@@ -23,11 +23,11 @@ export const profile: CharacterProfile = {
       q: {
         id: "q",
         label: "Q",
-        description: `CD：30s
+        description: `CD：10s
 Mana：100 EN
 Description：...`,
         cost: 100,
-        cooldownMs: 30000,
+        cooldownMs: 10000,
       },
       e: {
         id: "e",

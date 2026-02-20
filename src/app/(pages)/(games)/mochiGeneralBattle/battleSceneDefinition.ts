@@ -239,8 +239,6 @@ export const createMochiGeneralBattleScene = (
     isGameEnded: () => gameEnded,
     isBlocked: worldIsBlocked,
     trackMesh,
-    trackObject,
-    disposeObjectResources,
     fallbackGeometry: soldierFallbackGeometry,
     fallbackMaterialTemplate: soldierFallbackMaterialTemplate,
     hitboxGeometry: soldierHitboxGeometry,
@@ -259,8 +257,6 @@ export const createMochiGeneralBattleScene = (
       soldierLifecycle.spawn(position);
     },
     trackMesh,
-    trackObject,
-    disposeObjectResources,
     fallbackGeometry: bossFallbackGeometry,
     fallbackMaterialTemplate: bossFallbackMaterialTemplate,
     hitboxGeometry: bossHitboxGeometry,

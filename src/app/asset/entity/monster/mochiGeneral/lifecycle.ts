@@ -61,6 +61,51 @@ export type MochiGeneralBossLifecycle = {
 const BOSS_ENTRANCE_SMOKE_COUNT = 96;
 const BOSS_ENTRANCE_SMOKE_POOL_SIZE = BOSS_ENTRANCE_SMOKE_COUNT;
 
+const cloneObjectMaterials = (object: THREE.Object3D) => {
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    if (Array.isArray(mesh.material)) {
+      mesh.material = mesh.material.map((material) => material.clone());
+    } else {
+      mesh.material = mesh.material.clone();
+    }
+  });
+};
+
+const applyObjectShadowFlags = (
+  object: THREE.Object3D,
+  options?: {
+    castShadow?: boolean;
+    receiveShadow?: boolean;
+  }
+) => {
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (typeof options?.castShadow === "boolean") {
+      mesh.castShadow = options.castShadow;
+    }
+    if (typeof options?.receiveShadow === "boolean") {
+      mesh.receiveShadow = options.receiveShadow;
+    }
+  });
+};
+
+const disposeObjectMaterials = (object: THREE.Object3D) => {
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    if (Array.isArray(mesh.material)) {
+      for (let i = 0; i < mesh.material.length; i += 1) {
+        mesh.material[i]?.dispose?.();
+      }
+      return;
+    }
+    mesh.material.dispose?.();
+  });
+};
+
 export const createMochiGeneralBossLifecycle = ({
   scene,
   group,
@@ -71,8 +116,6 @@ export const createMochiGeneralBossLifecycle = ({
   maxBosses,
   onSummonSoldier,
   trackMesh,
-  trackObject,
-  disposeObjectResources,
   fallbackGeometry,
   fallbackMaterialTemplate,
   hitboxGeometry,
@@ -88,14 +131,6 @@ export const createMochiGeneralBossLifecycle = ({
   maxBosses: number;
   onSummonSoldier: (position: THREE.Vector3) => void;
   trackMesh: (mesh: THREE.Mesh) => void;
-  trackObject: (
-    object: THREE.Object3D,
-    options?: {
-      castShadow?: boolean;
-      receiveShadow?: boolean;
-    }
-  ) => void;
-  disposeObjectResources: (object: THREE.Object3D) => void;
   fallbackGeometry: THREE.BufferGeometry;
   fallbackMaterialTemplate: THREE.Material;
   hitboxGeometry: THREE.BufferGeometry;
@@ -135,7 +170,8 @@ export const createMochiGeneralBossLifecycle = ({
     model.rotation.set(0, 0, 0);
     model.scale.copy(prototype.scale);
     model.userData.mochiGeneralBaseScale = prototype.scale.clone();
-    trackObject(model, { castShadow: true, receiveShadow: true });
+    cloneObjectMaterials(model);
+    applyObjectShadowFlags(model, { castShadow: true, receiveShadow: true });
     const rig = resolveMochiGeneralRig(model);
     return { model, rig };
   };
@@ -147,6 +183,7 @@ export const createMochiGeneralBossLifecycle = ({
       if (prepared.model.parent) {
         prepared.model.parent.remove(prepared.model);
       }
+      disposeObjectMaterials(prepared.model);
     }
   };
 
@@ -217,7 +254,7 @@ export const createMochiGeneralBossLifecycle = ({
   const clearBossVisual = (entry: MochiGeneralBossEntry) => {
     if (entry.model) {
       entry.anchor.remove(entry.model);
-      disposeObjectResources(entry.model);
+      disposeObjectMaterials(entry.model);
       entry.model = null;
     }
     resetMochiGeneralCombatState(entry);

@@ -581,6 +581,37 @@ export const createMochiSoldierSurgeScene = (
       }
     });
   };
+  const applyObjectShadowFlags = (
+    object: THREE.Object3D,
+    options?: {
+      castShadow?: boolean;
+      receiveShadow?: boolean;
+    }
+  ) => {
+    object.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (typeof options?.castShadow === "boolean") {
+        mesh.castShadow = options.castShadow;
+      }
+      if (typeof options?.receiveShadow === "boolean") {
+        mesh.receiveShadow = options.receiveShadow;
+      }
+    });
+  };
+  const disposeObjectMaterials = (object: THREE.Object3D) => {
+    object.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      if (Array.isArray(mesh.material)) {
+        for (let i = 0; i < mesh.material.length; i += 1) {
+          mesh.material[i]?.dispose?.();
+        }
+        return;
+      }
+      mesh.material.dispose?.();
+    });
+  };
 
   const resolveMonsterRig = (model: THREE.Object3D): SurgeMonsterRig => {
     let body: THREE.Object3D | null = null;
@@ -666,7 +697,7 @@ export const createMochiSoldierSurgeScene = (
     const model = cloneSkeleton(mochiSoldierPrototype);
     cloneObjectMaterials(model);
     entry.anchor.add(model);
-    trackObject(model, { castShadow: true, receiveShadow: true });
+    applyObjectShadowFlags(model, { castShadow: true, receiveShadow: true });
     entry.model = model;
     entry.rig = resolveMonsterRig(model);
     entry.fallback.visible = false;
@@ -688,7 +719,7 @@ export const createMochiSoldierSurgeScene = (
     removeAttackTarget(entry.id);
     if (entry.model) {
       entry.anchor.remove(entry.model);
-      disposeObjectResources(entry.model);
+      disposeObjectMaterials(entry.model);
       entry.model = null;
     }
     entry.rig = null;

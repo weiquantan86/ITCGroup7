@@ -282,6 +282,55 @@ type ElectricAura = {
   dispose: () => void;
 };
 
+type SkillRVortexRing = {
+  mesh: THREE.Mesh;
+  tiltX: number;
+  tiltY: number;
+  tiltZ: number;
+  yawSpeed: number;
+  wobbleSpeed: number;
+  wobbleAmount: number;
+  phase: number;
+};
+
+type SkillRVortexOrb = {
+  mesh: THREE.Mesh;
+  orbitRadius: number;
+  orbitSpeed: number;
+  orbitYOffset: number;
+  swirlSpeed: number;
+  phase: number;
+};
+
+type SkillQArcOrb = {
+  mesh: THREE.Mesh;
+  orbitRadius: number;
+  orbitSpeed: number;
+  heightOffset: number;
+  phase: number;
+};
+
+type SkillQArcDebuffEntry = {
+  targetId: string;
+  targetObject: THREE.Object3D;
+  isTargetActive: () => boolean;
+  dealDamageToTarget: (damage: number, now?: number) => void;
+  expiresAt: number;
+  nextTickAt: number;
+  group: THREE.Group;
+  upperArc: THREE.Mesh;
+  lowerArc: THREE.Mesh;
+  arcMaterialA: THREE.MeshBasicMaterial;
+  arcMaterialB: THREE.MeshBasicMaterial;
+  orbMaterial: THREE.MeshBasicMaterial;
+  upperArcGeometry: THREE.TorusGeometry;
+  lowerArcGeometry: THREE.TorusGeometry;
+  orbGeometry: THREE.SphereGeometry;
+  orbs: SkillQArcOrb[];
+  radius: number;
+  phase: number;
+};
+
 const createElectricAura = ({
   radius,
   arcCount,
@@ -392,6 +441,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   mount,
   noCooldown,
   fireProjectile,
+  performMeleeAttack,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
   const bypassCooldown = Boolean(noCooldown);
@@ -440,6 +490,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
     explosionRadius: 12,
     explosionDamage: 60,
   };
+  const skillRComboExplosionDamage = 100;
+  const skillRContact = {
+    intervalMs: 200,
+    damage: 10,
+    maxHits: 2,
+    nextTickAt: 0,
+  };
   const skillQVolley = {
     count: 3,
     chargeMs: 2000,
@@ -451,7 +508,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
     verticalSpawnOffset: 1.25,
     radius: 2.8,
     targetHitRadius: 3.3,
-    damageMultiplierFromEmpoweredBasic: 3,
+    ballDamage: 150,
+  };
+  const skillQArcDebuff = {
+    triggerHitCount: 2,
+    durationMs: 5000,
+    tickMs: 1000,
+    tickDamage: 100,
+    minRadius: 0.52,
+    maxRadius: 3.6,
   };
   const skillQChargeState = {
     active: false,
@@ -465,12 +530,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
   );
   const skillRSphereMaterial = new THREE.MeshStandardMaterial({
     color: 0x22c55e,
-    roughness: 0.16,
-    metalness: 0.04,
+    roughness: 0.14,
+    metalness: 0.06,
     emissive: 0x22c55e,
-    emissiveIntensity: 0.9,
+    emissiveIntensity: 1.05,
     transparent: true,
-    opacity: 0.4,
+    opacity: 0.42,
     side: THREE.DoubleSide,
   });
   skillRSphereMaterial.depthWrite = false;
@@ -478,6 +543,88 @@ export const createRuntime: CharacterRuntimeFactory = ({
   skillRSphere.visible = false;
   skillRSphere.renderOrder = 8;
   avatar.add(skillRSphere);
+  const skillRVortexGroup = new THREE.Group();
+  skillRVortexGroup.visible = false;
+  skillRSphere.add(skillRVortexGroup);
+  const skillRVortexCoreGeometry = new THREE.SphereGeometry(
+    skillRSphereConfig.radius * 0.34,
+    24,
+    18
+  );
+  const skillRVortexCoreMaterial = new THREE.MeshBasicMaterial({
+    color: 0xdcfce7,
+    transparent: true,
+    opacity: 0.34,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const skillRVortexCore = new THREE.Mesh(
+    skillRVortexCoreGeometry,
+    skillRVortexCoreMaterial
+  );
+  skillRVortexGroup.add(skillRVortexCore);
+  const skillRVortexRingGeometry = new THREE.TorusGeometry(
+    skillRSphereConfig.radius * 0.42,
+    skillRSphereConfig.radius * 0.053,
+    14,
+    84
+  );
+  const skillRVortexRingMaterial = new THREE.MeshBasicMaterial({
+    color: 0x86efac,
+    transparent: true,
+    opacity: 0.42,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const skillRVortexRings: SkillRVortexRing[] = Array.from(
+    { length: 5 },
+    (_, index) => {
+      const mesh = new THREE.Mesh(skillRVortexRingGeometry, skillRVortexRingMaterial);
+      mesh.scale.setScalar(0.66 + index * 0.1);
+      skillRVortexGroup.add(mesh);
+      return {
+        mesh,
+        tiltX: (Math.random() - 0.5) * 0.7,
+        tiltY: (index / 5) * Math.PI * 0.7,
+        tiltZ: (Math.random() - 0.5) * 0.7,
+        yawSpeed: (index % 2 === 0 ? 1 : -1) * (1.7 + index * 0.22),
+        wobbleSpeed: 2.3 + index * 0.45,
+        wobbleAmount: 0.08 + index * 0.014,
+        phase: Math.random() * Math.PI * 2,
+      };
+    }
+  );
+  const skillRVortexOrbGeometry = new THREE.SphereGeometry(
+    skillRSphereConfig.radius * 0.082,
+    12,
+    10
+  );
+  const skillRVortexOrbMaterial = new THREE.MeshBasicMaterial({
+    color: 0xbbf7d0,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const skillRVortexOrbs: SkillRVortexOrb[] = Array.from(
+    { length: 18 },
+    () => {
+      const mesh = new THREE.Mesh(skillRVortexOrbGeometry, skillRVortexOrbMaterial);
+      skillRVortexGroup.add(mesh);
+      return {
+        mesh,
+        orbitRadius:
+          skillRSphereConfig.radius *
+          THREE.MathUtils.lerp(0.26, 0.58, Math.random()),
+        orbitSpeed: THREE.MathUtils.lerp(2.4, 4.9, Math.random()),
+        orbitYOffset:
+          skillRSphereConfig.radius * THREE.MathUtils.lerp(-0.16, 0.16, Math.random()),
+        swirlSpeed: THREE.MathUtils.lerp(2.6, 6.2, Math.random()),
+        phase: Math.random() * Math.PI * 2,
+      };
+    }
+  );
   const skillQProjectileGeometry = new THREE.SphereGeometry(
     skillQVolley.radius,
     36,
@@ -550,6 +697,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const armReset = {
     pending: false,
   };
+  const armPoseRestore = {
+    pendingNeutralTwist: false,
+  };
   const baseQuat = new THREE.Quaternion();
   const raiseQuat = new THREE.Quaternion();
   const throwQuat = new THREE.Quaternion();
@@ -561,6 +711,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillRForwardWorld = new THREE.Vector3();
   const skillRSphereLaunchOrigin = new THREE.Vector3();
   const skillRExplosionDirection = new THREE.Vector3();
+  const skillRContactCenterWorld = new THREE.Vector3();
+  const skillRContactDirection = new THREE.Vector3();
+  const skillRSphereWorldScale = new THREE.Vector3();
   const skillQAimDirection = new THREE.Vector3(0, 0, 1);
   const skillQOrigin = new THREE.Vector3();
   const skillQBaseDirection = new THREE.Vector3();
@@ -568,6 +721,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillQShotOrigin = new THREE.Vector3();
   const skillQShotDirection = new THREE.Vector3();
   const skillQUp = new THREE.Vector3(0, 1, 0);
+  const skillQArcBounds = new THREE.Box3();
+  const skillQArcSphere = new THREE.Sphere();
+  const skillQArcCenterWorld = new THREE.Vector3();
+  const skillQArcCenterLocal = new THREE.Vector3();
+  const activeSkillQArcDebuffs = new Map<string, SkillQArcDebuffEntry>();
   let skillRSphereInFlight = false;
 
   const resolveBaseProjectileDamage = (speed: number) =>
@@ -671,6 +829,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     chargeState.startTime = performance.now();
     chargeState.ratio = 0;
     chargeState.releaseUntil = 0;
+    // If we start a new basic attack before the previous release pose settles,
+    // force y/z arm twist back to neutral to avoid cumulative drift.
+    armPoseRestore.pendingNeutralTwist = true;
     armBase.captured = false;
     hud.setVisible(true);
     hud.setRatio(0);
@@ -681,6 +842,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     chargeState.isCharging = false;
     chargeState.releaseUntil = 0;
     chargeState.ratio = 0;
+    armPoseRestore.pendingNeutralTwist = true;
     hud.setVisible(false);
     hud.setRatio(0);
   };
@@ -698,6 +860,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const resetSkillRSphereAttachment = () => {
     skillRSphere.visible = false;
     skillRSphere.scale.setScalar(1);
+    skillRVortexGroup.visible = false;
+    skillRVortexGroup.scale.setScalar(1);
+    skillRContact.nextTickAt = 0;
     skillRSphere.removeFromParent();
     avatar.add(skillRSphere);
     skillRSphere.position.set(0, 0, 0);
@@ -711,6 +876,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillR.active = false;
     skillR.expiresAt = 0;
     skillRSphereInFlight = false;
+    skillRContact.nextTickAt = 0;
     resetSkillRSphereAttachment();
   };
 
@@ -800,6 +966,336 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillQChargeAura.group.scale.setScalar(pulse);
   };
 
+  const clearSkillQArcDebuffEntry = (entry: SkillQArcDebuffEntry) => {
+    entry.group.removeFromParent();
+    entry.upperArcGeometry.dispose();
+    entry.lowerArcGeometry.dispose();
+    entry.orbGeometry.dispose();
+    entry.arcMaterialA.dispose();
+    entry.arcMaterialB.dispose();
+    entry.orbMaterial.dispose();
+    activeSkillQArcDebuffs.delete(entry.targetId);
+  };
+
+  const clearAllSkillQArcDebuffs = () => {
+    const entries = Array.from(activeSkillQArcDebuffs.values());
+    for (let i = 0; i < entries.length; i += 1) {
+      clearSkillQArcDebuffEntry(entries[i]);
+    }
+  };
+
+  const resolveSkillQArcAnchor = (targetObject: THREE.Object3D) => {
+    targetObject.updateMatrixWorld(true);
+    skillQArcBounds.setFromObject(targetObject);
+
+    if (skillQArcBounds.isEmpty()) {
+      targetObject.getWorldPosition(skillQArcCenterWorld);
+      skillQArcCenterLocal.copy(skillQArcCenterWorld);
+      targetObject.worldToLocal(skillQArcCenterLocal);
+      return {
+        radius: 1,
+        centerLocal: skillQArcCenterLocal.clone(),
+      };
+    }
+
+    skillQArcBounds.getBoundingSphere(skillQArcSphere);
+    skillQArcCenterWorld.copy(skillQArcSphere.center);
+    skillQArcCenterLocal.copy(skillQArcCenterWorld);
+    targetObject.worldToLocal(skillQArcCenterLocal);
+
+    return {
+      radius: THREE.MathUtils.clamp(
+        skillQArcSphere.radius * 0.54,
+        skillQArcDebuff.minRadius,
+        skillQArcDebuff.maxRadius
+      ),
+      centerLocal: skillQArcCenterLocal.clone(),
+    };
+  };
+
+  const applySkillQArcDebuff = ({
+    targetId,
+    targetObject,
+    isTargetActive,
+    dealDamageToTarget,
+    now,
+  }: {
+    targetId: string;
+    targetObject: THREE.Object3D;
+    isTargetActive: () => boolean;
+    dealDamageToTarget: (damage: number, now?: number) => void;
+    now: number;
+  }) => {
+    const existing = activeSkillQArcDebuffs.get(targetId);
+    if (existing) {
+      existing.targetObject = targetObject;
+      existing.isTargetActive = isTargetActive;
+      existing.dealDamageToTarget = dealDamageToTarget;
+      existing.expiresAt = now + skillQArcDebuff.durationMs;
+      existing.nextTickAt = Math.min(
+        existing.nextTickAt,
+        now + skillQArcDebuff.tickMs
+      );
+      if (existing.group.parent !== targetObject) {
+        const anchor = resolveSkillQArcAnchor(targetObject);
+        existing.group.removeFromParent();
+        targetObject.add(existing.group);
+        existing.group.position.copy(anchor.centerLocal);
+      }
+      return;
+    }
+
+    const anchor = resolveSkillQArcAnchor(targetObject);
+    const radius = anchor.radius;
+    const tube = Math.max(0.03, radius * 0.14);
+    const group = new THREE.Group();
+    group.position.copy(anchor.centerLocal);
+    targetObject.add(group);
+
+    const upperArcGeometry = new THREE.TorusGeometry(
+      radius,
+      tube * 0.32,
+      10,
+      42,
+      Math.PI * 1.34
+    );
+    const lowerArcGeometry = new THREE.TorusGeometry(
+      radius * 0.8,
+      tube * 0.3,
+      10,
+      38,
+      Math.PI * 1.18
+    );
+    const arcMaterialA = new THREE.MeshBasicMaterial({
+      color: 0x86efac,
+      transparent: true,
+      opacity: 0.62,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const arcMaterialB = new THREE.MeshBasicMaterial({
+      color: 0x22c55e,
+      transparent: true,
+      opacity: 0.46,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const upperArc = new THREE.Mesh(upperArcGeometry, arcMaterialA);
+    const lowerArc = new THREE.Mesh(lowerArcGeometry, arcMaterialB);
+    upperArc.rotation.x = Math.PI * 0.5;
+    lowerArc.rotation.x = -Math.PI * 0.52;
+    lowerArc.position.y = -radius * 0.12;
+    group.add(upperArc, lowerArc);
+
+    const orbGeometry = new THREE.SphereGeometry(
+      Math.max(0.05, radius * 0.16),
+      10,
+      8
+    );
+    const orbMaterial = new THREE.MeshBasicMaterial({
+      color: 0xdcfce7,
+      transparent: true,
+      opacity: 0.86,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const orbs: SkillQArcOrb[] = Array.from({ length: 6 }, () => {
+      const mesh = new THREE.Mesh(orbGeometry, orbMaterial);
+      group.add(mesh);
+      return {
+        mesh,
+        orbitRadius: radius * THREE.MathUtils.lerp(0.62, 1.08, Math.random()),
+        orbitSpeed: THREE.MathUtils.lerp(3.2, 6.8, Math.random()),
+        heightOffset: radius * THREE.MathUtils.lerp(-0.32, 0.34, Math.random()),
+        phase: Math.random() * Math.PI * 2,
+      };
+    });
+
+    activeSkillQArcDebuffs.set(targetId, {
+      targetId,
+      targetObject,
+      isTargetActive,
+      dealDamageToTarget,
+      expiresAt: now + skillQArcDebuff.durationMs,
+      nextTickAt: now + skillQArcDebuff.tickMs,
+      group,
+      upperArc,
+      lowerArc,
+      arcMaterialA,
+      arcMaterialB,
+      orbMaterial,
+      upperArcGeometry,
+      lowerArcGeometry,
+      orbGeometry,
+      orbs,
+      radius,
+      phase: Math.random() * Math.PI * 2,
+    });
+  };
+
+  const updateSkillQArcDebuffs = (now: number) => {
+    if (!activeSkillQArcDebuffs.size) return;
+
+    const entries = Array.from(activeSkillQArcDebuffs.values());
+    for (let i = 0; i < entries.length; i += 1) {
+      const entry = entries[i];
+      let targetActive = false;
+      try {
+        targetActive = entry.isTargetActive();
+      } catch {
+        targetActive = false;
+      }
+
+      if (!entry.targetObject.parent || !targetActive) {
+        clearSkillQArcDebuffEntry(entry);
+        continue;
+      }
+
+      const t = now * 0.001 + entry.phase;
+      entry.upperArc.rotation.y = t * 5.6;
+      entry.upperArc.rotation.z = Math.sin(t * 2.1) * 0.34;
+      entry.lowerArc.rotation.y = -t * 4.7;
+      entry.lowerArc.rotation.z = Math.sin(t * 2.6 + 0.8) * -0.3;
+
+      const arcPulse = 0.86 + Math.sin(now * 0.02 + entry.phase) * 0.2;
+      entry.arcMaterialA.opacity = THREE.MathUtils.clamp(
+        0.62 * arcPulse,
+        0.22,
+        0.9
+      );
+      entry.arcMaterialB.opacity = THREE.MathUtils.clamp(
+        0.46 * arcPulse,
+        0.18,
+        0.74
+      );
+      entry.orbMaterial.opacity = THREE.MathUtils.clamp(
+        0.86 + Math.sin(now * 0.024 + entry.phase) * 0.08,
+        0.62,
+        0.96
+      );
+
+      for (let j = 0; j < entry.orbs.length; j += 1) {
+        const orb = entry.orbs[j];
+        const orbitAngle = t * orb.orbitSpeed + orb.phase;
+        const radialJitter = entry.radius * 0.14;
+        const radial =
+          orb.orbitRadius + Math.sin(t * 2.9 + orb.phase * 1.4) * radialJitter;
+        orb.mesh.position.set(
+          Math.cos(orbitAngle) * radial,
+          orb.heightOffset + Math.sin(t * 3.7 + orb.phase) * entry.radius * 0.18,
+          Math.sin(orbitAngle) * radial
+        );
+      }
+
+      while (entry.nextTickAt <= entry.expiresAt && now >= entry.nextTickAt) {
+        entry.dealDamageToTarget(skillQArcDebuff.tickDamage, entry.nextTickAt);
+        entry.nextTickAt += skillQArcDebuff.tickMs;
+      }
+
+      if (now >= entry.expiresAt && entry.nextTickAt > entry.expiresAt) {
+        clearSkillQArcDebuffEntry(entry);
+      }
+    }
+  };
+
+  const updateSkillRVortex = (now: number) => {
+    if (!skillRSphere.visible) {
+      skillRVortexGroup.visible = false;
+      return;
+    }
+    skillRVortexGroup.visible = true;
+    const t = now * 0.001;
+
+    const corePulse = 1 + Math.sin(now * 0.018) * 0.08;
+    skillRVortexCore.scale.setScalar(corePulse);
+    skillRVortexCoreMaterial.opacity = THREE.MathUtils.clamp(
+      0.34 + Math.sin(now * 0.015) * 0.08,
+      0.24,
+      0.46
+    );
+    skillRVortexRingMaterial.opacity = THREE.MathUtils.clamp(
+      0.42 + Math.sin(now * 0.012) * 0.1,
+      0.28,
+      0.56
+    );
+    skillRVortexOrbMaterial.opacity = THREE.MathUtils.clamp(
+      0.8 + Math.sin(now * 0.022) * 0.1,
+      0.64,
+      0.92
+    );
+
+    for (let i = 0; i < skillRVortexRings.length; i += 1) {
+      const ring = skillRVortexRings[i];
+      const wobble = Math.sin(t * ring.wobbleSpeed + ring.phase) * ring.wobbleAmount;
+      ring.mesh.rotation.set(
+        ring.tiltX + wobble,
+        ring.tiltY + t * ring.yawSpeed,
+        ring.tiltZ + wobble * 0.65
+      );
+    }
+
+    const radialJitter = skillRSphereConfig.radius * 0.08;
+    const verticalJitter = skillRSphereConfig.radius * 0.11;
+    for (let i = 0; i < skillRVortexOrbs.length; i += 1) {
+      const orb = skillRVortexOrbs[i];
+      const orbitAngle = t * orb.orbitSpeed + orb.phase;
+      const radialOffset =
+        orb.orbitRadius + Math.sin(t * orb.swirlSpeed + orb.phase * 1.7) * radialJitter;
+      orb.mesh.position.set(
+        Math.cos(orbitAngle) * radialOffset,
+        orb.orbitYOffset +
+          Math.sin(t * orb.swirlSpeed * 1.12 + orb.phase) * verticalJitter,
+        Math.sin(orbitAngle) * radialOffset
+      );
+      orb.mesh.rotation.y = orbitAngle * 1.15;
+    }
+  };
+
+  const applySkillRContactDamage = (now: number) => {
+    if (!skillR.active || !skillRSphere.visible || !performMeleeAttack) return;
+    if (skillRContact.nextTickAt <= 0) {
+      skillRContact.nextTickAt = now + skillRContact.intervalMs;
+      return;
+    }
+    if (now < skillRContact.nextTickAt) return;
+
+    skillRSphere.updateMatrixWorld(true);
+    skillRSphere.getWorldPosition(skillRContactCenterWorld);
+    skillRSphere.getWorldScale(skillRSphereWorldScale);
+    const sphereScale = Math.max(
+      skillRSphereWorldScale.x,
+      skillRSphereWorldScale.y,
+      skillRSphereWorldScale.z
+    );
+    const contactRadius = Math.max(
+      0.35,
+      skillRSphereConfig.radius * sphereScale * 0.65
+    );
+
+    skillRContactDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
+    skillRContactDirection.y = 0;
+    if (skillRContactDirection.lengthSq() < 0.000001) {
+      skillRContactDirection.set(0, 0, 1);
+    } else {
+      skillRContactDirection.normalize();
+    }
+
+    while (now >= skillRContact.nextTickAt) {
+      performMeleeAttack({
+        damage: skillRContact.damage,
+        maxDistance: 0.1,
+        maxHits: skillRContact.maxHits,
+        origin: skillRContactCenterWorld,
+        direction: skillRContactDirection,
+        contactCenter: skillRContactCenterWorld,
+        contactRadius,
+      });
+      skillRContact.nextTickAt += skillRContact.intervalMs;
+    }
+  };
+
   const updateSkillRSphereTransform = (
     now: number,
     leftArm: THREE.Object3D | null,
@@ -837,17 +1333,21 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillRSphere.position.copy(avatar.worldToLocal(skillRArmMidpoint));
     const pulse = 1 + Math.sin(now * 0.012) * 0.04;
     skillRSphere.scale.setScalar(pulse);
-    skillRSphereMaterial.emissiveIntensity = 0.9 + Math.sin(now * 0.02) * 0.18;
+    skillRSphereMaterial.emissiveIntensity = 1.05 + Math.sin(now * 0.02) * 0.2;
     skillRSphere.updateMatrixWorld(true);
+    updateSkillRVortex(now);
+    applySkillRContactDamage(now);
   };
 
   const handleSkillR = () => {
     if (skillQChargeState.active) return false;
     if (skillR.active || skillRSphereInFlight) return false;
+    const now = performance.now();
     cancelCharge();
     armBase.captured = false;
     skillR.active = true;
-    skillR.expiresAt = performance.now() + skillRDurationMs;
+    skillR.expiresAt = now + skillRDurationMs;
+    skillRContact.nextTickAt = now + skillRContact.intervalMs;
     skillRSphere.visible = true;
     return true;
   };
@@ -877,13 +1377,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       .addScaledVector(skillQBaseDirection, skillQVolley.forwardSpawnOffset);
     skillQOrigin.y += skillQVolley.verticalSpawnOffset;
     const lifetime = skillQVolley.distance / skillQVolley.speed;
-    const volleyDamage =
-      resolveEmpoweredBasicAttackDamage(skillQVolley.speed) *
-      skillQVolley.damageMultiplierFromEmpoweredBasic;
+    const volleyDamage = skillQVolley.ballDamage;
     const sideOffsets = [0, 1, -1];
-    const volleyHitGroupId = `adam-skill-q-${now.toFixed(2)}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
+    const volleyHitCountsByTarget = new Map<string, number>();
+    const volleyArcAppliedTargets = new Set<string>();
 
     for (let i = 0; i < sideOffsets.length; i += 1) {
       const side = sideOffsets[i];
@@ -915,8 +1412,30 @@ export const createRuntime: CharacterRuntimeFactory = ({
         splitOnImpact: false,
         removeOnTargetHit: false,
         singleHitPerTarget: true,
-        sharedHitGroupId: volleyHitGroupId,
         lifecycle: {
+          onTargetHit: ({
+            now: hitNow,
+            targetId,
+            targetObject,
+            isTargetActive,
+            dealDamageToTarget,
+          }) => {
+            const hitCount = (volleyHitCountsByTarget.get(targetId) ?? 0) + 1;
+            volleyHitCountsByTarget.set(targetId, hitCount);
+            if (
+              hitCount >= skillQArcDebuff.triggerHitCount &&
+              !volleyArcAppliedTargets.has(targetId)
+            ) {
+              volleyArcAppliedTargets.add(targetId);
+              applySkillQArcDebuff({
+                targetId,
+                targetObject,
+                isTargetActive,
+                dealDamageToTarget,
+                now: hitNow,
+              });
+            }
+          },
           applyForces: () => {
             entry.aura.update(performance.now());
             entry.mesh.rotation.x += 0.08;
@@ -961,6 +1480,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     armReset.pending = true;
     skillR.active = false;
     skillR.expiresAt = 0;
+    skillRContact.nextTickAt = 0;
     skillRSphereInFlight = true;
 
     const lifetime = skillRECombo.distance / skillRECombo.speed;
@@ -975,10 +1495,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       energyGainOnHit: 8,
       splitOnImpact: true,
       explosionRadius: skillRECombo.explosionRadius,
-      explosionDamage: skillRECombo.explosionDamage,
+      explosionDamage: skillRComboExplosionDamage,
       lifecycle: {
-        // Keep camera aim direction exactly; just disable default gravity.
         applyForces: () => {
+          updateSkillRVortex(performance.now());
         },
         onRemove: ({ reason, triggerExplosion, position }) => {
           if (reason === "expired") {
@@ -1026,6 +1546,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     armReset.pending = true;
     skillR.active = false;
     skillR.expiresAt = 0;
+    skillRContact.nextTickAt = 0;
     skillRSphereInFlight = true;
 
     fireProjectile({
@@ -1041,10 +1562,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
       energyGainOnHit: 0,
       splitOnImpact: true,
       explosionRadius: skillRECombo.explosionRadius,
-      explosionDamage: skillRECombo.explosionDamage,
+      explosionDamage: skillRComboExplosionDamage,
       removeOnTargetHit: false,
       removeOnWorldHit: false,
       lifecycle: {
+        applyForces: () => {
+          updateSkillRVortex(performance.now());
+        },
         onRemove: ({ reason, triggerExplosion, position }) => {
           if (reason === "expired") {
             triggerExplosion();
@@ -1146,6 +1670,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillE.cooldownUntil = 0;
     armAnim.raise = 0;
     armReset.pending = false;
+    armPoseRestore.pendingNeutralTwist = false;
     armBase.captured = false;
     armNeutral.captured = false;
     armNeutral.rightId = "";
@@ -1154,6 +1679,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     deactivateSkillE(false);
     deactivateSkillR();
     setSkillQChargeFxActive(false);
+    clearAllSkillQArcDebuffs();
     skillQProjectilePool.forEach((entry) => {
       entry.aura.setVisible(false);
       entry.mesh.rotation.set(0, 0, 0);
@@ -1228,6 +1754,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         fireSkillQVolley(args.now);
       }
       updateSkillQChargeFx(args.now);
+      updateSkillQArcDebuffs(args.now);
       if (chargeState.isCharging) {
         const elapsed = args.now - chargeState.startTime;
         const ratio = THREE.MathUtils.clamp(
@@ -1256,6 +1783,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
           leftArm;
         if (rightArm && leftArm) {
           captureArmNeutralIfNeeded(rightArm, leftArm);
+          if (armPoseRestore.pendingNeutralTwist) {
+            restoreArmNeutralTwist(rightArm, leftArm);
+            armBase.captured = false;
+            armPoseRestore.pendingNeutralTwist = false;
+          }
 
           if (armReset.pending) {
             if (armBase.captured) {
@@ -1426,6 +1958,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillGlow.dispose();
       hud.dispose();
       skillRSphere.removeFromParent();
+      skillRVortexGroup.removeFromParent();
+      skillRVortexCoreGeometry.dispose();
+      skillRVortexCoreMaterial.dispose();
+      skillRVortexRingGeometry.dispose();
+      skillRVortexRingMaterial.dispose();
+      skillRVortexOrbGeometry.dispose();
+      skillRVortexOrbMaterial.dispose();
       skillRSphereGeometry.dispose();
       skillRSphereMaterial.dispose();
       skillQChargeAura.group.removeFromParent();

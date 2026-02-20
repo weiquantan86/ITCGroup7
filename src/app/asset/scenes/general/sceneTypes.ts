@@ -7,11 +7,6 @@ export interface SceneSetupResult {
 }
 
 export interface SceneUiState {
-  tester?: {
-    health: number;
-    maxHealth: number;
-    alive: boolean;
-  };
   [key: string]: unknown;
 }
 

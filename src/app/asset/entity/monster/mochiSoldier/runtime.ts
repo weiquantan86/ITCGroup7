@@ -160,6 +160,39 @@ export const cloneMochiSoldierMaterials = (object: THREE.Object3D) => {
   });
 };
 
+export const applyObjectShadowFlags = (
+  object: THREE.Object3D,
+  options?: {
+    castShadow?: boolean;
+    receiveShadow?: boolean;
+  }
+) => {
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (typeof options?.castShadow === "boolean") {
+      mesh.castShadow = options.castShadow;
+    }
+    if (typeof options?.receiveShadow === "boolean") {
+      mesh.receiveShadow = options.receiveShadow;
+    }
+  });
+};
+
+export const disposeObjectMaterials = (object: THREE.Object3D) => {
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    if (Array.isArray(mesh.material)) {
+      for (let i = 0; i < mesh.material.length; i += 1) {
+        mesh.material[i]?.dispose?.();
+      }
+      return;
+    }
+    mesh.material.dispose?.();
+  });
+};
+
 export const normalizeMochiSoldierPrototype = (
   prototype: THREE.Object3D,
   targetHeight = 2.5
@@ -177,17 +210,9 @@ export const normalizeMochiSoldierPrototype = (
 export const attachMochiSoldierPrototype = ({
   entry,
   prototype,
-  trackObject,
 }: {
   entry: MochiSoldierRuntimeEntry;
   prototype: THREE.Object3D;
-  trackObject: (
-    object: THREE.Object3D,
-    options?: {
-      castShadow?: boolean;
-      receiveShadow?: boolean;
-    }
-  ) => void;
 }) => {
   if (entry.model || !entry.monster.isAlive) return;
   const model = cloneSkeleton(prototype);
@@ -197,7 +222,7 @@ export const attachMochiSoldierPrototype = ({
   model.rotation.set(0, 0, 0);
   model.scale.copy(prototype.scale);
   cloneMochiSoldierMaterials(model);
-  trackObject(model, { castShadow: true, receiveShadow: true });
+  applyObjectShadowFlags(model, { castShadow: true, receiveShadow: true });
   entry.anchor.add(model);
   entry.model = model;
   entry.rig = resolveMochiSoldierRig(model);
@@ -207,14 +232,12 @@ export const attachMochiSoldierPrototype = ({
 
 export const clearMochiSoldierVisual = ({
   entry,
-  disposeObjectResources,
 }: {
   entry: MochiSoldierRuntimeEntry;
-  disposeObjectResources: (object: THREE.Object3D) => void;
 }) => {
   if (entry.model) {
     entry.anchor.remove(entry.model);
-    disposeObjectResources(entry.model);
+    disposeObjectMaterials(entry.model);
     entry.model = null;
   }
   entry.rig = null;
@@ -231,14 +254,12 @@ export const removeMochiSoldierEntry = <
   group,
   deathFxRuntime,
   removeAttackTarget,
-  disposeObjectResources,
 }: {
   entry: TEntry;
   entries: TEntry[];
   group: THREE.Group;
   deathFxRuntime: MochiSoldierDeathFxRuntime;
   removeAttackTarget: (id: string) => void;
-  disposeObjectResources: (object: THREE.Object3D) => void;
 }) => {
   if (!entry.monster.isAlive) {
     deathFxRuntime.spawn(entry);
@@ -246,7 +267,6 @@ export const removeMochiSoldierEntry = <
   removeAttackTarget(entry.id);
   clearMochiSoldierVisual({
     entry,
-    disposeObjectResources,
   });
   if (entry.hitbox.parent === entry.anchor) {
     entry.anchor.remove(entry.hitbox);

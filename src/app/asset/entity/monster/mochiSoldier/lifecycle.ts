@@ -48,8 +48,6 @@ export const createMochiSoldierLifecycle = ({
   isGameEnded,
   isBlocked,
   trackMesh,
-  trackObject,
-  disposeObjectResources,
   fallbackGeometry,
   fallbackMaterialTemplate,
   hitboxGeometry,
@@ -61,14 +59,6 @@ export const createMochiSoldierLifecycle = ({
   isGameEnded: () => boolean;
   isBlocked: (x: number, z: number) => boolean;
   trackMesh: (mesh: THREE.Mesh) => void;
-  trackObject: (
-    object: THREE.Object3D,
-    options?: {
-      castShadow?: boolean;
-      receiveShadow?: boolean;
-    }
-  ) => void;
-  disposeObjectResources: (object: THREE.Object3D) => void;
   fallbackGeometry: THREE.BufferGeometry;
   fallbackMaterialTemplate: THREE.Material;
   hitboxGeometry: THREE.BufferGeometry;
@@ -94,7 +84,6 @@ export const createMochiSoldierLifecycle = ({
     attachMochiSoldierPrototype({
       entry,
       prototype,
-      trackObject,
     });
   };
 
@@ -112,7 +101,6 @@ export const createMochiSoldierLifecycle = ({
       group,
       deathFxRuntime,
       removeAttackTarget,
-      disposeObjectResources,
     });
   };
 

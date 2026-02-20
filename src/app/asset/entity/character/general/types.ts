@@ -170,6 +170,9 @@ export interface ProjectileLifecycleHooks {
     now: number;
     projectile: Projectile;
     targetId: string;
+    targetObject: THREE.Object3D;
+    isTargetActive: () => boolean;
+    dealDamageToTarget: (damage: number, now?: number) => void;
     point: THREE.Vector3;
     direction: THREE.Vector3;
     removeProjectile: () => void;

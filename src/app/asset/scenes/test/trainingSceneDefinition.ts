@@ -11,11 +11,13 @@ import type {
 import { Monster } from "../../entity/monster/general";
 import { createSceneResourceTracker } from "../general/resourceTracker";
 import type { SceneSetupContext, SceneSetupResult } from "../general/sceneTypes";
+import type { TrainingSceneUiState } from "./trainingSceneTypes";
 
 export const createTrainingScene = (
   scene: THREE.Scene,
   context?: SceneSetupContext
 ): SceneSetupResult => {
+  const DPS_WINDOW_MS = 1000;
   scene.background = new THREE.Color(0x111a2e);
   scene.fog = new THREE.Fog(0x111a2e, 18, 58);
 
@@ -425,16 +427,61 @@ export const createTrainingScene = (
     },
   });
 
-  const emitTesterState = () => {
-    context?.onStateChange?.({
+  type DamageEvent = {
+    now: number;
+    amount: number;
+  };
+  const damageEvents: DamageEvent[] = [];
+  let lastDamage = 0;
+  let dps = 0;
+  let lastTrainingStateSnapshot = "";
+
+  const pruneDamageEvents = (now: number) => {
+    while (damageEvents.length > 0 && now - damageEvents[0].now > DPS_WINDOW_MS) {
+      damageEvents.shift();
+    }
+  };
+
+  const resolveCurrentDps = (now: number) => {
+    pruneDamageEvents(now);
+    let total = 0;
+    for (let i = 0; i < damageEvents.length; i += 1) {
+      total += damageEvents[i].amount;
+    }
+    return total;
+  };
+
+  const emitTrainingState = (force = false) => {
+    const payload: TrainingSceneUiState = {
       tester: {
         health: testerMonster.health,
         maxHealth: testerMonster.maxHealth,
         alive: testerMonster.isAlive,
       },
-    });
+      trainingCombat: {
+        lastDamage,
+        dps,
+      },
+    };
+    const snapshot = `${Math.round(payload.tester.health)}|${Math.round(
+      payload.tester.maxHealth
+    )}|${payload.tester.alive ? 1 : 0}|${payload.trainingCombat.lastDamage.toFixed(
+      2
+    )}|${payload.trainingCombat.dps.toFixed(2)}`;
+    if (!force && snapshot === lastTrainingStateSnapshot) return;
+    lastTrainingStateSnapshot = snapshot;
+    context?.onStateChange?.(payload);
   };
-  emitTesterState();
+
+  const recordPlayerDamage = (now: number, amount: number) => {
+    if (amount <= 0) return;
+    lastDamage = amount;
+    damageEvents.push({ now, amount });
+    dps = resolveCurrentDps(now);
+    emitTrainingState();
+  };
+
+  emitTrainingState(true);
 
   type TesterExplosionPiece = {
     mesh: THREE.Mesh;
@@ -532,7 +579,7 @@ export const createTrainingScene = (
     testerRespawnAt = now + 2000;
     testerAnchor.visible = false;
     spawnTesterExplosion(direction);
-    emitTesterState();
+    emitTrainingState();
   };
 
   type TargetDebris = {
@@ -670,11 +717,12 @@ export const createTrainingScene = (
       onHit: (hit) => {
         const dealt = testerMonster.takeDamage(Math.max(1, Math.round(hit.damage)));
         if (dealt <= 0) return;
+        recordPlayerDamage(hit.now, dealt);
         if (!testerMonster.isAlive) {
           handleTesterDeath(hit.now, hit.direction);
           return;
         }
-        emitTesterState();
+        emitTrainingState();
       },
     },
   ];
@@ -689,7 +737,7 @@ export const createTrainingScene = (
     spawnTesterFromAir();
     testerAnchor.visible = true;
     testerRespawnAt = 0;
-    emitTesterState();
+    emitTrainingState();
   };
 
   const updateTargetDebrisPieces = (delta: number) => {
@@ -865,6 +913,8 @@ export const createTrainingScene = (
     applyDamage,
     projectileBlockers,
   }: PlayerWorldTickArgs) => {
+    const previousDps = dps;
+    dps = resolveCurrentDps(now);
     updateTesterGravity(delta);
     updateTesterLifecycle(now, player);
 
@@ -881,6 +931,9 @@ export const createTrainingScene = (
     }
 
     updateLauncherArrows(now, delta, player, applyDamage, projectileBlockers);
+    if (Math.abs(dps - previousDps) > 0.000001) {
+      emitTrainingState();
+    }
   };
 
   const clearTrainingTransientObjects = () => {
@@ -905,7 +958,10 @@ export const createTrainingScene = (
     spawnTesterFromAir();
     testerAnchor.visible = true;
     clearTrainingTransientObjects();
-    emitTesterState();
+    damageEvents.length = 0;
+    lastDamage = 0;
+    dps = 0;
+    emitTrainingState(true);
   };
 
   let isDisposed = false;

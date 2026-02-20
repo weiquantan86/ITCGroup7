@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { PlayerUiState } from "../../entity/character/general/player";
 import { characterProfiles } from "../../entity/character/general/player/registry";
 import SceneLauncher from "../general/SceneLauncher";
 import type { SceneUiState } from "../general/sceneTypes";
+import type { TrainingSceneUiState } from "./trainingSceneTypes";
 
 const characters = characterProfiles.map((profile) => ({
   id: profile.id,
@@ -29,38 +29,21 @@ export default function TrainingScenePage({
     maxHealth: 0,
     alive: true,
   });
-  const [infiniteFire, setInfiniteFire] = useState(false);
-  const [playerUi, setPlayerUi] = useState<PlayerUiState>({
-    cooldowns: { q: 0, e: 0, r: 0 },
-    cooldownDurations: { q: 0, e: 0, r: 0 },
-    staminaCurrent: 0,
-    staminaMax: 0,
-    manaCurrent: 0,
-    manaMax: 0,
-    energyCurrent: 0,
-    energyMax: 0,
-    infiniteFire: false,
+  const [combatState, setCombatState] = useState({
+    lastDamage: 0,
+    dps: 0,
   });
+  const [infiniteFire, setInfiniteFire] = useState(false);
 
   const handleSceneStateChange = useCallback((state: SceneUiState) => {
-    if (!state.tester) return;
-    setTesterState(state.tester);
+    const trainingState = state as TrainingSceneUiState;
+    if (trainingState.tester) {
+      setTesterState(trainingState.tester);
+    }
+    if (trainingState.trainingCombat) {
+      setCombatState(trainingState.trainingCombat);
+    }
   }, []);
-
-  const handlePlayerStateChange = useCallback((state: PlayerUiState) => {
-    setPlayerUi(state);
-  }, []);
-
-  const renderCooldown = (label: "Q" | "E" | "R", seconds: number) => (
-    <div className="rounded-lg border border-white/10 bg-slate-900/50 px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-semibold tabular-nums text-slate-100">
-        {seconds > 0 ? `${seconds.toFixed(1)}s` : "Ready"}
-      </p>
-    </div>
-  );
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
@@ -91,7 +74,6 @@ export default function TrainingScenePage({
               characterPath={selectedCharacterPath || undefined}
               infiniteFire={infiniteFire}
               onSceneStateChange={handleSceneStateChange}
-              onPlayerStateChange={handlePlayerStateChange}
               useDefaultLights={false}
               className="relative h-[70vh] min-h-[520px] w-full max-w-[1300px] overflow-hidden rounded-[32px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
             />
@@ -136,37 +118,52 @@ export default function TrainingScenePage({
             <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
-                  Q / E / R Cooldown
-                </p>
-                <p className="text-[11px] font-semibold tabular-nums text-amber-200">
-                  ST {Math.round(playerUi.staminaCurrent)}/{Math.round(playerUi.staminaMax)}
-                </p>
-                <p className="text-[11px] font-semibold tabular-nums text-cyan-200">
-                  MP {Math.round(playerUi.manaCurrent)}/{Math.round(playerUi.manaMax)}
-                </p>
-                <p className="text-[11px] font-semibold tabular-nums text-emerald-200">
-                  EN {Math.round(playerUi.energyCurrent)}/{Math.round(playerUi.energyMax)}
+                  Damage Metrics
                 </p>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {renderCooldown("Q", playerUi.cooldowns.q)}
-                {renderCooldown("E", playerUi.cooldowns.e)}
-                {renderCooldown("R", playerUi.cooldowns.r)}
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-white/10 bg-slate-900/50 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    Last Hit
+                  </p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums text-slate-100">
+                    {combatState.lastDamage.toFixed(1)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-slate-900/50 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    DPS
+                  </p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums text-slate-100">
+                    {combatState.dps.toFixed(1)}
+                  </p>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setInfiniteFire((prev) => !prev)}
-                className={`mt-4 w-full rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
-                  infiniteFire
-                    ? "border-emerald-300/70 bg-emerald-400/20 text-emerald-200"
-                    : "border-white/20 bg-slate-900/70 text-slate-100 hover:border-white/40"
-                }`}
-              >
-                {infiniteFire ? "Infinite Fire: On" : "Infinite Fire: Off"}
-              </button>
-              <p className="mt-2 text-[11px] text-slate-400">
-                Toggle to remove cooldown and mana/energy cost for Q/E/R in test scene.
-              </p>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
+                    Infinite Fire
+                  </p>
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    Toggle to remove cooldown and mana/energy cost for Q/E/R in
+                    test scene.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInfiniteFire((prev) => !prev)}
+                  className={`inline-flex h-8 min-w-14 items-center justify-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.16em] transition ${
+                    infiniteFire
+                      ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-200"
+                      : "border-slate-400/50 bg-slate-800/70 text-slate-300"
+                  }`}
+                >
+                  {infiniteFire ? "On" : "Off"}
+                </button>
+              </div>
             </div>
           </aside>
         </div>
