@@ -30,19 +30,19 @@ Description: Enter Mech-Electric state. Requires at least 70 EN to activate, dra
         id: "e",
         label: "E",
         cooldownMs: 15000,
-        cost: 30,
+        cost: 60,
         description: `CD: 15s
-Mana: 30
+Mana: 60
 Description: Enter Light-Jump state for 10s. Gain 1.2x move speed, feet emit green particles, and charged basic attack fires a 2-shot burst.`,
       },
       r: {
         id: "r",
         label: "R",
-        cooldownMs: 15000,
-        cost: 30,
-        description: `CD: 15s
-Mana: 30
-Description: Enter Gravity state for 10s. Move speed is halved. During this state, basic attack charges for 2.5s and fires an explosive shell.`,
+        cooldownMs: 20000,
+        cost: 40,
+        description: `CD: 20s
+Mana: 40
+Description: Enter Gravity state. Move speed is halved. During this state, basic attack charges for 1.8s and fires one explosive shell, then immediately exits the state.`,
       },
     },
   },
@@ -54,6 +54,6 @@ Description: Enter Gravity state for 10s. Move speed is halved. During this stat
   },
   slash: {
     enabled: true,
-    color: 0x22c55e,
+    color: 0x16a34a,
   },
 };

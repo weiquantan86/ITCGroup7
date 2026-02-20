@@ -17,6 +17,7 @@ export type MochiGeneralSkill1BurstRuntime = {
   spawnBurst: (args: {
     origin: THREE.Vector3;
     gameEnded: boolean;
+    rageActive?: boolean;
   }) => void;
   update: (args: {
     now: number;
@@ -30,6 +31,10 @@ export type MochiGeneralSkill1BurstRuntime = {
 };
 
 const BOSS_SKILL1_PROJECTILE_COUNT = 40;
+const BOSS_SKILL1_RAGE_PROJECTILE_COUNT = Math.max(
+  1,
+  Math.round(BOSS_SKILL1_PROJECTILE_COUNT * 1.5)
+);
 const BOSS_SKILL1_PROJECTILE_DAMAGE = 20;
 const BOSS_SKILL1_PROJECTILE_LIFETIME = 3.2;
 const BOSS_SKILL1_PROJECTILE_SPEED_MIN = 8.5;
@@ -38,6 +43,7 @@ const BOSS_SKILL1_PROJECTILE_RADIUS = 0.26;
 const BOSS_SKILL1_PROJECTILE_PLAYER_RADIUS = 0.55;
 const BOSS_SKILL1_PROJECTILE_PLAYER_HEIGHT_OFFSET = 1;
 const BOSS_SKILL1_PROJECTILE_MIN_DIRECTION_Y = -0.05;
+const BOSS_SKILL1_PROJECTILE_RAGE_SCALE_MULTIPLIER = 1.2;
 
 const burstOriginWorld = new THREE.Vector3();
 const projectileDirectionWorld = new THREE.Vector3();
@@ -54,6 +60,10 @@ export const createMochiGeneralSkill1BurstRuntime = (
     emissive: 0xd4a373,
     emissiveIntensity: 0.22,
   });
+  const projectileMaterialRageTemplate = projectileMaterialTemplate.clone();
+  projectileMaterialRageTemplate.color.set(0xffffff);
+  projectileMaterialRageTemplate.emissive.set(0xffedd5);
+  projectileMaterialRageTemplate.emissiveIntensity = 0.42;
   const projectiles: MochiGeneralSkill1Projectile[] = [];
   const projectileUpdater = new LinearProjectileUpdater();
 
@@ -69,14 +79,25 @@ export const createMochiGeneralSkill1BurstRuntime = (
   const spawnBurst = ({
     origin,
     gameEnded,
+    rageActive = false,
   }: {
     origin: THREE.Vector3;
     gameEnded: boolean;
+    rageActive?: boolean;
   }) => {
     if (gameEnded) return;
     burstOriginWorld.copy(origin);
+    const projectileMaterial = rageActive
+      ? projectileMaterialRageTemplate
+      : projectileMaterialTemplate;
+    const projectileScaleMultiplier = rageActive
+      ? BOSS_SKILL1_PROJECTILE_RAGE_SCALE_MULTIPLIER
+      : 1;
+    const projectileCount = rageActive
+      ? BOSS_SKILL1_RAGE_PROJECTILE_COUNT
+      : BOSS_SKILL1_PROJECTILE_COUNT;
 
-    for (let i = 0; i < BOSS_SKILL1_PROJECTILE_COUNT; i += 1) {
+    for (let i = 0; i < projectileCount; i += 1) {
       let safety = 0;
       do {
         projectileDirectionWorld.set(
@@ -102,16 +123,19 @@ export const createMochiGeneralSkill1BurstRuntime = (
       );
       const projectileMesh = new THREE.Mesh(
         projectileGeometry,
-        projectileMaterialTemplate
+        projectileMaterial
       );
       projectileMesh.position.copy(burstOriginWorld);
+      const projectileScale =
+        projectileScaleMultiplier * THREE.MathUtils.lerp(0.9, 1.12, Math.random());
+      projectileMesh.scale.setScalar(projectileScale);
       projectileMesh.castShadow = false;
       projectileMesh.receiveShadow = false;
       scene.add(projectileMesh);
       projectiles.push({
         mesh: projectileMesh,
         velocity: projectileDirectionWorld.clone().multiplyScalar(speed),
-        radius: BOSS_SKILL1_PROJECTILE_RADIUS,
+        radius: BOSS_SKILL1_PROJECTILE_RADIUS * projectileScale,
         life: 0,
         maxLife: BOSS_SKILL1_PROJECTILE_LIFETIME,
       });
@@ -194,6 +218,7 @@ export const createMochiGeneralSkill1BurstRuntime = (
       }
       projectileGeometry.dispose();
       projectileMaterialTemplate.dispose();
+      projectileMaterialRageTemplate.dispose();
     },
   };
 };

@@ -9,7 +9,7 @@ const minDirectionSq = 0.000001;
 type ChargeHud = {
   setVisible: (visible: boolean) => void;
   setRatio: (ratio: number) => void;
-  setFlickerMode: (active: boolean) => void;
+  setFlickerMode: (mode: "off" | "mono" | "crimson") => void;
   update: (now: number) => void;
   dispose: () => void;
 };
@@ -94,24 +94,25 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
   templeRight.setAttribute("stroke-width", "6");
   templeRight.setAttribute("stroke-linecap", "round");
 
-  let flickerMode = false;
+  let flickerMode: "off" | "mono" | "crimson" = "off";
   let lastFlickerUpdateAt = 0;
   let flickerElapsed = 0;
   let flickerWhite = true;
-  const flickerInterval = 0.25;
+  const monoFlickerInterval = 0.25;
+  const crimsonFlickerInterval = 0.45;
 
   const applyDefaultPalette = () => {
-    trackLeft.setAttribute("stroke", "rgba(74,222,128,0.30)");
-    trackRight.setAttribute("stroke", "rgba(74,222,128,0.30)");
-    fillLeft.setAttribute("stroke", "#22c55e");
-    fillRight.setAttribute("stroke", "#22c55e");
-    fillLeft.style.filter = "drop-shadow(0 0 10px rgba(34,197,94,0.72))";
-    fillRight.style.filter = "drop-shadow(0 0 10px rgba(34,197,94,0.72))";
-    bridgeTrack.setAttribute("stroke", "rgba(74,222,128,0.32)");
-    bridgeFill.setAttribute("stroke", "#22c55e");
-    bridgeFill.style.filter = "drop-shadow(0 0 8px rgba(34,197,94,0.72))";
-    templeLeft.setAttribute("stroke", "rgba(74,222,128,0.24)");
-    templeRight.setAttribute("stroke", "rgba(74,222,128,0.24)");
+    trackLeft.setAttribute("stroke", "rgba(34,197,94,0.30)");
+    trackRight.setAttribute("stroke", "rgba(34,197,94,0.30)");
+    fillLeft.setAttribute("stroke", "#16a34a");
+    fillRight.setAttribute("stroke", "#16a34a");
+    fillLeft.style.filter = "drop-shadow(0 0 10px rgba(22,163,74,0.72))";
+    fillRight.style.filter = "drop-shadow(0 0 10px rgba(22,163,74,0.72))";
+    bridgeTrack.setAttribute("stroke", "rgba(34,197,94,0.32)");
+    bridgeFill.setAttribute("stroke", "#16a34a");
+    bridgeFill.style.filter = "drop-shadow(0 0 8px rgba(22,163,74,0.72))";
+    templeLeft.setAttribute("stroke", "rgba(34,197,94,0.24)");
+    templeRight.setAttribute("stroke", "rgba(34,197,94,0.24)");
   };
 
   const applyMonochromePalette = (white: boolean) => {
@@ -142,27 +143,61 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
     templeRight.setAttribute("stroke", "rgba(0,0,0,0.46)");
   };
 
-  const setFlickerMode = (active: boolean) => {
-    if (flickerMode === active) return;
-    flickerMode = active;
+  const applyCrimsonPalette = (white: boolean) => {
+    if (white) {
+      trackLeft.setAttribute("stroke", "rgba(255,255,255,0.34)");
+      trackRight.setAttribute("stroke", "rgba(255,255,255,0.34)");
+      fillLeft.setAttribute("stroke", "#ffffff");
+      fillRight.setAttribute("stroke", "#ffffff");
+      fillLeft.style.filter = "drop-shadow(0 0 10px rgba(255,255,255,0.78))";
+      fillRight.style.filter = "drop-shadow(0 0 10px rgba(255,255,255,0.78))";
+      bridgeTrack.setAttribute("stroke", "rgba(255,255,255,0.34)");
+      bridgeFill.setAttribute("stroke", "#ffffff");
+      bridgeFill.style.filter = "drop-shadow(0 0 8px rgba(255,255,255,0.78))";
+      templeLeft.setAttribute("stroke", "rgba(255,255,255,0.3)");
+      templeRight.setAttribute("stroke", "rgba(255,255,255,0.3)");
+      return;
+    }
+    trackLeft.setAttribute("stroke", "rgba(127,29,29,0.52)");
+    trackRight.setAttribute("stroke", "rgba(127,29,29,0.52)");
+    fillLeft.setAttribute("stroke", "#7f1d1d");
+    fillRight.setAttribute("stroke", "#7f1d1d");
+    fillLeft.style.filter = "drop-shadow(0 0 10px rgba(127,29,29,0.78))";
+    fillRight.style.filter = "drop-shadow(0 0 10px rgba(127,29,29,0.78))";
+    bridgeTrack.setAttribute("stroke", "rgba(127,29,29,0.52)");
+    bridgeFill.setAttribute("stroke", "#7f1d1d");
+    bridgeFill.style.filter = "drop-shadow(0 0 8px rgba(127,29,29,0.78))";
+    templeLeft.setAttribute("stroke", "rgba(127,29,29,0.46)");
+    templeRight.setAttribute("stroke", "rgba(127,29,29,0.46)");
+  };
+
+  const setFlickerMode = (mode: "off" | "mono" | "crimson") => {
+    if (flickerMode === mode) return;
+    flickerMode = mode;
     lastFlickerUpdateAt = 0;
     flickerElapsed = 0;
     flickerWhite = true;
-    if (flickerMode) {
+    if (flickerMode === "mono") {
       applyMonochromePalette(true);
+      return;
+    }
+    if (flickerMode === "crimson") {
+      applyCrimsonPalette(true);
       return;
     }
     applyDefaultPalette();
   };
 
   const update = (now: number) => {
-    if (!flickerMode) return;
+    if (flickerMode === "off") return;
     const deltaSeconds =
       lastFlickerUpdateAt > 0
         ? THREE.MathUtils.clamp((now - lastFlickerUpdateAt) / 1000, 0, 0.08)
         : 0;
     lastFlickerUpdateAt = now;
     flickerElapsed += deltaSeconds;
+    const flickerInterval =
+      flickerMode === "crimson" ? crimsonFlickerInterval : monoFlickerInterval;
     let paletteChanged = false;
     while (flickerElapsed >= flickerInterval) {
       flickerElapsed -= flickerInterval;
@@ -170,7 +205,11 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
       paletteChanged = true;
     }
     if (paletteChanged) {
-      applyMonochromePalette(flickerWhite);
+      if (flickerMode === "mono") {
+        applyMonochromePalette(flickerWhite);
+      } else {
+        applyCrimsonPalette(flickerWhite);
+      }
     }
   };
 
@@ -277,7 +316,7 @@ const createFootParticleFx = (avatar: THREE.Object3D): FootParticleFx => {
   const particleGeometry = new THREE.SphereGeometry(0.026, 8, 6);
   const particles = Array.from({ length: 72 }, () => {
     const material = new THREE.MeshBasicMaterial({
-      color: 0x22c55e,
+      color: 0x16a34a,
       transparent: true,
       opacity: 0,
       blending: THREE.AdditiveBlending,
@@ -411,8 +450,14 @@ const createFootParticleFx = (avatar: THREE.Object3D): FootParticleFx => {
 };
 
 type GunChargeFx = {
-  attachTo: (arm: THREE.Object3D | null) => void;
+  attachTo: (
+    anchor: THREE.Object3D | null,
+    localPosition?: THREE.Vector3 | null,
+    localDirection?: THREE.Vector3 | null
+  ) => void;
+  setRingEnabled: (enabled: boolean) => void;
   setGravityMode: (active: boolean) => void;
+  setCrimsonMode: (active: boolean) => void;
   setActive: (active: boolean) => void;
   setRatio: (ratio: number) => void;
   update: (now: number) => void;
@@ -442,14 +487,21 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
   group.visible = false;
   let currentRatio = 0;
   let gravityMode = false;
+  let crimsonMode = false;
+  let gravityFlickerElapsed = 0;
+  let gravityWhiteDominant = true;
+  const gravityFlickerInterval = 0.09;
+  let ringEnabled = true;
   let lastUpdateAt = 0;
+  const forwardAxis = new THREE.Vector3(0, 0, 1);
+  const localAimDirection = new THREE.Vector3();
 
   const coreGeometry = new THREE.SphereGeometry(0.07, 16, 12);
   const coreMaterial = new THREE.MeshStandardMaterial({
-    color: 0x22c55e,
+    color: 0x16a34a,
     roughness: 0.22,
     metalness: 0.08,
-    emissive: 0x16a34a,
+    emissive: 0x15803d,
     emissiveIntensity: 0.6,
     transparent: true,
     opacity: 0.88,
@@ -458,14 +510,15 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
 
   const ringGeometry = new THREE.TorusGeometry(0.1, 0.012, 8, 24);
   const ringMaterial = new THREE.MeshBasicMaterial({
-    color: 0x86efac,
+    color: 0x4ade80,
     transparent: true,
     opacity: 0.6,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
   const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-  ring.rotation.x = Math.PI / 2;
+  // Keep ring facing local +Z so it aligns with muzzle direction after group orientation.
+  ring.rotation.x = 0;
   ring.position.z = 0.01;
 
   const particleGeometry = new THREE.SphereGeometry(0.018, 8, 8);
@@ -478,7 +531,7 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
     const material = new THREE.MeshBasicMaterial({
       color: isWhite ? 0xf8fafc : 0x0a0a0a,
       transparent: true,
-      opacity: isWhite ? 0.86 : 0.62,
+      opacity: isWhite ? 0.9 : 0.76,
       depthWrite: false,
     });
     const mesh = new THREE.Mesh(particleGeometry, material);
@@ -495,44 +548,104 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
       depthOffset: 0.12 + Math.random() * 0.34,
       flowOffset: Math.random(),
       direction: index % 4 < 2 ? 1 : -1,
-      baseOpacity: isWhite ? 0.86 : 0.62,
+      baseOpacity: isWhite ? 0.9 : 0.76,
     };
   });
 
-  const applyModePalette = () => {
-    if (gravityMode) {
+  const applyGravityFlickerPalette = () => {
+    if (gravityWhiteDominant) {
       coreMaterial.color.set(0xf8fafc);
       coreMaterial.emissive.set(0xffffff);
-      ringMaterial.color.set(0xf8fafc);
+      ringMaterial.color.set(0xffffff);
+    } else {
+      coreMaterial.color.set(0x0a0a0a);
+      coreMaterial.emissive.set(0x1f2937);
+      ringMaterial.color.set(0x111827);
+    }
+    for (let i = 0; i < particles.length; i += 1) {
+      const entry = particles[i];
+      const isWhite = (i % 2 === 0) === gravityWhiteDominant;
+      entry.material.color.set(isWhite ? 0xf8fafc : 0x0a0a0a);
+      entry.baseOpacity = isWhite ? 0.9 : 0.76;
+    }
+  };
+
+  const applyCrimsonPalette = () => {
+    coreMaterial.color.set(0x7f1d1d);
+    coreMaterial.emissive.set(0x450a0a);
+    ringMaterial.color.set(0xdc2626);
+    for (let i = 0; i < particles.length; i += 1) {
+      const entry = particles[i];
+      const isWhite = i % 2 === 0;
+      entry.material.color.set(isWhite ? 0xf8fafc : 0x7f1d1d);
+      entry.baseOpacity = isWhite ? 0.9 : 0.72;
+    }
+  };
+
+  const applyModePalette = () => {
+    if (gravityMode) {
+      applyGravityFlickerPalette();
       return;
     }
-    coreMaterial.color.set(0x22c55e);
-    coreMaterial.emissive.set(0x16a34a);
-    ringMaterial.color.set(0x86efac);
+    if (crimsonMode) {
+      applyCrimsonPalette();
+      return;
+    }
+    coreMaterial.color.set(0x16a34a);
+    coreMaterial.emissive.set(0x15803d);
+    ringMaterial.color.set(0x4ade80);
   };
 
   group.add(core, ring, particleGroup);
   avatar.add(group);
 
   return {
-    attachTo: (arm) => {
-      const parent = arm ?? avatar;
+    attachTo: (anchor, localPosition, localDirection) => {
+      const parent = anchor ?? avatar;
       if (group.parent !== parent) {
         group.removeFromParent();
         parent.add(group);
       }
-      if (!arm) {
+      if (!anchor) {
         group.position.set(0, 0, 0);
         group.rotation.set(0, 0, 0);
         return;
       }
-      group.position.set(0.02, -0.92, 0.25);
-      group.rotation.set(0, 0, 0);
+      if (localPosition) {
+        group.position.copy(localPosition);
+      } else {
+        group.position.set(0, 0, 0);
+      }
+      if (localDirection && localDirection.lengthSq() > minDirectionSq) {
+        localAimDirection.copy(localDirection).normalize();
+        group.quaternion.setFromUnitVectors(forwardAxis, localAimDirection);
+      } else {
+        group.rotation.set(0, 0, 0);
+      }
+    },
+    setRingEnabled: (enabled) => {
+      ringEnabled = enabled;
+      ring.visible = group.visible && ringEnabled;
+      if (!ringEnabled) {
+        ringMaterial.opacity = 0;
+      }
     },
     setGravityMode: (active) => {
       gravityMode = active;
-      particleGroup.visible = gravityMode && group.visible;
-      if (!gravityMode) {
+      gravityFlickerElapsed = 0;
+      gravityWhiteDominant = true;
+      particleGroup.visible = (gravityMode || crimsonMode) && group.visible;
+      if (!gravityMode && !crimsonMode) {
+        for (let i = 0; i < particles.length; i += 1) {
+          particles[i].mesh.visible = false;
+        }
+      }
+      applyModePalette();
+    },
+    setCrimsonMode: (active) => {
+      crimsonMode = active;
+      particleGroup.visible = (gravityMode || crimsonMode) && group.visible;
+      if (!gravityMode && !crimsonMode) {
         for (let i = 0; i < particles.length; i += 1) {
           particles[i].mesh.visible = false;
         }
@@ -541,9 +654,12 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
     },
     setActive: (active) => {
       group.visible = active;
-      particleGroup.visible = active && gravityMode;
+      ring.visible = active && ringEnabled;
+      particleGroup.visible = active && (gravityMode || crimsonMode);
       if (!active) {
         lastUpdateAt = 0;
+        gravityFlickerElapsed = 0;
+        gravityWhiteDominant = true;
         for (let i = 0; i < particles.length; i += 1) {
           particles[i].mesh.visible = false;
         }
@@ -555,12 +671,14 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
       const coreScale = 0.75 + clamped * 1.3;
       core.scale.setScalar(coreScale);
       ring.scale.setScalar(0.82 + clamped * 1.25);
-      coreMaterial.emissiveIntensity = gravityMode
+      coreMaterial.emissiveIntensity = gravityMode || crimsonMode
         ? 0.82 + clamped * 1.7
         : 0.6 + clamped * 1.4;
-      ringMaterial.opacity = gravityMode
-        ? 0.5 + clamped * 0.46
-        : 0.38 + clamped * 0.55;
+      ringMaterial.opacity = ringEnabled
+        ? gravityMode || crimsonMode
+          ? 0.5 + clamped * 0.46
+          : 0.38 + clamped * 0.55
+        : 0;
     },
     update: (now) => {
       if (!group.visible) return;
@@ -569,12 +687,26 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
           ? THREE.MathUtils.clamp((now - lastUpdateAt) / 1000, 0, 0.06)
           : 0;
       lastUpdateAt = now;
+      if (gravityMode) {
+        gravityFlickerElapsed += deltaSeconds;
+        let paletteChanged = false;
+        while (gravityFlickerElapsed >= gravityFlickerInterval) {
+          gravityFlickerElapsed -= gravityFlickerInterval;
+          gravityWhiteDominant = !gravityWhiteDominant;
+          paletteChanged = true;
+        }
+        if (paletteChanged) {
+          applyGravityFlickerPalette();
+        }
+      }
 
       const pulse = 1 + Math.sin(now * 0.02) * 0.08;
-      ring.rotation.z += gravityMode ? 0.11 : 0.07;
+      if (ringEnabled) {
+        ring.rotation.z += gravityMode || crimsonMode ? 0.11 : 0.07;
+      }
       const baseRingScale = 0.82 + currentRatio * 1.25;
       ring.scale.setScalar(baseRingScale * pulse);
-      if (!gravityMode) {
+      if (!gravityMode && !crimsonMode) {
         particleGroup.visible = false;
         return;
       }
@@ -1016,6 +1148,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
   mount,
   fireProjectile,
+  applyHealth,
+  applyEnergy,
   applyMana,
   spendEnergy,
   getCurrentStats,
@@ -1029,7 +1163,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const chargeConfig = {
     defaultDurationMs: 700,
-    gravityDurationMs: 2000,
+    gravityDurationMs: 1800,
     projectileSpeed: 24,
     projectileLifetime: 1.45,
     projectileRadius: 0.16,
@@ -1043,9 +1177,21 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillRConfig = {
     durationMs: 10000,
     movementMultiplier: 0.5,
-    explosiveRadius: 5,
+    explosiveRadius: 6.5,
+    directDamage: 220,
+    minExplosionDamage: 90,
+    impactHeal: 10,
+    impactEnergy: 20,
+    projectileSpeed: 20,
+    projectileLifetime: 1.95,
+    projectileRadius: 0.19,
+  };
+  const skillQExplosiveConfig = {
     directDamage: 85,
     minExplosionDamage: 40,
+    explosiveRadius: 5,
+    projectileSpeed: 20,
+    projectileLifetime: 1.8,
   };
   const skillQConfig = {
     minActivationEnergy: 70,
@@ -1191,14 +1337,23 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const aimOrigin = new THREE.Vector3();
   const fallbackForward = new THREE.Vector3();
   const muzzleOrigin = new THREE.Vector3();
+  const muzzleLocalOrigin = new THREE.Vector3();
+  const muzzleLocalDirection = new THREE.Vector3();
   const shotOrigin = new THREE.Vector3();
   const shotDirection = new THREE.Vector3();
   const projectileForwardAxis = new THREE.Vector3(0, 0, 1);
+  const avatarWorldQuaternion = new THREE.Quaternion();
+  const avatarWorldQuaternionInverse = new THREE.Quaternion();
+  const muzzleArmBaseWorld = new THREE.Vector3();
+  const muzzleCandidateWorld = new THREE.Vector3();
+  const muzzleCandidateOffset = new THREE.Vector3();
+  let muzzleCandidates: THREE.Object3D[] = [];
+  let muzzleCandidatesArmId = "";
 
   const projectileGeometry = new THREE.SphereGeometry(0.095, 16, 14);
   const projectileMaterial = new THREE.MeshStandardMaterial({
-    color: 0x22c55e,
-    emissive: 0x16a34a,
+    color: 0x16a34a,
+    emissive: 0x15803d,
     emissiveIntensity: 0.95,
     roughness: 0.28,
     metalness: 0.08,
@@ -1267,6 +1422,57 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   };
 
+  const clearMuzzleCandidates = () => {
+    muzzleCandidates = [];
+    muzzleCandidatesArmId = "";
+  };
+
+  const refreshMuzzleCandidates = (rightArm: THREE.Object3D) => {
+    if (muzzleCandidatesArmId === rightArm.uuid && muzzleCandidates.length > 0) {
+      return;
+    }
+    muzzleCandidatesArmId = rightArm.uuid;
+    muzzleCandidates = [];
+    rightArm.traverse((node) => {
+      if (node === rightArm) return;
+      muzzleCandidates.push(node);
+    });
+  };
+
+  const resolveMuzzleOrigin = (rightArm: THREE.Object3D) => {
+    refreshMuzzleCandidates(rightArm);
+    rightArm.getWorldPosition(muzzleArmBaseWorld);
+    let bestScore = -Infinity;
+    let found = false;
+
+    for (let i = 0; i < muzzleCandidates.length; i += 1) {
+      const node = muzzleCandidates[i];
+      if (!node.parent) continue;
+      node.getWorldPosition(muzzleCandidateWorld);
+      muzzleCandidateOffset.copy(muzzleCandidateWorld).sub(muzzleArmBaseWorld);
+      const forwardScore = muzzleCandidateOffset.dot(aimDirection);
+      if (forwardScore <= 0.02) continue;
+      const name = (node.name || "").toLowerCase();
+      let nameBoost = 0;
+      if (name.includes("muzzle") || name.includes("barrel")) nameBoost = 0.75;
+      else if (name.includes("gun") || name.includes("weapon")) nameBoost = 0.45;
+      const score = forwardScore + nameBoost;
+      if (score > bestScore) {
+        bestScore = score;
+        muzzleOrigin.copy(muzzleCandidateWorld);
+        found = true;
+      }
+    }
+
+    if (!found) {
+      rightArm.getWorldPosition(muzzleOrigin);
+      muzzleOrigin.addScaledVector(aimDirection, 0.38);
+      return;
+    }
+    // Push slightly forward from anchor so effect sits at barrel tip, not inside mesh.
+    muzzleOrigin.addScaledVector(aimDirection, 0.18);
+  };
+
   const resetChargeState = () => {
     chargeState.isCharging = false;
     chargeState.startAt = 0;
@@ -1274,8 +1480,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     armState.raise = 0;
     armPose.restartRequested = true;
     armPose.wasMoving = false;
-    hud.setFlickerMode(false);
+    hud.setFlickerMode("off");
     gunChargeFx.setGravityMode(false);
+    gunChargeFx.setCrimsonMode(false);
     gunChargeFx.setActive(false);
     gunChargeFx.setRatio(0);
     gunChargeFx.attachTo(null);
@@ -1287,26 +1494,53 @@ export const createRuntime: CharacterRuntimeFactory = ({
   ) => {
     if (!fireProjectile) return;
 
-    const isExplosiveShell = skillRState.active || skillQState.active;
+    const isRGravityBurstShell = skillRState.active;
+    const isQExplosiveShell = skillQState.active;
+    const isExplosiveShell = isRGravityBurstShell || isQExplosiveShell;
     const recoversEnergyOnHit =
-      !skillQState.active && (skillEState.active || skillRState.active);
-    const gravityShellMaterial = isExplosiveShell
-      ? (projectileMaterial.clone() as THREE.MeshStandardMaterial)
-      : null;
-    if (gravityShellMaterial) {
-      gravityShellMaterial.color.set(0xffffff);
-      gravityShellMaterial.emissive.set(0xffffff);
-      gravityShellMaterial.emissiveIntensity = 1.15;
+      !isQExplosiveShell && !isRGravityBurstShell && skillEState.active;
+    const manaGainOnHit = isRGravityBurstShell ? 0 : skillEState.active ? 2 : 5;
+    let shellMaterial: THREE.MeshStandardMaterial | null = null;
+    let ownsShellMaterial = false;
+    let burstRingMaterial: THREE.MeshBasicMaterial | null = null;
+    let burstRingGeometry: THREE.TorusGeometry | null = null;
+    let burstRingMesh: THREE.Mesh | null = null;
+
+    let mesh: THREE.Mesh;
+    if (isRGravityBurstShell) {
+      shellMaterial = projectileMaterial.clone() as THREE.MeshStandardMaterial;
+      ownsShellMaterial = true;
+      shellMaterial.color.set(0x7f1d1d);
+      shellMaterial.emissive.set(0x450a0a);
+      shellMaterial.emissiveIntensity = 1.3;
+      shellMaterial.roughness = 0.22;
+      shellMaterial.metalness = 0.14;
+      mesh = new THREE.Mesh(projectileGeometry, shellMaterial);
+      burstRingGeometry = new THREE.TorusGeometry(0.2, 0.03, 10, 28);
+      burstRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0xdc2626,
+        transparent: true,
+        opacity: 0.68,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      burstRingMesh = new THREE.Mesh(burstRingGeometry, burstRingMaterial);
+      burstRingMesh.position.z = -0.04;
+      burstRingMesh.rotation.x = Math.PI / 2;
+      mesh.add(burstRingMesh);
+      mesh.scale.set(1.06, 1.06, 2.8);
+    } else if (isQExplosiveShell) {
+      shellMaterial = projectileMaterial.clone() as THREE.MeshStandardMaterial;
+      ownsShellMaterial = true;
+      shellMaterial.color.set(0xffffff);
+      shellMaterial.emissive.set(0xffffff);
+      shellMaterial.emissiveIntensity = 1.15;
+      mesh = new THREE.Mesh(projectileGeometry, shellMaterial);
+      mesh.scale.set(0.94, 0.94, 2.45);
+    } else {
+      mesh = new THREE.Mesh(projectileGeometry, projectileMaterial);
+      mesh.scale.set(0.78, 0.78, 2.2);
     }
-    const mesh = new THREE.Mesh(
-      projectileGeometry,
-      gravityShellMaterial ?? projectileMaterial
-    );
-    mesh.scale.set(
-      isExplosiveShell ? 0.94 : 0.78,
-      isExplosiveShell ? 0.94 : 0.78,
-      isExplosiveShell ? 2.45 : 2.2
-    );
 
     if (originInput && directionInput) {
       shotOrigin.copy(originInput);
@@ -1321,56 +1555,114 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     mesh.quaternion.setFromUnitVectors(projectileForwardAxis, shotDirection);
+    let gravityBurstRewardGranted = false;
+    const speed = isRGravityBurstShell
+      ? skillRConfig.projectileSpeed
+      : isQExplosiveShell
+        ? skillQExplosiveConfig.projectileSpeed
+        : chargeConfig.projectileSpeed;
+    const lifetime = isRGravityBurstShell
+      ? skillRConfig.projectileLifetime
+      : isQExplosiveShell
+        ? skillQExplosiveConfig.projectileLifetime
+        : chargeConfig.projectileLifetime;
+    const radius = isRGravityBurstShell
+      ? skillRConfig.projectileRadius
+      : chargeConfig.projectileRadius;
 
     fireProjectile({
       projectileType: "abilityOrb",
       origin: shotOrigin,
       direction: shotDirection,
       mesh,
-      radius: chargeConfig.projectileRadius,
-      speed: isExplosiveShell ? 20 : chargeConfig.projectileSpeed,
-      lifetime: isExplosiveShell ? 1.8 : chargeConfig.projectileLifetime,
+      radius,
+      speed,
+      lifetime,
       gravity: 0,
       energyGainOnHit: recoversEnergyOnHit ? 4 : 0,
-      grantEnergyOnTargetHit: recoversEnergyOnHit,
-      manaGainOnHit: 3,
-      grantManaOnTargetHit: true,
-      damage: isExplosiveShell ? skillRConfig.directDamage : undefined,
+      grantEnergyOnTargetHit: isRGravityBurstShell ? false : recoversEnergyOnHit,
+      manaGainOnHit,
+      grantManaOnTargetHit: !isRGravityBurstShell,
+      damage: isRGravityBurstShell
+        ? skillRConfig.directDamage
+        : isQExplosiveShell
+          ? skillQExplosiveConfig.directDamage
+          : undefined,
       splitOnImpact: isExplosiveShell,
       explodeOnExpire: isExplosiveShell,
-      explosionRadius: isExplosiveShell ? skillRConfig.explosiveRadius : undefined,
-      explosionDamage: isExplosiveShell ? skillRConfig.directDamage : undefined,
-      explosionMinDamage: isExplosiveShell
+      explosionRadius: isRGravityBurstShell
+        ? skillRConfig.explosiveRadius
+        : isQExplosiveShell
+          ? skillQExplosiveConfig.explosiveRadius
+          : undefined,
+      explosionDamage: isRGravityBurstShell
+        ? skillRConfig.directDamage
+        : isQExplosiveShell
+          ? skillQExplosiveConfig.directDamage
+          : undefined,
+      explosionMinDamage: isRGravityBurstShell
         ? skillRConfig.minExplosionDamage
-        : undefined,
-      explosionColor: isExplosiveShell ? 0x000000 : undefined,
-      explosionEmissive: isExplosiveShell ? 0xffffff : undefined,
-      explosionEmissiveIntensity: isExplosiveShell ? 1.3 : undefined,
+        : isQExplosiveShell
+          ? skillQExplosiveConfig.minExplosionDamage
+          : undefined,
+      explosionColor: isRGravityBurstShell
+        ? 0x2a0407
+        : isQExplosiveShell
+          ? 0x000000
+          : undefined,
+      explosionEmissive: isRGravityBurstShell
+        ? 0xff2020
+        : isQExplosiveShell
+          ? 0xffffff
+          : undefined,
+      explosionEmissiveIntensity: isRGravityBurstShell
+        ? 1.55
+        : isQExplosiveShell
+          ? 1.3
+          : undefined,
       lifecycle: {
         applyForces: ({ velocity, delta }) => {
           if (velocity.lengthSq() < minDirectionSq) return;
           shotDirection.copy(velocity).normalize();
           mesh.quaternion.setFromUnitVectors(projectileForwardAxis, shotDirection);
-          if (!gravityShellMaterial) return;
-          let elapsed = (mesh.userData.gravityFlickerElapsed as number) ?? 0;
-          elapsed += delta;
-          while (elapsed >= gravityShellFlickerInterval) {
-            elapsed -= gravityShellFlickerInterval;
-            const isWhite =
-              !Boolean(mesh.userData.gravityFlickerWhite ?? false);
-            mesh.userData.gravityFlickerWhite = isWhite;
-            if (isWhite) {
-              gravityShellMaterial.color.set(0xffffff);
-              gravityShellMaterial.emissive.set(0xffffff);
-            } else {
-              gravityShellMaterial.color.set(0x0a0a0a);
-              gravityShellMaterial.emissive.set(0x0a0a0a);
+          if (isQExplosiveShell && shellMaterial) {
+            let elapsed = (mesh.userData.gravityFlickerElapsed as number) ?? 0;
+            elapsed += delta;
+            while (elapsed >= gravityShellFlickerInterval) {
+              elapsed -= gravityShellFlickerInterval;
+              const isWhite = !Boolean(mesh.userData.gravityFlickerWhite ?? false);
+              mesh.userData.gravityFlickerWhite = isWhite;
+              if (isWhite) {
+                shellMaterial.color.set(0xffffff);
+                shellMaterial.emissive.set(0xffffff);
+              } else {
+                shellMaterial.color.set(0x0a0a0a);
+                shellMaterial.emissive.set(0x0a0a0a);
+              }
             }
+            mesh.userData.gravityFlickerElapsed = elapsed;
           }
-          mesh.userData.gravityFlickerElapsed = elapsed;
+          if (isRGravityBurstShell && burstRingMesh && burstRingMaterial) {
+            const elapsed = ((mesh.userData.gravityBurstElapsed as number) ?? 0) + delta;
+            mesh.userData.gravityBurstElapsed = elapsed;
+            burstRingMesh.rotation.z += delta * 6.4;
+            const pulse = 1 + Math.sin(elapsed * 18) * 0.16;
+            burstRingMesh.scale.setScalar(pulse);
+            burstRingMaterial.opacity = 0.64 + Math.sin(elapsed * 22) * 0.14;
+          }
+        },
+        onTargetHit: () => {
+          if (!isRGravityBurstShell || gravityBurstRewardGranted) return;
+          gravityBurstRewardGranted = true;
+          applyHealth?.(skillRConfig.impactHeal);
+          applyEnergy?.(skillRConfig.impactEnergy);
         },
         onRemove: () => {
-          gravityShellMaterial?.dispose();
+          if (ownsShellMaterial) {
+            shellMaterial?.dispose();
+          }
+          burstRingMaterial?.dispose();
+          burstRingGeometry?.dispose();
         },
       },
     });
@@ -1413,12 +1705,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
       0,
       1
     );
+    const firedFromSkillR = skillRState.active;
     resetChargeState();
     hud.setVisible(false);
     hud.setRatio(0);
     if (ratio < 1) return;
     resolveShotPose(shotOrigin, shotDirection);
     fireChargedProjectile(shotOrigin, shotDirection);
+    if (firedFromSkillR) {
+      deactivateSkillR();
+      clearBurstQueue();
+      return;
+    }
     const burstShots = skillQState.active
       ? skillQConfig.burstShots
       : skillEState.active
@@ -1494,6 +1792,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const resetState = () => {
     cancelCharge();
     manaRegenElapsed = 0;
+    clearMuzzleCandidates();
     armPose.restartRequested = true;
     armPose.wasMoving = false;
     deactivateSkillE();
@@ -1618,10 +1917,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
         );
         hud.setVisible(true);
         hud.setRatio(chargeState.ratio);
-        hud.setFlickerMode(skillQState.active);
+        const hudFlickerMode = skillRState.active
+          ? "crimson"
+          : skillQState.active
+            ? "mono"
+            : "off";
+        hud.setFlickerMode(hudFlickerMode);
         hud.update(args.now);
       } else {
-        hud.setFlickerMode(false);
+        hud.setFlickerMode("off");
       }
 
       const targetRaise = chargeState.isCharging ? 0.35 + chargeState.ratio * 0.65 : 0;
@@ -1629,51 +1933,74 @@ export const createRuntime: CharacterRuntimeFactory = ({
         ? THREE.MathUtils.lerp(armState.raise, targetRaise, 0.32)
         : 0;
 
-      if (!args.arms.length) return;
+      if (!args.arms.length) {
+        clearMuzzleCandidates();
+        gunChargeFx.setGravityMode(false);
+        gunChargeFx.setCrimsonMode(false);
+        gunChargeFx.setActive(false);
+        gunChargeFx.attachTo(null);
+        return;
+      }
       const rightArm = pickArm(args.arms, "right");
       if (!rightArm) {
+        clearMuzzleCandidates();
         gunChargeFx.setGravityMode(false);
+        gunChargeFx.setCrimsonMode(false);
         gunChargeFx.setActive(false);
         gunChargeFx.attachTo(null);
         return;
       }
 
-      rightArm.getWorldPosition(muzzleOrigin);
-      muzzleOrigin.addScaledVector(aimDirection, 0.38);
+      if (chargeState.isCharging) {
+        const baseX =
+          armPose.captured && armPose.rightId === rightArm.uuid
+            ? armPose.rightX
+            : rightArm.rotation.x;
+        const baseY =
+          armPose.captured && armPose.rightId === rightArm.uuid
+            ? armPose.rightY
+            : rightArm.rotation.y;
+        const baseZ =
+          armPose.captured && armPose.rightId === rightArm.uuid
+            ? armPose.rightZ
+            : rightArm.rotation.z;
+
+        // During charge, override right arm to raised gun pose from the initial base pose.
+        rightArm.rotation.set(
+          baseX + (-0.28 - armState.raise * 1.1),
+          baseY + -0.08 * armState.raise,
+          baseZ + -0.26 * armState.raise
+        );
+      }
+
+      resolveMuzzleOrigin(rightArm);
 
       if (chargeState.isCharging) {
-        gunChargeFx.attachTo(rightArm);
-        gunChargeFx.setGravityMode(skillRState.active);
+        muzzleLocalOrigin.copy(muzzleOrigin);
+        avatar.worldToLocal(muzzleLocalOrigin);
+        avatar.getWorldQuaternion(avatarWorldQuaternion);
+        avatarWorldQuaternionInverse.copy(avatarWorldQuaternion).invert();
+        muzzleLocalDirection.copy(aimDirection).applyQuaternion(avatarWorldQuaternionInverse);
+        if (muzzleLocalDirection.lengthSq() < minDirectionSq) {
+          muzzleLocalDirection.set(0, 0, 1);
+        } else {
+          muzzleLocalDirection.normalize();
+        }
+        const showChargeRing = skillQState.active || skillEState.active || skillRState.active;
+        gunChargeFx.setRingEnabled(showChargeRing);
+        gunChargeFx.attachTo(avatar, muzzleLocalOrigin, muzzleLocalDirection);
+        gunChargeFx.setGravityMode(skillQState.active);
+        gunChargeFx.setCrimsonMode(skillRState.active);
         gunChargeFx.setActive(true);
         gunChargeFx.setRatio(chargeState.ratio);
         gunChargeFx.update(args.now);
       } else {
+        gunChargeFx.setRingEnabled(false);
         gunChargeFx.setGravityMode(false);
+        gunChargeFx.setCrimsonMode(false);
         gunChargeFx.setActive(false);
         gunChargeFx.attachTo(null);
       }
-
-      if (!chargeState.isCharging) return;
-
-      const baseX =
-        armPose.captured && armPose.rightId === rightArm.uuid
-          ? armPose.rightX
-          : rightArm.rotation.x;
-      const baseY =
-        armPose.captured && armPose.rightId === rightArm.uuid
-          ? armPose.rightY
-          : rightArm.rotation.y;
-      const baseZ =
-        armPose.captured && armPose.rightId === rightArm.uuid
-          ? armPose.rightZ
-          : rightArm.rotation.z;
-
-      // During charge, override right arm to raised gun pose from the initial base pose.
-      rightArm.rotation.set(
-        baseX + (-0.28 - armState.raise * 1.1),
-        baseY + -0.08 * armState.raise,
-        baseZ + -0.26 * armState.raise
-      );
     },
     dispose: () => {
       resetChargeState();

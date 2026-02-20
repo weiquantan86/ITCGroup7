@@ -9,6 +9,9 @@ type SpinningSwordState = {
   originalLocalPosition: THREE.Vector3;
   originalLocalQuaternion: THREE.Quaternion;
   originalLocalScale: THREE.Vector3;
+  bladeAxisLocal: THREE.Vector3;
+  collisionForwardDistance: number;
+  collisionBackwardDistance: number;
   launchStart: THREE.Vector3;
   orbitCenter: THREE.Vector3;
   orbitForward: THREE.Vector3;
@@ -35,7 +38,7 @@ export type MochiGeneralSkill4Runtime = {
 };
 
 const SKILL4_HIT_DAMAGE = 35;
-const SKILL4_PROJECTILE_RADIUS = 0.95;
+const SKILL4_BLADE_COLLISION_RADIUS = 0.72;
 const SKILL4_PLAYER_RADIUS = 0.55;
 const SKILL4_PLAYER_HEIGHT_OFFSET = 1;
 const SKILL4_ORBIT_FORWARD_DISTANCE = 6.2;
@@ -48,6 +51,8 @@ const SKILL4_ATTACH_DISTANCE = 0.28;
 const SKILL4_SPIN_SPEED = 32;
 const SKILL4_PROXY_LENGTH = 2.3;
 const SKILL4_FALLEN_TILT_RADIANS = Math.PI * 0.5;
+const SKILL4_THROW_SCALE_MULTIPLIER = 1.2;
+const SKILL4_RAGE_SPIN_SPEED_MULTIPLIER = 1.28;
 
 const swordOriginWorld = new THREE.Vector3();
 const swordOrbitCenterWorld = new THREE.Vector3();
@@ -57,6 +62,10 @@ const swordOrbitPointWorld = new THREE.Vector3();
 const swordReturnTargetWorld = new THREE.Vector3();
 const swordMoveDelta = new THREE.Vector3();
 const playerProbeWorld = new THREE.Vector3();
+const swordBladeAxisWorld = new THREE.Vector3();
+const swordCollisionStartWorld = new THREE.Vector3();
+const swordCollisionEndWorld = new THREE.Vector3();
+const swordCollisionClosestWorld = new THREE.Vector3();
 const worldUp = new THREE.Vector3(0, 1, 0);
 const anchorWorldRotation = new THREE.Quaternion();
 const swordFallenTiltQuaternion = new THREE.Quaternion().setFromAxisAngle(
@@ -64,6 +73,7 @@ const swordFallenTiltQuaternion = new THREE.Quaternion().setFromAxisAngle(
   SKILL4_FALLEN_TILT_RADIANS
 );
 const swordSpinQuaternion = new THREE.Quaternion();
+const swordCollisionSegment = new THREE.Line3();
 
 export const createMochiGeneralSkill4Runtime = (
   scene: THREE.Scene
@@ -126,8 +136,13 @@ export const createMochiGeneralSkill4Runtime = (
     entry.skill4SwordActive = false;
   };
 
-  const applyFallenSpinPose = (state: SpinningSwordState, delta: number) => {
-    state.spinAngle += SKILL4_SPIN_SPEED * delta;
+  const applyFallenSpinPose = (
+    state: SpinningSwordState,
+    delta: number,
+    rageActive: boolean
+  ) => {
+    state.spinAngle +=
+      SKILL4_SPIN_SPEED * (rageActive ? SKILL4_RAGE_SPIN_SPEED_MULTIPLIER : 1) * delta;
     swordSpinQuaternion.setFromAxisAngle(worldUp, state.spinAngle);
     state.object.quaternion
       .copy(state.baseQuaternion)
@@ -158,6 +173,10 @@ export const createMochiGeneralSkill4Runtime = (
     let originalLocalPosition = new THREE.Vector3();
     let originalLocalQuaternion = new THREE.Quaternion();
     let originalLocalScale = new THREE.Vector3(1, 1, 1);
+    let bladeAxisLocal = new THREE.Vector3(0, 0, 1);
+    let collisionForwardDistance =
+      (SKILL4_PROXY_LENGTH * SKILL4_THROW_SCALE_MULTIPLIER) * 0.5;
+    let collisionBackwardDistance = collisionForwardDistance;
 
     const sword = entry.rig?.sword;
     if (sword?.parent) {
@@ -167,6 +186,19 @@ export const createMochiGeneralSkill4Runtime = (
       originalLocalScale = sword.scale.clone();
       scene.attach(sword);
       object = sword;
+      object.scale.copy(originalLocalScale).multiplyScalar(SKILL4_THROW_SCALE_MULTIPLIER);
+      const swordTip = entry.rig?.swordTip;
+      if (swordTip?.parent === sword) {
+        const localTip = swordTip.position.clone();
+        if (localTip.lengthSq() > 0.00001) {
+          bladeAxisLocal.copy(localTip).normalize();
+          const tipDistance =
+            localTip.length() *
+            Math.max(object.scale.x, object.scale.y, object.scale.z);
+          collisionForwardDistance = Math.max(0.72, tipDistance);
+          collisionBackwardDistance = Math.max(0.24, tipDistance * 0.36);
+        }
+      }
     } else {
       usingProxy = true;
       proxyMaterial = proxyMaterialTemplate.clone();
@@ -175,6 +207,7 @@ export const createMochiGeneralSkill4Runtime = (
       proxyMesh.receiveShadow = false;
       scene.add(proxyMesh);
       object = proxyMesh;
+      object.scale.setScalar(SKILL4_THROW_SCALE_MULTIPLIER);
     }
 
     object.position.copy(swordOriginWorld);
@@ -191,6 +224,9 @@ export const createMochiGeneralSkill4Runtime = (
       originalLocalPosition,
       originalLocalQuaternion,
       originalLocalScale,
+      bladeAxisLocal,
+      collisionForwardDistance,
+      collisionBackwardDistance,
       launchStart: swordOriginWorld.clone(),
       orbitCenter: swordOrbitCenterWorld.clone(),
       orbitForward: swordForwardWorld.clone(),
@@ -216,13 +252,32 @@ export const createMochiGeneralSkill4Runtime = (
     if (state.damagedTargetIds.has(targetId)) return;
     player.getWorldPosition(playerProbeWorld);
     playerProbeWorld.y += SKILL4_PLAYER_HEIGHT_OFFSET;
-    const collisionDistance = SKILL4_PROJECTILE_RADIUS + SKILL4_PLAYER_RADIUS;
-    if (
-      state.object.position.distanceToSquared(playerProbeWorld) >
-      collisionDistance * collisionDistance
-    ) {
-      return;
+    swordBladeAxisWorld.copy(state.bladeAxisLocal).applyQuaternion(state.object.quaternion);
+    if (swordBladeAxisWorld.lengthSq() <= 0.00001) {
+      swordBladeAxisWorld.set(0, 0, 1).applyQuaternion(state.object.quaternion);
     }
+    if (swordBladeAxisWorld.lengthSq() <= 0.00001) {
+      swordBladeAxisWorld.set(0, 0, 1);
+    } else {
+      swordBladeAxisWorld.normalize();
+    }
+    swordCollisionStartWorld
+      .copy(state.object.position)
+      .addScaledVector(swordBladeAxisWorld, -state.collisionBackwardDistance);
+    swordCollisionEndWorld
+      .copy(state.object.position)
+      .addScaledVector(swordBladeAxisWorld, state.collisionForwardDistance);
+    swordCollisionSegment.set(swordCollisionStartWorld, swordCollisionEndWorld);
+    swordCollisionSegment.closestPointToPoint(
+      playerProbeWorld,
+      true,
+      swordCollisionClosestWorld
+    );
+    const collisionDistance = SKILL4_BLADE_COLLISION_RADIUS + SKILL4_PLAYER_RADIUS;
+    if (
+      swordCollisionClosestWorld.distanceToSquared(playerProbeWorld) >
+      collisionDistance * collisionDistance
+    ) return;
     state.damagedTargetIds.add(targetId);
     applyDamage(SKILL4_HIT_DAMAGE);
   };
@@ -262,7 +317,7 @@ export const createMochiGeneralSkill4Runtime = (
           .copy(state.orbitCenter)
           .addScaledVector(swordRightWorld, SKILL4_ORBIT_RADIUS);
         state.object.position.lerpVectors(state.launchStart, swordOrbitPointWorld, t);
-        applyFallenSpinPose(state, delta);
+        applyFallenSpinPose(state, delta, entry.rageActive);
         if (t >= 1) {
           state.phase = "orbit";
           state.phaseTimer = 0;
@@ -286,7 +341,7 @@ export const createMochiGeneralSkill4Runtime = (
           .addScaledVector(swordRightWorld, Math.cos(theta) * SKILL4_ORBIT_RADIUS)
           .addScaledVector(state.orbitForward, Math.sin(theta) * SKILL4_ORBIT_RADIUS);
         state.object.position.copy(swordOrbitPointWorld);
-        applyFallenSpinPose(state, delta);
+        applyFallenSpinPose(state, delta, entry.rageActive);
         if (t >= 1) {
           state.phase = "return";
           state.phaseTimer = 0;
@@ -312,7 +367,7 @@ export const createMochiGeneralSkill4Runtime = (
             Math.min(remaining, SKILL4_RETURN_SPEED * delta)
           );
         }
-        applyFallenSpinPose(state, delta * 0.8);
+        applyFallenSpinPose(state, delta * 0.8, entry.rageActive);
       }
 
       updateSwordCollision({

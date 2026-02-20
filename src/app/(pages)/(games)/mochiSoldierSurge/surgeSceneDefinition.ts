@@ -11,6 +11,7 @@ import {
   mochiSoldierCombatConfig,
   mochiSoldierProfile,
 } from "../../../asset/entity/monster/mochiSoldier/profile";
+import { createMochiSoldierDeathFxRuntime } from "../../../asset/entity/monster/mochiSoldier/runtime";
 import { createSceneResourceTracker } from "../../../asset/scenes/general/resourceTracker";
 import { createMochiStreetScene } from "../../../asset/scenes/mochiStreet/sceneDefinition";
 import type {
@@ -83,6 +84,91 @@ const SURGE_NAV_REPATH_INTERVAL_MS = 520;
 const SURGE_NAV_TARGET_SHIFT_REPATH_DISTANCE = 1.3;
 const SURGE_NAV_MAX_EXPANSIONS = 3200;
 
+type DaylightPresetRuntime = {
+  syncSkyToPlayer: (player: THREE.Object3D) => void;
+  dispose: () => void;
+};
+
+const applySurgeDaylightPreset = (scene: THREE.Scene): DaylightPresetRuntime => {
+  scene.background = new THREE.Color(0x1d3278);
+  scene.fog = new THREE.Fog(0x3457a3, 85, 240);
+
+  const skyGeometry = new THREE.SphereGeometry(95, 40, 28);
+  const skyMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      topColor: { value: new THREE.Color(0x102567) },
+      middleColor: { value: new THREE.Color(0x2c58bf) },
+      bottomColor: { value: new THREE.Color(0x74b1ff) },
+      sunTintColor: { value: new THREE.Color(0xffcf8c) },
+    },
+    vertexShader: `
+      varying vec3 vWorldDirection;
+      void main() {
+        vWorldDirection = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vWorldDirection;
+      uniform vec3 topColor;
+      uniform vec3 middleColor;
+      uniform vec3 bottomColor;
+      uniform vec3 sunTintColor;
+      void main() {
+        float h = clamp(vWorldDirection.y * 0.5 + 0.5, 0.0, 1.0);
+        vec3 sky = mix(bottomColor, middleColor, smoothstep(0.0, 0.58, h));
+        sky = mix(sky, topColor, smoothstep(0.52, 1.0, h));
+        vec3 sunDir = normalize(vec3(0.82, 0.32, -0.24));
+        float sunGlow = pow(max(dot(vWorldDirection, sunDir), 0.0), 12.0);
+        sky = mix(sky, sunTintColor, sunGlow * 0.36);
+        gl_FragColor = vec4(sky, 1.0);
+      }
+    `,
+    side: THREE.BackSide,
+    depthWrite: false,
+    depthTest: false,
+    fog: false,
+    toneMapped: false,
+  });
+  const skyDome = new THREE.Mesh(skyGeometry, skyMaterial);
+  skyDome.name = "mochiSoldierSurgeColorSky";
+  skyDome.renderOrder = -1000;
+  skyDome.frustumCulled = false;
+  scene.add(skyDome);
+
+  const daylightGroup = new THREE.Group();
+  daylightGroup.name = "mochiSoldierSurgeDaylight";
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.95);
+  const hemi = new THREE.HemisphereLight(0xf0f7ff, 0xc4cfdb, 0.7);
+  const key = new THREE.DirectionalLight(0xffffff, 0.86);
+  key.position.set(20, 26, 12);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.near = 0.5;
+  key.shadow.camera.far = 110;
+
+  const fill = new THREE.DirectionalLight(0xfff5df, 0.42);
+  fill.position.set(-15, 11, -9);
+
+  daylightGroup.add(ambient, hemi, key, fill);
+  scene.add(daylightGroup);
+
+  const skyFollowPosition = new THREE.Vector3();
+  return {
+    syncSkyToPlayer: (player) => {
+      player.getWorldPosition(skyFollowPosition);
+      skyDome.position.copy(skyFollowPosition);
+    },
+    dispose: () => {
+      scene.remove(daylightGroup);
+      scene.remove(skyDome);
+      skyGeometry.dispose();
+      skyMaterial.dispose();
+    },
+  };
+};
+
 export const createMochiSoldierSurgeScene = (
   scene: THREE.Scene,
   context?: SceneSetupContext
@@ -90,6 +176,7 @@ export const createMochiSoldierSurgeScene = (
   const streetSetup = createMochiStreetScene(scene);
   const streetWorld = streetSetup.world;
   if (!streetWorld) return streetSetup;
+  const daylightPreset = applySurgeDaylightPreset(scene);
 
   const bounds = streetWorld.bounds ?? fallbackBounds;
   const worldIsBlocked = streetWorld.isBlocked ?? (() => false);
@@ -107,6 +194,7 @@ export const createMochiSoldierSurgeScene = (
     disposeObjectResources,
     disposeTrackedResources,
   } = resourceTracker;
+  const deathFxRuntime = createMochiSoldierDeathFxRuntime(scene);
 
   const fallbackGeometry = new THREE.CapsuleGeometry(0.58, 1.15, 6, 14);
   const fallbackMaterialTemplate = new THREE.MeshStandardMaterial({
@@ -585,6 +673,42 @@ export const createMochiSoldierSurgeScene = (
     entry.monster.invalidateHitFlashMaterialCache();
   };
 
+  const removeAttackTarget = (id: string) => {
+    const index = attackTargets.findIndex((target) => target.id === id);
+    if (index < 0) return;
+    attackTargets.splice(index, 1);
+  };
+
+  const removeMonsterEntry = (entry: SurgeMonsterEntry, countedAsDefeat: boolean) => {
+    const index = monsters.indexOf(entry);
+    if (index < 0) return;
+    if (countedAsDefeat && !entry.monster.isAlive) {
+      deathFxRuntime.spawn(entry);
+    }
+    removeAttackTarget(entry.id);
+    if (entry.model) {
+      entry.anchor.remove(entry.model);
+      disposeObjectResources(entry.model);
+      entry.model = null;
+    }
+    entry.rig = null;
+    if (entry.fallback.parent === entry.anchor) {
+      entry.anchor.remove(entry.fallback);
+    }
+    if (entry.hitbox.parent === entry.anchor) {
+      entry.anchor.remove(entry.hitbox);
+    }
+    entry.monster.dispose();
+    if (entry.anchor.parent === monstersGroup) {
+      monstersGroup.remove(entry.anchor);
+    }
+    monsters.splice(index, 1);
+
+    if (countedAsDefeat) {
+      handleMonsterDefeated();
+    }
+  };
+
   const handleMonsterDefeated = () => {
     defeatedMonsters += 1;
     aliveMonsters = Math.max(0, aliveMonsters - 1);
@@ -665,8 +789,7 @@ export const createMochiSoldierSurgeScene = (
         const dealt = entry.monster.takeDamage(Math.max(1, Math.round(hit.damage)));
         if (dealt <= 0) return;
         if (!entry.monster.isAlive) {
-          entry.anchor.visible = false;
-          handleMonsterDefeated();
+          removeMonsterEntry(entry, true);
         } else {
           emitState();
         }
@@ -809,6 +932,8 @@ export const createMochiSoldierSurgeScene = (
     currentStats,
     applyDamage,
   }: PlayerWorldTickArgs) => {
+    daylightPreset.syncSkyToPlayer(player);
+
     if (!playerDead && currentStats.health <= 0) {
       playerDead = true;
       endGame(false);
@@ -819,9 +944,12 @@ export const createMochiSoldierSurgeScene = (
       nextSpawnAt = now + SURGE_SPAWN_INTERVAL_MS;
     }
 
-    for (let i = 0; i < monsters.length; i += 1) {
+    for (let i = monsters.length - 1; i >= 0; i -= 1) {
       const entry = monsters[i];
-      if (!entry.monster.isAlive) continue;
+      if (!entry.monster.isAlive) {
+        removeMonsterEntry(entry, true);
+        continue;
+      }
 
       let isMoving = false;
       if (!gameEnded) {
@@ -860,6 +988,7 @@ export const createMochiSoldierSurgeScene = (
 
       applyMonsterWalkAnimation(entry, delta, isMoving);
     }
+    deathFxRuntime.update(delta);
 
     emitState();
   };
@@ -925,10 +1054,13 @@ export const createMochiSoldierSurgeScene = (
   const dispose = () => {
     isDisposed = true;
     context?.onStateChange?.({});
-    monsters.forEach((entry) => entry.monster.dispose());
-    monsters.length = 0;
+    while (monsters.length > 0) {
+      removeMonsterEntry(monsters[0], false);
+    }
+    deathFxRuntime.dispose();
     attackTargets.length = 0;
     scene.remove(monstersGroup);
+    daylightPreset.dispose();
     disposeTrackedResources();
     streetSetup.dispose?.();
   };

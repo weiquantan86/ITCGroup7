@@ -52,7 +52,7 @@ mkdirSync(dirname(outPath), { recursive: true });
 const scene = new THREE.Scene();
 
 const primaryMat = new THREE.MeshStandardMaterial({
-  color: 0x22c55e,
+  color: 0x16a34a,
   roughness: 0.55,
   metalness: 0.08,
 });

@@ -40,8 +40,16 @@ type RewardEntry = {
   count: number;
 };
 
+type ScoreDeltaFx = {
+  id: number;
+  delta: number;
+  lane: number;
+};
+
 const REWARD_LINE_STAGGER_MS = 280;
 const REWARD_COUNT_STEP_MS = 90;
+const SCORE_DELTA_LIFETIME_MS = 980;
+const SCORE_DELTA_LANE_COUNT = 3;
 
 const cloneRewards = (rewards: SurgeSnackRewards): SurgeSnackRewards => ({
   energy_sugar: rewards.energy_sugar || 0,
@@ -49,6 +57,13 @@ const cloneRewards = (rewards: SurgeSnackRewards): SurgeSnackRewards => ({
   core_crunch_seed: rewards.core_crunch_seed || 0,
   star_gel_essence: rewards.star_gel_essence || 0,
 });
+
+const formatDurationLabel = (seconds: number) => {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainSeconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainSeconds).padStart(2, "0")}`;
+};
 
 export default function MochiGeneralBattleClient({
   characterOptions,
@@ -81,8 +96,19 @@ export default function MochiGeneralBattleClient({
   const [winBonusAnimatedCounts, setWinBonusAnimatedCounts] = useState<
     Record<string, number>
   >({});
+  const [scoreDeltaFxList, setScoreDeltaFxList] = useState<ScoreDeltaFx[]>([]);
   const rewardSubmittedRef = useRef(false);
   const rewardAnimationTimersRef = useRef<number[]>([]);
+  const scorePreviousValueRef = useRef<number | null>(0);
+  const scoreDeltaTimerIdsRef = useRef<number[]>([]);
+  const scoreDeltaNextIdRef = useRef(1);
+
+  const clearScoreDeltaTimers = useCallback(() => {
+    scoreDeltaTimerIdsRef.current.forEach((timerId) => {
+      window.clearTimeout(timerId);
+    });
+    scoreDeltaTimerIdsRef.current = [];
+  }, []);
 
   const selectedCharacter = useMemo(() => {
     if (!selectedCharacterId) return characterOptions[0] ?? null;
@@ -130,6 +156,8 @@ export default function MochiGeneralBattleClient({
       spawnedMonsters: next.spawnedMonsters || 0,
       aliveMonsters: next.aliveMonsters || 0,
       defeatedMonsters: next.defeatedMonsters || 0,
+      elapsedSeconds: next.elapsedSeconds || 0,
+      score: next.score || 0,
       playerDead: Boolean(next.playerDead),
       gameEnded: Boolean(next.gameEnded),
       victory: Boolean(next.victory),
@@ -146,8 +174,11 @@ export default function MochiGeneralBattleClient({
     setRevealedWinBonusLines(0);
     setObtainedAnimatedCounts({});
     setWinBonusAnimatedCounts({});
+    clearScoreDeltaTimers();
+    setScoreDeltaFxList([]);
+    scorePreviousValueRef.current = 0;
     rewardSubmittedRef.current = false;
-  }, []);
+  }, [clearScoreDeltaTimers]);
 
   const startGame = async () => {
     if (isStarting || !selectedCharacter) return;
@@ -190,6 +221,9 @@ export default function MochiGeneralBattleClient({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            gameMode: "mochiGeneralBattle",
+            score: surgeState.score,
+            elapsedSeconds: surgeState.elapsedSeconds,
             defeatedMonsters: surgeState.defeatedMonsters,
             victory: surgeState.victory,
           }),
@@ -241,7 +275,14 @@ export default function MochiGeneralBattleClient({
     return () => {
       cancelled = true;
     };
-  }, [hasStarted, surgeState.gameEnded, surgeState.defeatedMonsters, surgeState.victory]);
+  }, [
+    hasStarted,
+    surgeState.gameEnded,
+    surgeState.score,
+    surgeState.elapsedSeconds,
+    surgeState.defeatedMonsters,
+    surgeState.victory,
+  ]);
 
   useEffect(() => {
     rewardAnimationTimersRef.current.forEach((timer) => {
@@ -310,6 +351,31 @@ export default function MochiGeneralBattleClient({
       rewardAnimationTimersRef.current = [];
     };
   }, [surgeState.gameEnded, rewardClaimStatus, obtainedSnackEntries, winBonusEntries]);
+
+  useEffect(() => {
+    const previousScore = scorePreviousValueRef.current;
+    scorePreviousValueRef.current = surgeState.score;
+
+    if (!hasStarted || previousScore === null) return;
+    const delta = surgeState.score - previousScore;
+    if (delta === 0) return;
+
+    const id = scoreDeltaNextIdRef.current;
+    scoreDeltaNextIdRef.current += 1;
+    const lane = id % SCORE_DELTA_LANE_COUNT;
+    setScoreDeltaFxList((prev) => [...prev, { id, delta, lane }]);
+
+    const removeTimer = window.setTimeout(() => {
+      setScoreDeltaFxList((prev) => prev.filter((entry) => entry.id !== id));
+    }, SCORE_DELTA_LIFETIME_MS);
+    scoreDeltaTimerIdsRef.current.push(removeTimer);
+  }, [hasStarted, surgeState.score]);
+
+  useEffect(() => {
+    return () => {
+      clearScoreDeltaTimers();
+    };
+  }, [clearScoreDeltaTimers]);
 
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-[#05070d] text-slate-100">
@@ -475,45 +541,43 @@ export default function MochiGeneralBattleClient({
 
             <aside className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
               <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Counter
+                Run Data
               </h2>
               <div className="mt-4 space-y-3">
                 <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
                   <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                    Defeated
+                    Game Time
                   </p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-100">
-                    {surgeState.defeatedMonsters}/{surgeState.totalMonsters}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                    Spawned
-                  </p>
-                  <p className="mt-1 text-xl font-semibold tabular-nums text-cyan-200">
-                    {surgeState.spawnedMonsters}/{surgeState.totalMonsters}
+                  <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-100">
+                    {formatDurationLabel(surgeState.elapsedSeconds)}
                   </p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
                   <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                    Alive Now
+                    Score
                   </p>
-                  <p className="mt-1 text-xl font-semibold tabular-nums text-amber-200">
-                    {surgeState.aliveMonsters}
+                  <p className="relative mt-1 text-3xl font-semibold tabular-nums text-cyan-200">
+                    {surgeState.score}
+                    <span className="pointer-events-none absolute inset-0 overflow-visible">
+                      {scoreDeltaFxList.map((entry) => (
+                        <span
+                          key={entry.id}
+                          className={`absolute text-xl font-bold tabular-nums animate-[mochiScoreDeltaFloat_980ms_cubic-bezier(0.18,0.8,0.32,1)_forwards] ${
+                            entry.delta > 0
+                              ? "text-emerald-300 drop-shadow-[0_0_14px_rgba(52,211,153,0.45)]"
+                              : "text-rose-300 drop-shadow-[0_0_14px_rgba(251,113,133,0.45)]"
+                          }`}
+                          style={{
+                            right: `${10 + entry.lane * 34}px`,
+                            top: "50%",
+                          }}
+                        >
+                          {entry.delta > 0 ? `+${entry.delta}` : `${entry.delta}`}
+                        </span>
+                      ))}
+                    </span>
                   </p>
                 </div>
-              </div>
-
-              <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/65 p-4 text-center">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
-                  Settlement Rule
-                </p>
-                <p className="mt-3 text-base font-medium leading-relaxed text-slate-100">
-                  Every 5 kills gives 1 random snack.
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-300">
-                  Full clear bonus: +3 random snacks.
-                </p>
               </div>
 
               <div className="mt-4 flex min-h-[360px] flex-1 flex-col rounded-xl border border-red-300/35 bg-red-950/45 p-3 shadow-[0_0_34px_rgba(220,38,38,0.22)]">
@@ -628,6 +692,22 @@ export default function MochiGeneralBattleClient({
           </section>
         )}
       </div>
+      <style jsx>{`
+        @keyframes mochiScoreDeltaFloat {
+          0% {
+            opacity: 0;
+            transform: translateY(0) scale(0.76);
+          }
+          16% {
+            opacity: 1;
+            transform: translateY(-40%) scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-150%) scale(1.1);
+          }
+        }
+      `}</style>
     </main>
   );
 }

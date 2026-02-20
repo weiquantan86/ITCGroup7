@@ -10,14 +10,26 @@ import {
 } from "../../../../(pages)/(games)/mochiSoldierSurge/surgeConfig";
 
 type RewardRequestBody = {
+  gameMode?: string;
+  score?: number;
+  elapsedSeconds?: number;
   defeatedMonsters?: number;
   victory?: boolean;
 };
+
+const MOCHI_GENERAL_VICTORY_SCORE_STEP = 100;
+const MOCHI_GENERAL_DEFEAT_SCORE_STEP = 400;
 
 const normalizeDefeatedCount = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 0;
   return Math.max(0, Math.min(500, Math.floor(parsed)));
+};
+
+const normalizeScore = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(1_000_000, Math.floor(parsed)));
 };
 
 const rollRewards = (count: number): SurgeSnackRewards => {
@@ -59,14 +71,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const defeatedMonsters = normalizeDefeatedCount(body.defeatedMonsters);
-  const isVictory =
-    Boolean(body.victory) && defeatedMonsters >= SURGE_TOTAL_MONSTERS;
-  const killRewardPacks = resolveSurgeRewardPacksFromKills(defeatedMonsters);
-  const victoryBonus = isVictory ? 3 : 0;
-  const obtainedSnackRewards = rollRewards(killRewardPacks);
-  const winBonusRewards = rollRewards(victoryBonus);
-  const rewards = mergeRewards(obtainedSnackRewards, winBonusRewards);
+  const isMochiGeneralBattleMode = body.gameMode === "mochiGeneralBattle";
+
+  let obtainedSnackRewards = createEmptySurgeSnackRewards();
+  let winBonusRewards = createEmptySurgeSnackRewards();
+  let rewards = createEmptySurgeSnackRewards();
+  let settlementPayload: Record<string, number | boolean> = {};
+
+  if (isMochiGeneralBattleMode) {
+    const score = normalizeScore(body.score);
+    const isVictory = Boolean(body.victory);
+    const scoreStep = isVictory
+      ? MOCHI_GENERAL_VICTORY_SCORE_STEP
+      : MOCHI_GENERAL_DEFEAT_SCORE_STEP;
+    const rewardPacks = Math.floor(score / scoreStep);
+    obtainedSnackRewards = rollRewards(rewardPacks);
+    winBonusRewards = createEmptySurgeSnackRewards();
+    rewards = mergeRewards(obtainedSnackRewards, winBonusRewards);
+    settlementPayload = {
+      score,
+      scoreStep,
+      rewardPacks,
+      victory: isVictory,
+    };
+  } else {
+    const defeatedMonsters = normalizeDefeatedCount(body.defeatedMonsters);
+    const isVictory =
+      Boolean(body.victory) && defeatedMonsters >= SURGE_TOTAL_MONSTERS;
+    const killRewardPacks = resolveSurgeRewardPacksFromKills(defeatedMonsters);
+    const victoryBonus = isVictory ? 3 : 0;
+    obtainedSnackRewards = rollRewards(killRewardPacks);
+    winBonusRewards = rollRewards(victoryBonus);
+    rewards = mergeRewards(obtainedSnackRewards, winBonusRewards);
+    settlementPayload = {
+      defeatedMonsters,
+      killRewardPacks,
+      victoryBonus,
+      victory: isVictory,
+    };
+  }
 
   const totalReward = SURGE_SNACK_KEYS.reduce(
     (total, key) => total + rewards[key],
@@ -78,9 +121,7 @@ export async function POST(request: Request) {
       granted: rewards,
       obtainedSnack: obtainedSnackRewards,
       winBonus: winBonusRewards,
-      defeatedMonsters,
-      killRewardPacks,
-      victoryBonus,
+      ...settlementPayload,
       skipped: true,
     });
   }
@@ -123,9 +164,7 @@ export async function POST(request: Request) {
       granted: rewards,
       obtainedSnack: obtainedSnackRewards,
       winBonus: winBonusRewards,
-      defeatedMonsters,
-      killRewardPacks,
-      victoryBonus,
+      ...settlementPayload,
       resources: {
         energy_sugar: Number(resources.energy_sugar) || 0,
         dream_fruit_dust: Number(resources.dream_fruit_dust) || 0,

@@ -5,6 +5,8 @@ export const SURGE_SPAWN_BATCH_SIZE = 1;
 export const SURGE_SPAWN_INTERVAL_MS = 1000;
 export const SURGE_EDGE_SPAWN_PADDING = 0.8;
 export const SURGE_REWARD_KILL_STEP = 5;
+export const SURGE_SCORE_BOSS_DEFEAT = 100;
+export const SURGE_SCORE_SUMMONED_SOLDIER_DEFEAT = 20;
 
 export const SURGE_SNACK_KEYS = [
   "energy_sugar",
@@ -41,6 +43,8 @@ export interface MochiSoldierSurgeState {
   spawnedMonsters: number;
   aliveMonsters: number;
   defeatedMonsters: number;
+  elapsedSeconds: number;
+  score: number;
   playerDead: boolean;
   gameEnded: boolean;
   victory: boolean;
@@ -51,6 +55,8 @@ export const createInitialMochiSoldierSurgeState = (): MochiSoldierSurgeState =>
   spawnedMonsters: 0,
   aliveMonsters: 0,
   defeatedMonsters: 0,
+  elapsedSeconds: 0,
+  score: 0,
   playerDead: false,
   gameEnded: false,
   victory: false,

@@ -24,6 +24,11 @@ export type MochiGeneralSkill1Runtime = {
     delta: number,
     gameEnded: boolean
   ) => void;
+  spawnSingleBurst: (args: {
+    entry: MochiGeneralCombatEntry;
+    origin?: THREE.Vector3;
+    gameEnded: boolean;
+  }) => void;
   update: (args: {
     now: number;
     delta: number;
@@ -50,6 +55,9 @@ const BOSS_SKILL1_CHARGE_PARTICLE_SWIRL_AMPLITUDE_MIN = 0.08;
 const BOSS_SKILL1_CHARGE_PARTICLE_SWIRL_AMPLITUDE_MAX = 0.2;
 const BOSS_SKILL1_CHARGE_PARTICLE_SWIRL_FREQUENCY_MIN = 10;
 const BOSS_SKILL1_CHARGE_PARTICLE_SWIRL_FREQUENCY_MAX = 24;
+const BOSS_SKILL1_RAGE_CHARGE_SPAWN_RATE_MULTIPLIER = 1.45;
+const BOSS_SKILL1_RAGE_CHARGE_SCALE_MULTIPLIER = 1.28;
+const BOSS_SKILL1_RAGE_CHARGE_EMISSIVE_MULTIPLIER = 1.5;
 
 const bossSkillBurstOrigin = new THREE.Vector3();
 const bossSkillChargeTargetWorld = new THREE.Vector3();
@@ -77,6 +85,9 @@ export const createMochiGeneralSkill1Runtime = (
   const chargeParticles: BossSkillChargeParticle[] = [];
   const chargeSpawnCarryByEntry = new WeakMap<MochiGeneralCombatEntry, number>();
 
+  const resolveRageChargeFxMultiplier = (entry: MochiGeneralCombatEntry) =>
+    entry.rageActive ? BOSS_SKILL1_RAGE_CHARGE_EMISSIVE_MULTIPLIER : 1;
+
   const resolveSkill1Origin = (entry: MochiGeneralCombatEntry, out: THREE.Vector3) => {
     const burstOriginNode = entry.rig?.heldMochi;
     if (burstOriginNode) {
@@ -102,6 +113,10 @@ export const createMochiGeneralSkill1Runtime = (
     gameEnded: boolean
   ) => {
     if (gameEnded || !entry.monster.isAlive) return;
+    const rageFxMultiplier = resolveRageChargeFxMultiplier(entry);
+    const rageScaleMultiplier = entry.rageActive
+      ? BOSS_SKILL1_RAGE_CHARGE_SCALE_MULTIPLIER
+      : 1;
 
     resolveSkill1Origin(entry, bossSkillChargeTargetWorld);
     let safety = 0;
@@ -145,14 +160,19 @@ export const createMochiGeneralSkill1Runtime = (
     bossSkillChargeSwirlAxisTemp.normalize();
 
     const material = chargeSphereMaterialTemplate.clone();
-    material.opacity = THREE.MathUtils.lerp(0.52, 0.95, Math.random());
-    material.emissiveIntensity = THREE.MathUtils.lerp(0.42, 0.8, Math.random());
+    material.opacity = THREE.MathUtils.clamp(
+      THREE.MathUtils.lerp(0.52, 0.95, Math.random()) * Math.min(1.1, rageFxMultiplier),
+      0,
+      1
+    );
+    material.emissiveIntensity =
+      THREE.MathUtils.lerp(0.42, 0.8, Math.random()) * rageFxMultiplier;
 
     const startScale = THREE.MathUtils.lerp(
       BOSS_SKILL1_CHARGE_PARTICLE_SCALE_MIN,
       BOSS_SKILL1_CHARGE_PARTICLE_SCALE_MAX,
       Math.random()
-    );
+    ) * rageScaleMultiplier;
     const endScale = startScale * THREE.MathUtils.lerp(0.1, 0.4, Math.random());
     const life = THREE.MathUtils.lerp(
       BOSS_SKILL1_CHARGE_PARTICLE_LIFE_MIN,
@@ -201,6 +221,7 @@ export const createMochiGeneralSkill1Runtime = (
       }
 
       resolveSkill1Origin(particle.entry, bossSkillChargeTargetWorld);
+      const rageFxMultiplier = resolveRageChargeFxMultiplier(particle.entry);
       const decay = Math.max(0, 1 - t);
       const decaySquared = decay * decay;
       particle.mesh.position
@@ -214,9 +235,35 @@ export const createMochiGeneralSkill1Runtime = (
 
       const scale = THREE.MathUtils.lerp(particle.startScale, particle.endScale, t);
       particle.mesh.scale.setScalar(scale);
-      particle.material.opacity = Math.max(0.03, decay * decay * 0.95);
-      particle.material.emissiveIntensity = THREE.MathUtils.lerp(0.46, 1.05, t);
+      particle.material.opacity = Math.max(
+        0.03,
+        decay * decay * 0.95 * Math.min(1.1, rageFxMultiplier)
+      );
+      particle.material.emissiveIntensity =
+        THREE.MathUtils.lerp(0.46, 1.05, t) * rageFxMultiplier;
     }
+  };
+
+  const spawnSingleBurst = ({
+    entry,
+    origin,
+    gameEnded,
+  }: {
+    entry: MochiGeneralCombatEntry;
+    origin?: THREE.Vector3;
+    gameEnded: boolean;
+  }) => {
+    if (gameEnded || !entry.monster.isAlive) return;
+    if (origin) {
+      bossSkillBurstOrigin.copy(origin);
+    } else {
+      resolveSkill1Origin(entry, bossSkillBurstOrigin);
+    }
+    projectileRuntime.spawnBurst({
+      origin: bossSkillBurstOrigin,
+      gameEnded,
+      rageActive: entry.rageActive,
+    });
   };
 
   return {
@@ -229,9 +276,8 @@ export const createMochiGeneralSkill1Runtime = (
         entry.skill1ProjectileBurstRequested = false;
         entry.skill1ProjectileBurstPendingCount = 0;
         for (let i = 0; i < pendingBurstCount; i += 1) {
-          resolveSkill1Origin(entry, bossSkillBurstOrigin);
-          projectileRuntime.spawnBurst({
-            origin: bossSkillBurstOrigin,
+          spawnSingleBurst({
+            entry,
             gameEnded,
           });
         }
@@ -254,8 +300,10 @@ export const createMochiGeneralSkill1Runtime = (
             BOSS_SKILL1_CHARGE_SPAWN_RATE_MAX,
             entry.skill1CastBlend
           );
+      const adjustedSpawnRate = spawnRate *
+        (entry.rageActive ? BOSS_SKILL1_RAGE_CHARGE_SPAWN_RATE_MULTIPLIER : 1);
       let chargeSpawnCarry = chargeSpawnCarryByEntry.get(entry) ?? 0;
-      chargeSpawnCarry += spawnRate * delta;
+      chargeSpawnCarry += adjustedSpawnRate * delta;
       const spawnCount = Math.min(
         BOSS_SKILL1_CHARGE_SPAWN_PER_FRAME_CAP,
         Math.floor(chargeSpawnCarry)
@@ -268,6 +316,7 @@ export const createMochiGeneralSkill1Runtime = (
       }
       chargeSpawnCarryByEntry.set(entry, chargeSpawnCarry);
     },
+    spawnSingleBurst,
     update: ({
       now,
       delta,

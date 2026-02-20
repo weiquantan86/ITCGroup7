@@ -82,7 +82,7 @@ export const createCarrotPhantomModifier = ({
   applyMana,
 }: CreateCarrotPhantomModifierArgs) => {
   const phantomConfig = {
-    shallowDurationMs: 75,
+    shallowDurationMs: 200,
     deepDurationMs: 3000,
     shallowParticleDurationMs: 300,
     deepBurstDurationMs: 280,

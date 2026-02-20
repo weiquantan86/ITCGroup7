@@ -7,6 +7,7 @@ type ThrownMochiState = {
   object: THREE.Object3D;
   usingProxy: boolean;
   proxyMaterial: THREE.MeshStandardMaterial | null;
+  detachedMaterialOverrides: DetachedMochiMaterialOverride[];
   originalParent: THREE.Object3D | null;
   originalLocalPosition: THREE.Vector3;
   originalLocalQuaternion: THREE.Quaternion;
@@ -15,6 +16,16 @@ type ThrownMochiState = {
   age: number;
   returning: boolean;
   hitPlayer: boolean;
+  trailSpawnCarry: number;
+  rageSkill1BurstTriggerTimes: number[];
+  rageSkill1BurstFiredCount: number;
+  flowTime: number;
+};
+
+type DetachedMochiMaterialOverride = {
+  mesh: THREE.Mesh;
+  originalMaterial: THREE.Material | THREE.Material[];
+  overrideMaterial: THREE.Material | THREE.Material[];
 };
 
 type StickyBlob = {
@@ -56,6 +67,16 @@ type ThrowShockwave = {
   endScale: number;
 };
 
+type MeteorTrailParticle = {
+  mesh: THREE.Mesh;
+  material: THREE.MeshStandardMaterial;
+  velocity: THREE.Vector3;
+  age: number;
+  life: number;
+  startScale: number;
+  endScale: number;
+};
+
 export type MochiGeneralSkill2Runtime = {
   onBossTick: (args: {
     entry: MochiGeneralCombatEntry;
@@ -69,6 +90,11 @@ export type MochiGeneralSkill2Runtime = {
     applyDamage: (amount: number) => number;
     applyStatusEffect: (effect: StatusEffectApplication) => boolean;
     gameEnded: boolean;
+    spawnSkill1SingleBurst?: (args: {
+      entry: MochiGeneralCombatEntry;
+      origin: THREE.Vector3;
+      gameEnded: boolean;
+    }) => void;
   }) => void;
   onBossRemoved: (entry: MochiGeneralCombatEntry) => void;
   dispose: () => void;
@@ -95,6 +121,22 @@ const SKILL2_THROW_FLASH_PARTICLE_LIFE_MAX = 0.48;
 const SKILL2_THROW_FLASH_PARTICLE_SPEED_MIN = 4.8;
 const SKILL2_THROW_FLASH_PARTICLE_SPEED_MAX = 10.8;
 const SKILL2_THROW_SHOCKWAVE_LIFE = 0.36;
+const SKILL2_METEOR_TRAIL_SPAWN_RATE = 40;
+const SKILL2_METEOR_TRAIL_SPAWN_RATE_RAGE = 76;
+const SKILL2_METEOR_TRAIL_SPAWN_PER_FRAME_CAP = 18;
+const SKILL2_METEOR_TRAIL_LIFE_MIN = 0.12;
+const SKILL2_METEOR_TRAIL_LIFE_MAX = 0.28;
+const SKILL2_METEOR_TRAIL_SCALE_MIN = 0.3;
+const SKILL2_METEOR_TRAIL_SCALE_MAX = 0.86;
+const SKILL2_METEOR_TRAIL_SPEED = 5.6;
+const SKILL2_RAGE_FX_MULTIPLIER = 1.4;
+const SKILL2_RAGE_SKILL1_SINGLE_BURST_COUNT = 2;
+const SKILL2_RAGE_SKILL1_SINGLE_BURST_TRIGGER_MIN_RATIO = 0.16;
+const SKILL2_RAGE_SKILL1_SINGLE_BURST_TRIGGER_MAX_RATIO = 0.68;
+const SKILL2_TRACKING_FLOW_SPEED = 8.2;
+const SKILL2_TRACKING_FLOW_POSITION_FREQUENCY = 6.4;
+const SKILL2_TRACKING_FLOW_EMISSIVE_MIN = 0.14;
+const SKILL2_TRACKING_FLOW_EMISSIVE_MAX = 0.7;
 
 const mochiThrowOriginWorld = new THREE.Vector3();
 const mochiThrowTargetWorld = new THREE.Vector3();
@@ -104,6 +146,9 @@ const mochiVelocityTarget = new THREE.Vector3();
 const mochiDelta = new THREE.Vector3();
 const playerWorldProbe = new THREE.Vector3();
 const throwFlashDirection = new THREE.Vector3();
+const meteorTrailDirection = new THREE.Vector3();
+const meteorTrailSpawnOffset = new THREE.Vector3();
+const rageSkill1BurstOrigin = new THREE.Vector3();
 
 export const createMochiGeneralSkill2Runtime = (
   scene: THREE.Scene
@@ -171,12 +216,36 @@ export const createMochiGeneralSkill2Runtime = (
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
   });
+  const meteorTrailGeometry = new THREE.SphereGeometry(0.08, 7, 5);
+  const meteorTrailWhiteMaterialTemplate = new THREE.MeshStandardMaterial({
+    color: 0xf8fafc,
+    roughness: 0.2,
+    metalness: 0,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.45,
+    transparent: true,
+    opacity: 0.84,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const meteorTrailBlackMaterialTemplate = new THREE.MeshStandardMaterial({
+    color: 0x0f172a,
+    roughness: 0.38,
+    metalness: 0.04,
+    emissive: 0x020617,
+    emissiveIntensity: 0.16,
+    transparent: true,
+    opacity: 0.78,
+    depthWrite: false,
+  });
 
   const thrownStates = new Map<MochiGeneralCombatEntry, ThrownMochiState>();
   const throwFlashParticles: ThrowFlashParticle[] = [];
   const throwShockwaves: ThrowShockwave[] = [];
+  const meteorTrailParticles: MeteorTrailParticle[] = [];
   let stickyFxRemaining = 0;
   let stickyFxState: StickyFxState | null = null;
+  let stickyFxIntensity = 1;
 
   const resolveHeldMochiOrigin = (entry: MochiGeneralCombatEntry, out: THREE.Vector3) => {
     const heldMochi = entry.rig?.heldMochi;
@@ -186,6 +255,141 @@ export const createMochiGeneralSkill2Runtime = (
     }
     out.copy(entry.anchor.position);
     out.y += 2.2;
+  };
+
+  const applyDetachedMochiMaterialOverrides = (
+    object: THREE.Object3D
+  ): DetachedMochiMaterialOverride[] => {
+    const overrides: DetachedMochiMaterialOverride[] = [];
+    object.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      if (Array.isArray(mesh.material)) {
+        const originalMaterial = mesh.material;
+        const overrideMaterial = originalMaterial.map((material) => material.clone());
+        mesh.material = overrideMaterial;
+        overrides.push({
+          mesh,
+          originalMaterial,
+          overrideMaterial,
+        });
+        return;
+      }
+      const originalMaterial = mesh.material;
+      const overrideMaterial = originalMaterial.clone();
+      mesh.material = overrideMaterial;
+      overrides.push({
+        mesh,
+        originalMaterial,
+        overrideMaterial,
+      });
+    });
+    return overrides;
+  };
+
+  const restoreDetachedMochiMaterialOverrides = (
+    overrides: DetachedMochiMaterialOverride[]
+  ) => {
+    for (let i = 0; i < overrides.length; i += 1) {
+      const override = overrides[i];
+      if (!override?.mesh) continue;
+      override.mesh.material = override.originalMaterial;
+      if (Array.isArray(override.overrideMaterial)) {
+        for (let j = 0; j < override.overrideMaterial.length; j += 1) {
+          override.overrideMaterial[j]?.dispose();
+        }
+      } else {
+        override.overrideMaterial.dispose();
+      }
+    }
+  };
+
+  const applyTrackingFlowToMaterial = (
+    material: THREE.Material,
+    flowT: number,
+    rageFxMultiplier: number
+  ) => {
+    const clampedT = THREE.MathUtils.clamp(flowT, 0, 1);
+    const colorMaterial = material as THREE.Material & { color?: THREE.Color };
+    if (colorMaterial.color?.isColor) {
+      colorMaterial.color.setRGB(clampedT, clampedT, clampedT);
+    }
+
+    const emissiveMaterial = material as THREE.Material & {
+      emissive?: THREE.Color;
+      emissiveIntensity?: number;
+    };
+    if (emissiveMaterial.emissive?.isColor) {
+      const emissiveTone = THREE.MathUtils.lerp(0.02, 0.42, clampedT);
+      emissiveMaterial.emissive.setRGB(emissiveTone, emissiveTone, emissiveTone);
+      emissiveMaterial.emissiveIntensity =
+        THREE.MathUtils.lerp(
+          SKILL2_TRACKING_FLOW_EMISSIVE_MIN,
+          SKILL2_TRACKING_FLOW_EMISSIVE_MAX,
+          clampedT
+        ) * rageFxMultiplier;
+    }
+  };
+
+  const updateTrackingFlowFx = (
+    thrownState: ThrownMochiState,
+    delta: number,
+    rageActive: boolean
+  ) => {
+    const rageFxMultiplier = rageActive ? SKILL2_RAGE_FX_MULTIPLIER : 1;
+    thrownState.flowTime +=
+      delta *
+      SKILL2_TRACKING_FLOW_SPEED *
+      (rageActive ? 1.18 : 1);
+    const worldPhase =
+      thrownState.object.position.x * 0.53 +
+      thrownState.object.position.y * 0.61 +
+      thrownState.object.position.z * 0.47;
+
+    if (thrownState.proxyMaterial) {
+      const flowT =
+        0.5 +
+        0.5 *
+          Math.sin(
+            thrownState.flowTime +
+              worldPhase * SKILL2_TRACKING_FLOW_POSITION_FREQUENCY
+          );
+      applyTrackingFlowToMaterial(thrownState.proxyMaterial, flowT, rageFxMultiplier);
+      return;
+    }
+
+    for (let i = 0; i < thrownState.detachedMaterialOverrides.length; i += 1) {
+      const materialOverride = thrownState.detachedMaterialOverrides[i];
+      const localPhase =
+        materialOverride.mesh.position.x * 0.9 +
+        materialOverride.mesh.position.y * 0.7 +
+        materialOverride.mesh.position.z * 0.6;
+      const phase =
+        thrownState.flowTime +
+        worldPhase * SKILL2_TRACKING_FLOW_POSITION_FREQUENCY +
+        localPhase * SKILL2_TRACKING_FLOW_POSITION_FREQUENCY +
+        i * 0.86;
+      const flowT = 0.5 + 0.5 * Math.sin(phase);
+
+      if (Array.isArray(materialOverride.overrideMaterial)) {
+        for (let j = 0; j < materialOverride.overrideMaterial.length; j += 1) {
+          const layeredPhase = phase + j * 0.94;
+          const layeredFlowT = 0.5 + 0.5 * Math.sin(layeredPhase);
+          applyTrackingFlowToMaterial(
+            materialOverride.overrideMaterial[j],
+            layeredFlowT,
+            rageFxMultiplier
+          );
+        }
+        continue;
+      }
+
+      applyTrackingFlowToMaterial(
+        materialOverride.overrideMaterial,
+        flowT,
+        rageFxMultiplier
+      );
+    }
   };
 
   const disposeStickyFx = () => {
@@ -200,6 +404,7 @@ export const createMochiGeneralSkill2Runtime = (
       stickyFxState.group.parent.remove(stickyFxState.group);
     }
     stickyFxState = null;
+    stickyFxIntensity = 1;
   };
 
   const ensureStickyFx = (player: THREE.Object3D) => {
@@ -215,8 +420,8 @@ export const createMochiGeneralSkill2Runtime = (
     coreMesh.receiveShadow = false;
     auraMesh.castShadow = false;
     auraMesh.receiveShadow = false;
-    coreMesh.scale.setScalar(1.2);
-    auraMesh.scale.setScalar(1.02);
+    coreMesh.scale.setScalar(1.2 * stickyFxIntensity);
+    auraMesh.scale.setScalar(1.02 * stickyFxIntensity);
     group.add(coreMesh);
     group.add(auraMesh);
 
@@ -224,7 +429,8 @@ export const createMochiGeneralSkill2Runtime = (
     for (let i = 0; i < SKILL2_STICKY_BLOB_COUNT; i += 1) {
       const material = stickyBlobMaterialTemplate.clone();
       material.opacity = THREE.MathUtils.lerp(0.68, 0.98, Math.random());
-      material.emissiveIntensity = THREE.MathUtils.lerp(0.2, 0.42, Math.random());
+      material.emissiveIntensity =
+        THREE.MathUtils.lerp(0.2, 0.42, Math.random()) * stickyFxIntensity;
       const mesh = new THREE.Mesh(stickyBlobGeometry, material);
       const angle = Math.random() * Math.PI * 2;
       const radius = Math.sqrt(Math.random()) * 0.52;
@@ -234,7 +440,8 @@ export const createMochiGeneralSkill2Runtime = (
         Math.sin(angle) * radius
       );
       mesh.position.copy(baseOffset);
-      const scale = THREE.MathUtils.lerp(0.72, 1.82, Math.random());
+      const scale =
+        THREE.MathUtils.lerp(0.72, 1.82, Math.random()) * stickyFxIntensity;
       mesh.scale.setScalar(scale);
       mesh.castShadow = false;
       mesh.receiveShadow = false;
@@ -266,17 +473,18 @@ export const createMochiGeneralSkill2Runtime = (
     stickyFxState.time += delta;
     const pulse = 1 + Math.sin(stickyFxState.time * 6.2) * 0.12;
     const pulseSecondary = 1 + Math.sin(stickyFxState.time * 3.1 + 1.2) * 0.09;
-    stickyFxState.coreMesh.scale.setScalar(1.15 * pulse);
-    stickyFxState.auraMesh.scale.setScalar(1.02 * pulseSecondary);
+    stickyFxState.coreMesh.scale.setScalar(1.15 * pulse * stickyFxIntensity);
+    stickyFxState.auraMesh.scale.setScalar(1.02 * pulseSecondary * stickyFxIntensity);
     stickyFxState.coreMesh.rotation.y += delta * 0.9;
     stickyFxState.auraMesh.rotation.y -= delta * 1.35;
     stickyFxState.auraMesh.rotation.x += delta * 0.45;
     const corePulseT = THREE.MathUtils.clamp((pulse - 0.88) / 0.24, 0, 1);
     const auraPulseT = THREE.MathUtils.clamp((pulseSecondary - 0.91) / 0.18, 0, 1);
     stickyFxState.coreMaterial.emissiveIntensity =
-      THREE.MathUtils.lerp(0.2, 0.45, corePulseT);
+      THREE.MathUtils.lerp(0.2, 0.45, corePulseT) * stickyFxIntensity;
     stickyFxState.auraMaterial.opacity =
-      THREE.MathUtils.lerp(0.22, 0.44, auraPulseT);
+      THREE.MathUtils.lerp(0.22, 0.44, auraPulseT) *
+      THREE.MathUtils.clamp(stickyFxIntensity, 1, 1.3);
 
     for (let i = 0; i < stickyFxState.blobs.length; i += 1) {
       const blob = stickyFxState.blobs[i];
@@ -317,8 +525,102 @@ export const createMochiGeneralSkill2Runtime = (
     throwShockwaves.splice(index, 1);
   };
 
-  const spawnThrowFx = (originWorld: THREE.Vector3) => {
+  const removeMeteorTrailParticleAt = (index: number) => {
+    const particle = meteorTrailParticles[index];
+    if (!particle) return;
+    if (particle.mesh.parent) {
+      particle.mesh.parent.remove(particle.mesh);
+    }
+    particle.material.dispose();
+    meteorTrailParticles.splice(index, 1);
+  };
+
+  const spawnMeteorTrailParticles = (
+    thrownState: ThrownMochiState,
+    entry: MochiGeneralCombatEntry,
+    delta: number
+  ) => {
+    if (thrownState.returning) return;
+    const spawnRate = entry.rageActive
+      ? SKILL2_METEOR_TRAIL_SPAWN_RATE_RAGE
+      : SKILL2_METEOR_TRAIL_SPAWN_RATE;
+    thrownState.trailSpawnCarry += spawnRate * delta;
+    const spawnCount = Math.min(
+      SKILL2_METEOR_TRAIL_SPAWN_PER_FRAME_CAP,
+      Math.floor(thrownState.trailSpawnCarry)
+    );
+    if (spawnCount <= 0) return;
+    thrownState.trailSpawnCarry -= spawnCount;
+
+    meteorTrailDirection.copy(thrownState.velocity);
+    if (meteorTrailDirection.lengthSq() <= 0.00001) {
+      meteorTrailDirection.set(0, 0, 1);
+    } else {
+      meteorTrailDirection.normalize();
+    }
+    const rageFxMultiplier = entry.rageActive ? SKILL2_RAGE_FX_MULTIPLIER : 1;
+
+    for (let i = 0; i < spawnCount; i += 1) {
+      const isWhite = Math.random() < 0.5;
+      const material = (
+        isWhite ? meteorTrailWhiteMaterialTemplate : meteorTrailBlackMaterialTemplate
+      ).clone();
+      material.opacity = THREE.MathUtils.clamp(
+        material.opacity * THREE.MathUtils.lerp(0.72, 1.08, Math.random()) * rageFxMultiplier,
+        0,
+        1
+      );
+      material.emissiveIntensity *= THREE.MathUtils.lerp(0.7, 1.35, Math.random()) * rageFxMultiplier;
+
+      const mesh = new THREE.Mesh(meteorTrailGeometry, material);
+      meteorTrailSpawnOffset
+        .set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1)
+        .multiplyScalar(0.12 * rageFxMultiplier);
+      mesh.position
+        .copy(thrownState.object.position)
+        .addScaledVector(meteorTrailDirection, -THREE.MathUtils.lerp(0.08, 0.42, Math.random()))
+        .add(meteorTrailSpawnOffset);
+      const startScale =
+        THREE.MathUtils.lerp(
+          SKILL2_METEOR_TRAIL_SCALE_MIN,
+          SKILL2_METEOR_TRAIL_SCALE_MAX,
+          Math.random()
+        ) * rageFxMultiplier;
+      mesh.scale.setScalar(startScale);
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      scene.add(mesh);
+
+      const life = THREE.MathUtils.lerp(
+        SKILL2_METEOR_TRAIL_LIFE_MIN,
+        SKILL2_METEOR_TRAIL_LIFE_MAX,
+        Math.random()
+      );
+      meteorTrailParticles.push({
+        mesh,
+        material,
+        velocity: meteorTrailDirection
+          .clone()
+          .multiplyScalar(
+            -SKILL2_METEOR_TRAIL_SPEED * THREE.MathUtils.lerp(0.8, 1.2, Math.random())
+          )
+          .addScaledVector(meteorTrailSpawnOffset, 8),
+        age: 0,
+        life,
+        startScale,
+        endScale: startScale * THREE.MathUtils.lerp(0.04, 0.22, Math.random()),
+      });
+    }
+  };
+
+  const spawnThrowFx = (originWorld: THREE.Vector3, rageActive: boolean) => {
+    const rageFxMultiplier = rageActive ? SKILL2_RAGE_FX_MULTIPLIER : 1;
     const shockwaveMaterial = throwShockwaveMaterialTemplate.clone();
+    shockwaveMaterial.opacity = THREE.MathUtils.clamp(
+      shockwaveMaterial.opacity * THREE.MathUtils.lerp(1, 1.25, rageActive ? 1 : 0),
+      0,
+      1
+    );
     const shockwaveMesh = new THREE.Mesh(throwShockwaveGeometry, shockwaveMaterial);
     shockwaveMesh.position.copy(originWorld);
     shockwaveMesh.rotation.x = -Math.PI * 0.5;
@@ -331,10 +633,16 @@ export const createMochiGeneralSkill2Runtime = (
       age: 0,
       life: SKILL2_THROW_SHOCKWAVE_LIFE,
       startScale: 0.5,
-      endScale: 3.4,
+      endScale: 3.4 * rageFxMultiplier,
     });
 
-    for (let i = 0; i < SKILL2_THROW_FLASH_PARTICLE_COUNT; i += 1) {
+    const flashParticleCount = Math.max(
+      1,
+      Math.round(
+        SKILL2_THROW_FLASH_PARTICLE_COUNT * (rageActive ? SKILL2_RAGE_FX_MULTIPLIER : 1)
+      )
+    );
+    for (let i = 0; i < flashParticleCount; i += 1) {
       let safety = 0;
       do {
         throwFlashDirection.set(
@@ -352,14 +660,20 @@ export const createMochiGeneralSkill2Runtime = (
       throwFlashDirection.normalize();
 
       const material = throwFlashMaterialTemplate.clone();
-      material.opacity = THREE.MathUtils.lerp(0.62, 0.96, Math.random());
-      material.emissiveIntensity = THREE.MathUtils.lerp(0.9, 1.65, Math.random());
+      material.opacity = THREE.MathUtils.clamp(
+        THREE.MathUtils.lerp(0.62, 0.96, Math.random()) * rageFxMultiplier,
+        0,
+        1
+      );
+      material.emissiveIntensity =
+        THREE.MathUtils.lerp(0.9, 1.65, Math.random()) * rageFxMultiplier;
 
       const mesh = new THREE.Mesh(throwFlashGeometry, material);
       mesh.position.copy(originWorld);
       mesh.castShadow = false;
       mesh.receiveShadow = false;
-      const startScale = THREE.MathUtils.lerp(0.58, 1.42, Math.random());
+      const startScale =
+        THREE.MathUtils.lerp(0.58, 1.42, Math.random()) * rageFxMultiplier;
       mesh.scale.setScalar(startScale);
       scene.add(mesh);
 
@@ -372,7 +686,7 @@ export const createMochiGeneralSkill2Runtime = (
         SKILL2_THROW_FLASH_PARTICLE_SPEED_MIN,
         SKILL2_THROW_FLASH_PARTICLE_SPEED_MAX,
         Math.random()
-      );
+      ) * rageFxMultiplier;
       throwFlashParticles.push({
         mesh,
         material,
@@ -421,11 +735,89 @@ export const createMochiGeneralSkill2Runtime = (
     }
   };
 
+  const updateMeteorTrailFx = (delta: number) => {
+    for (let i = meteorTrailParticles.length - 1; i >= 0; i -= 1) {
+      const particle = meteorTrailParticles[i];
+      particle.age += delta;
+      const t = particle.life > 0 ? particle.age / particle.life : 1;
+      if (t >= 1) {
+        removeMeteorTrailParticleAt(i);
+        continue;
+      }
+      particle.mesh.position.addScaledVector(particle.velocity, delta);
+      particle.velocity.multiplyScalar(0.9);
+      particle.velocity.y += 0.42 * delta;
+      particle.mesh.rotation.x += delta * 9.2;
+      particle.mesh.rotation.y += delta * 6.4;
+      const fade = Math.max(0, 1 - t);
+      particle.material.opacity = fade * fade * 0.92;
+      particle.material.emissiveIntensity = THREE.MathUtils.lerp(1.25, 0.2, t);
+      particle.mesh.scale.setScalar(
+        THREE.MathUtils.lerp(particle.startScale, particle.endScale, t)
+      );
+    }
+  };
+
+  const createRageSkill1BurstTriggerTimes = () => {
+    const triggerTimes: number[] = [];
+    for (let i = 0; i < SKILL2_RAGE_SKILL1_SINGLE_BURST_COUNT; i += 1) {
+      const ratio = THREE.MathUtils.lerp(
+        SKILL2_RAGE_SKILL1_SINGLE_BURST_TRIGGER_MIN_RATIO,
+        SKILL2_RAGE_SKILL1_SINGLE_BURST_TRIGGER_MAX_RATIO,
+        Math.random()
+      );
+      triggerTimes.push(SKILL2_OUTBOUND_MAX_DURATION * ratio);
+    }
+    triggerTimes.sort((a, b) => a - b);
+    return triggerTimes;
+  };
+
+  const emitPendingRageSkill1Bursts = ({
+    thrownState,
+    spawnSkill1SingleBurst,
+    gameEnded,
+    forceAll,
+  }: {
+    thrownState: ThrownMochiState;
+    spawnSkill1SingleBurst?: (args: {
+      entry: MochiGeneralCombatEntry;
+      origin: THREE.Vector3;
+      gameEnded: boolean;
+    }) => void;
+    gameEnded: boolean;
+    forceAll: boolean;
+  }) => {
+    if (!spawnSkill1SingleBurst || !thrownState.entry.rageActive) return;
+
+    while (
+      thrownState.rageSkill1BurstFiredCount <
+      thrownState.rageSkill1BurstTriggerTimes.length
+    ) {
+      const nextTriggerTime =
+        thrownState.rageSkill1BurstTriggerTimes[
+          thrownState.rageSkill1BurstFiredCount
+        ];
+      if (!forceAll && thrownState.age < nextTriggerTime) break;
+      rageSkill1BurstOrigin.copy(thrownState.object.position);
+      spawnSkill1SingleBurst({
+        entry: thrownState.entry,
+        origin: rageSkill1BurstOrigin,
+        gameEnded,
+      });
+      thrownState.rageSkill1BurstFiredCount += 1;
+    }
+  };
+
   const clearThrownState = (entry: MochiGeneralCombatEntry) => {
     const thrownState = thrownStates.get(entry);
     if (!thrownState) {
       entry.skill2ProjectileActive = false;
       return;
+    }
+
+    if (!thrownState.usingProxy && thrownState.detachedMaterialOverrides.length > 0) {
+      restoreDetachedMochiMaterialOverrides(thrownState.detachedMaterialOverrides);
+      thrownState.detachedMaterialOverrides = [];
     }
 
     if (thrownState.usingProxy) {
@@ -440,6 +832,10 @@ export const createMochiGeneralSkill2Runtime = (
       thrownState.object.scale.copy(thrownState.originalLocalScale);
     } else if (thrownState.object.parent) {
       thrownState.object.parent.remove(thrownState.object);
+    }
+
+    if (!thrownState.usingProxy) {
+      entry.monster.invalidateHitFlashMaterialCache();
     }
 
     thrownStates.delete(entry);
@@ -467,6 +863,7 @@ export const createMochiGeneralSkill2Runtime = (
     let object: THREE.Object3D;
     let usingProxy = false;
     let proxyMaterial: THREE.MeshStandardMaterial | null = null;
+    let detachedMaterialOverrides: DetachedMochiMaterialOverride[] = [];
     let originalParent: THREE.Object3D | null = null;
     let originalLocalPosition = new THREE.Vector3();
     let originalLocalQuaternion = new THREE.Quaternion();
@@ -478,6 +875,8 @@ export const createMochiGeneralSkill2Runtime = (
       originalLocalQuaternion = heldMochi.quaternion.clone();
       originalLocalScale = heldMochi.scale.clone();
       scene.attach(heldMochi);
+      detachedMaterialOverrides = applyDetachedMochiMaterialOverrides(heldMochi);
+      entry.monster.invalidateHitFlashMaterialCache();
       object = heldMochi;
     } else {
       usingProxy = true;
@@ -491,7 +890,7 @@ export const createMochiGeneralSkill2Runtime = (
     }
 
     object.position.copy(mochiThrowOriginWorld);
-    spawnThrowFx(mochiThrowOriginWorld);
+    spawnThrowFx(mochiThrowOriginWorld, entry.rageActive);
     player.getWorldPosition(mochiThrowTargetWorld);
     mochiThrowTargetWorld.y += SKILL2_PLAYER_HEIGHT_OFFSET;
     mochiThrowDirection.copy(mochiThrowTargetWorld).sub(mochiThrowOriginWorld);
@@ -506,6 +905,7 @@ export const createMochiGeneralSkill2Runtime = (
       object,
       usingProxy,
       proxyMaterial,
+      detachedMaterialOverrides,
       originalParent,
       originalLocalPosition,
       originalLocalQuaternion,
@@ -514,6 +914,12 @@ export const createMochiGeneralSkill2Runtime = (
       age: 0,
       returning: false,
       hitPlayer: false,
+      trailSpawnCarry: 0,
+      rageSkill1BurstTriggerTimes: entry.rageActive
+        ? createRageSkill1BurstTriggerTimes()
+        : [],
+      rageSkill1BurstFiredCount: 0,
+      flowTime: Math.random() * Math.PI * 2,
     });
     entry.skill2ProjectileActive = true;
   };
@@ -524,12 +930,18 @@ export const createMochiGeneralSkill2Runtime = (
     applyDamage,
     applyStatusEffect,
     gameEnded,
+    spawnSkill1SingleBurst,
   }: {
     delta: number;
     player: THREE.Object3D;
     applyDamage: (amount: number) => number;
     applyStatusEffect: (effect: StatusEffectApplication) => boolean;
     gameEnded: boolean;
+    spawnSkill1SingleBurst?: (args: {
+      entry: MochiGeneralCombatEntry;
+      origin: THREE.Vector3;
+      gameEnded: boolean;
+    }) => void;
   }) => {
     player.getWorldPosition(playerWorldProbe);
     playerWorldProbe.y += SKILL2_PLAYER_HEIGHT_OFFSET;
@@ -559,6 +971,15 @@ export const createMochiGeneralSkill2Runtime = (
           );
         }
         objectPosition.addScaledVector(thrownState.velocity, delta);
+        updateTrackingFlowFx(thrownState, delta, entry.rageActive);
+        spawnMeteorTrailParticles(thrownState, entry, delta);
+
+        emitPendingRageSkill1Bursts({
+          thrownState,
+          spawnSkill1SingleBurst,
+          gameEnded,
+          forceAll: false,
+        });
 
         const collisionDistance = SKILL2_PROJECTILE_RADIUS + SKILL2_PLAYER_RADIUS;
         if (
@@ -566,6 +987,12 @@ export const createMochiGeneralSkill2Runtime = (
           objectPosition.distanceToSquared(playerWorldProbe) <=
             collisionDistance * collisionDistance
         ) {
+          emitPendingRageSkill1Bursts({
+            thrownState,
+            spawnSkill1SingleBurst,
+            gameEnded,
+            forceAll: true,
+          });
           thrownState.hitPlayer = true;
           thrownState.returning = true;
           applyDamage(SKILL2_HIT_DAMAGE);
@@ -578,12 +1005,22 @@ export const createMochiGeneralSkill2Runtime = (
               moveSpeedMultiplier: SKILL2_SLOW_SPEED_MULTIPLIER,
             })
           ) {
+            stickyFxIntensity = Math.max(
+              stickyFxIntensity,
+              entry.rageActive ? SKILL2_RAGE_FX_MULTIPLIER : 1
+            );
             stickyFxRemaining = Math.max(stickyFxRemaining, SKILL2_SLOW_DURATION);
             ensureStickyFx(player);
           }
         }
 
         if (thrownState.age >= SKILL2_OUTBOUND_MAX_DURATION) {
+          emitPendingRageSkill1Bursts({
+            thrownState,
+            spawnSkill1SingleBurst,
+            gameEnded,
+            forceAll: true,
+          });
           thrownState.returning = true;
         }
       }
@@ -645,14 +1082,23 @@ export const createMochiGeneralSkill2Runtime = (
         gameEnded,
       });
     },
-    update: ({ delta, player, applyDamage, applyStatusEffect, gameEnded }) => {
+    update: ({
+      delta,
+      player,
+      applyDamage,
+      applyStatusEffect,
+      gameEnded,
+      spawnSkill1SingleBurst,
+    }) => {
       updateThrowFx(delta);
+      updateMeteorTrailFx(delta);
       updateThrownMochiStates({
         delta,
         player,
         applyDamage,
         applyStatusEffect,
         gameEnded,
+        spawnSkill1SingleBurst,
       });
       updateStickyDebuffFx({
         delta,
@@ -672,6 +1118,9 @@ export const createMochiGeneralSkill2Runtime = (
       for (let i = throwShockwaves.length - 1; i >= 0; i -= 1) {
         removeThrowShockwaveAt(i);
       }
+      for (let i = meteorTrailParticles.length - 1; i >= 0; i -= 1) {
+        removeMeteorTrailParticleAt(i);
+      }
       disposeStickyFx();
       proxyGeometry.dispose();
       proxyMaterialTemplate.dispose();
@@ -685,7 +1134,11 @@ export const createMochiGeneralSkill2Runtime = (
       throwFlashMaterialTemplate.dispose();
       throwShockwaveGeometry.dispose();
       throwShockwaveMaterialTemplate.dispose();
+      meteorTrailGeometry.dispose();
+      meteorTrailWhiteMaterialTemplate.dispose();
+      meteorTrailBlackMaterialTemplate.dispose();
       stickyFxRemaining = 0;
+      stickyFxIntensity = 1;
     },
   };
 };

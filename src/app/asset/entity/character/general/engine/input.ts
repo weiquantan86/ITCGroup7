@@ -62,7 +62,10 @@ export const bindPlayerInput = ({
   onSecondaryDown,
   onSkill,
 }: BindPlayerInputArgs) => {
+  const maxYawStepPerEvent = 0.28;
+  const maxPitchStepPerEvent = 0.2;
   let isPointerLockRequested = false;
+  let ignoreMouseMoveCount = 0;
 
   const handlePointerDown = (event: PointerEvent) => {
     if (event.button === 0) {
@@ -100,7 +103,11 @@ export const bindPlayerInput = ({
     const isLocked = document.pointerLockElement === mount;
     if (!isLocked) {
       isPointerLockRequested = false;
+      ignoreMouseMoveCount = 0;
       onPrimaryCancel();
+    } else {
+      // Ignore the first mouse delta after lock to avoid occasional jump spikes.
+      ignoreMouseMoveCount = 1;
     }
     mount.style.cursor = isLocked ? "none" : "";
   };
@@ -111,9 +118,18 @@ export const bindPlayerInput = ({
 
   const handleMouseMove = (event: MouseEvent) => {
     if (document.pointerLockElement !== mount) return;
-    lookState.yaw -= event.movementX * lookState.sensitivity;
+    if (ignoreMouseMoveCount > 0) {
+      ignoreMouseMoveCount -= 1;
+      return;
+    }
+    const safeSensitivity = Math.max(0.000001, Math.abs(lookState.sensitivity));
+    const maxMovementX = maxYawStepPerEvent / safeSensitivity;
+    const maxMovementY = maxPitchStepPerEvent / safeSensitivity;
+    const movementX = THREE.MathUtils.clamp(event.movementX, -maxMovementX, maxMovementX);
+    const movementY = THREE.MathUtils.clamp(event.movementY, -maxMovementY, maxMovementY);
+    lookState.yaw -= movementX * lookState.sensitivity;
     lookState.pitch = THREE.MathUtils.clamp(
-      lookState.pitch - event.movementY * lookState.sensitivity,
+      lookState.pitch - movementY * lookState.sensitivity,
       lookState.minPitch,
       lookState.maxPitch
     );

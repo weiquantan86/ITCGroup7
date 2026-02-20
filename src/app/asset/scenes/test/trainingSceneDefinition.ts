@@ -359,7 +359,15 @@ export const createTrainingScene = (
   trackMesh(triggerPad);
 
   const playerSpawn = new THREE.Vector3(0, groundY, 6);
-  const testerSpawn = new THREE.Vector3(0, groundY, bounds.minZ + 5.4);
+  const testerGroundOffsetY = 0.02;
+  const testerDropHeight = 1.2;
+  const testerFallGravity = 22;
+  const testerMaxFallSpeed = 24;
+  const testerSpawn = new THREE.Vector3(
+    0,
+    groundY + testerGroundOffsetY,
+    bounds.minZ + 5.4
+  );
   const testerDirection = new THREE.Vector3()
     .subVectors(playerSpawn, testerSpawn)
     .setY(0);
@@ -367,6 +375,7 @@ export const createTrainingScene = (
 
   const testerAnchor = new THREE.Group();
   testerAnchor.position.copy(testerSpawn);
+  testerAnchor.position.y += testerDropHeight;
   testerAnchor.rotation.y = testerYaw;
   trainingGroup.add(testerAnchor);
 
@@ -447,7 +456,37 @@ export const createTrainingScene = (
   trackMaterial(testerExplosionMaterial);
   const testerExplosionOrigin = new THREE.Vector3();
   const testerExplosionDirection = new THREE.Vector3();
+  const testerAnchorWorldPosition = new THREE.Vector3();
+  let testerVerticalVelocity = 0;
   let testerRespawnAt = 0;
+
+  const spawnTesterFromAir = () => {
+    testerAnchor.position.copy(testerSpawn);
+    testerAnchor.position.y += testerDropHeight;
+    testerVerticalVelocity = 0;
+  };
+
+  const updateTesterGravity = (delta: number) => {
+    if (!testerAnchor.visible) return;
+    const groundLevel = testerSpawn.y;
+    if (testerAnchor.position.y <= groundLevel + 0.0001) {
+      testerAnchor.position.y = groundLevel;
+      if (testerVerticalVelocity < 0) testerVerticalVelocity = 0;
+      return;
+    }
+    testerVerticalVelocity = Math.max(
+      testerVerticalVelocity - testerFallGravity * delta,
+      -testerMaxFallSpeed
+    );
+    testerAnchor.position.y = Math.max(
+      groundLevel,
+      testerAnchor.position.y + testerVerticalVelocity * delta
+    );
+    if (testerAnchor.position.y <= groundLevel + 0.0001) {
+      testerAnchor.position.y = groundLevel;
+      testerVerticalVelocity = 0;
+    }
+  };
 
   const spawnTesterExplosion = (direction: THREE.Vector3) => {
     testerExplosionOrigin.copy(testerSpawn);
@@ -647,7 +686,7 @@ export const createTrainingScene = (
     }
     if (testerRespawnAt <= 0 || now < testerRespawnAt) return;
     testerMonster.revive(1);
-    testerAnchor.position.copy(testerSpawn);
+    spawnTesterFromAir();
     testerAnchor.visible = true;
     testerRespawnAt = 0;
     emitTesterState();
@@ -826,6 +865,7 @@ export const createTrainingScene = (
     applyDamage,
     projectileBlockers,
   }: PlayerWorldTickArgs) => {
+    updateTesterGravity(delta);
     updateTesterLifecycle(now, player);
 
     if (targetBroken && now >= targetRespawnAt) {
@@ -860,8 +900,9 @@ export const createTrainingScene = (
     }
     launcherCooldownUntil = 0;
     testerRespawnAt = 0;
+    testerVerticalVelocity = 0;
     testerMonster.revive(1);
-    testerAnchor.position.copy(testerSpawn);
+    spawnTesterFromAir();
     testerAnchor.visible = true;
     clearTrainingTransientObjects();
     emitTesterState();
@@ -889,7 +930,10 @@ export const createTrainingScene = (
       testerModel.updateMatrixWorld(true);
 
       modelBounds.setFromObject(testerModel);
-      testerModel.position.y += groundY - modelBounds.min.y;
+      // `setFromObject` is in world space; convert minY back to tester-local before grounding.
+      testerAnchor.getWorldPosition(testerAnchorWorldPosition);
+      const localMinY = modelBounds.min.y - testerAnchorWorldPosition.y;
+      testerModel.position.y -= localMinY;
       testerModel.updateMatrixWorld(true);
 
       testerAnchor.remove(testerFallback);

@@ -68,6 +68,7 @@ export const createPlayerFrameUpdater = ({
   const miniOrbitYawRotateSpeed = 1.8;
   const miniOrbitPitchRotateSpeed = 1.35;
   const miniOrbitDistanceAdjustSpeed = 3.2;
+  const maxFacingTurnRate = Math.PI * 7;
   const miniOrbitPitchMinOffset = -0.85;
   const miniOrbitPitchMaxOffset = 0.85;
   const miniOrbitDistanceMinOffset = -2;
@@ -185,7 +186,17 @@ export const createPlayerFrameUpdater = ({
     }
 
     if (!runtime?.isFacingLocked?.()) {
-      avatar.rotation.y = lookState.yaw;
+      const currentYaw = avatar.rotation.y;
+      const targetYaw = lookState.yaw;
+      const yawDelta =
+        THREE.MathUtils.euclideanModulo(targetYaw - currentYaw + Math.PI, Math.PI * 2) -
+        Math.PI;
+      const maxStep = Math.max(0, maxFacingTurnRate * delta);
+      if (Math.abs(yawDelta) <= maxStep) {
+        avatar.rotation.y = targetYaw;
+      } else {
+        avatar.rotation.y = currentYaw + Math.sign(yawDelta) * maxStep;
+      }
     }
 
     const headPitch = THREE.MathUtils.clamp(-lookState.pitch, -0.8, 0.8);
