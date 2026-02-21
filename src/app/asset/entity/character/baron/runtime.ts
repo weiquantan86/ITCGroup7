@@ -783,7 +783,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     minReflectSpeedMultiplier: 1.05,
     maxReflectSpeedMultiplier: 2.35,
     energyGainOnReflect: 15,
-    energyGainOnHit: 30,
+    energyGainOnHit: 10,
   };
   const chargedSwordWaveConfig = {
     fullChargeThreshold: 0.999,
@@ -965,6 +965,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     preparingHandForwardMin: 0.02,
     preparingHandForwardMax: 0.1,
     preparingHeldScaleBoost: 1.4,
+    eShurikenHomingRadius: 5,
+    eShurikenHomingTurnRate: 4.2,
   };
   const cloneState = {
     active: false,
@@ -1036,8 +1038,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     speed: 20,
     lifetime: 0.62,
     damage: 17,
-    radius: 0.26,
-    targetHitRadius: 0.32,
+    radius: 0.27,
+    targetHitRadius: 0,
     forwardSpawn: 0.34,
     lateralSpawn: 0.28,
     verticalSpawn: 0,
@@ -1093,6 +1095,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const chargedSwordWaveOrigin = new THREE.Vector3();
   const chargedSwordWaveDirection = new THREE.Vector3();
   const chargedSwordWaveVelocityDirection = new THREE.Vector3();
+  const reflectedProjectileDirection = new THREE.Vector3();
+  const reflectedProjectileHitPoint = new THREE.Vector3();
 
   const captureArmNeutralIfNeeded = (
     rightArm: THREE.Object3D,
@@ -2528,6 +2532,64 @@ export const createRuntime: CharacterRuntimeFactory = ({
     );
   };
 
+  const convertReflectedProjectileToChargedWave = ({
+    projectile,
+    nextPosition,
+    hitPoint,
+    reflectedDirection,
+  }: {
+    projectile: {
+      velocity: THREE.Vector3;
+      radius: number;
+    };
+    nextPosition: THREE.Vector3;
+    hitPoint: THREE.Vector3;
+    reflectedDirection: THREE.Vector3;
+  }) => {
+    launchReflectedChargedSwordWave(hitPoint, reflectedDirection);
+
+    const mutableProjectile = projectile as typeof projectile & {
+      life?: number;
+      maxLife?: number;
+      damage?: number;
+      targetHitRadius?: number;
+      splitOnImpact?: boolean;
+      explodeOnTargetHit?: boolean;
+      explodeOnWorldHit?: boolean;
+      explodeOnExpire?: boolean;
+      grantEnergyOnTargetHit?: boolean;
+      grantManaOnTargetHit?: boolean;
+      removeOnTargetHit?: boolean;
+      removeOnWorldHit?: boolean;
+      energyGainOnHit?: number | null;
+      manaGainOnHit?: number | null;
+    };
+    mutableProjectile.damage = 0;
+    mutableProjectile.targetHitRadius = 0;
+    mutableProjectile.splitOnImpact = false;
+    mutableProjectile.explodeOnTargetHit = false;
+    mutableProjectile.explodeOnWorldHit = false;
+    mutableProjectile.explodeOnExpire = false;
+    mutableProjectile.grantEnergyOnTargetHit = false;
+    mutableProjectile.grantManaOnTargetHit = false;
+    mutableProjectile.removeOnTargetHit = true;
+    mutableProjectile.removeOnWorldHit = true;
+    mutableProjectile.energyGainOnHit = 0;
+    mutableProjectile.manaGainOnHit = 0;
+
+    projectile.velocity.set(0, -220, 0);
+    projectile.radius = Math.min(projectile.radius, 0.05);
+    nextPosition.copy(hitPoint).addScaledVector(reflectedDirection, 0.05);
+    nextPosition.y = Math.min(nextPosition.y, avatar.position.y - 8);
+
+    if (
+      typeof mutableProjectile.life === "number" &&
+      typeof mutableProjectile.maxLife === "number"
+    ) {
+      mutableProjectile.life = mutableProjectile.maxLife;
+    }
+  };
+
   const handleProjectileBlockHit: NonNullable<
     CharacterRuntime["handleProjectileBlockHit"]
   > = ({
@@ -2549,8 +2611,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
         nextPosition,
         velocity: projectile.velocity,
         radius: projectile.radius,
+        outDirection: reflectedProjectileDirection,
       });
       if (reflected) {
+        reflectedProjectileHitPoint.copy(blockerHit.point);
+        convertReflectedProjectileToChargedWave({
+          projectile,
+          nextPosition,
+          hitPoint: reflectedProjectileHitPoint,
+          reflectedDirection: reflectedProjectileDirection,
+        });
         return true;
       }
     }
@@ -2569,8 +2639,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
         nextPosition,
         velocity: projectile.velocity,
         radius: projectile.radius,
+        outDirection: reflectedProjectileDirection,
       });
       if (reflected) {
+        reflectedProjectileHitPoint.copy(blockerHit.point);
+        convertReflectedProjectileToChargedWave({
+          projectile,
+          nextPosition,
+          hitPoint: reflectedProjectileHitPoint,
+          reflectedDirection: reflectedProjectileDirection,
+        });
         return true;
       }
       return true;
@@ -2927,9 +3005,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
       .copy(skillEOrigin)
       .addScaledVector(skillEBaseDirection, targetDistance);
     const shotScale = skillEVolley.shurikenScale * 2;
-    const shotDamage = Math.round(skillEConfig.damage * 1.5);
+    const shotDamage = 50;
     const shotRadius = skillEVolley.radius * 2;
     const shotHitRadius = skillEVolley.targetHitRadius * 2;
+    const shotExplosionDamage = 85;
+    const shotExplosionMinDamage = 40;
     const shotSpeed = skillEVolley.speed * 0.96;
     const shotLifetime = skillEVolley.lifetime * 1.12;
 
@@ -2977,6 +3057,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       resetShurikenTrail(entry, skillEShotOrigin);
 
       const currentDirection = new THREE.Vector3();
+      const homingDirection = new THREE.Vector3();
       const trailHead = new THREE.Vector3();
       fireProjectile({
         projectileType: "shuriken",
@@ -2989,19 +3070,42 @@ export const createRuntime: CharacterRuntimeFactory = ({
         targetHitRadius: shotHitRadius,
         damage: shotDamage,
         energyGainOnHit: 0,
-        splitOnImpact: false,
+        splitOnImpact: true,
+        explosionRadius: skillEVolley.explosionRadius,
+        explosionDamage: shotExplosionDamage,
+        explosionMinDamage: shotExplosionMinDamage,
         explodeOnTargetHit: false,
-        explodeOnWorldHit: false,
+        explodeOnWorldHit: true,
         explodeOnExpire: false,
         removeOnTargetHit: true,
         removeOnWorldHit: true,
         lifecycle: {
-          onTargetHit: ({ now, point, direction }) => {
+          onTargetHit: ({ now, point, direction, triggerExplosion }) => {
             launchSkillEHitCutWave(now, point, direction, 1.22);
+            triggerExplosion(null);
           },
-          applyForces: ({ velocity, delta }) => {
+          applyForces: ({ velocity, position, delta, findNearestTarget }) => {
             if (velocity.lengthSq() < 0.000001) return;
             currentDirection.copy(velocity).normalize();
+            const nearestTarget = findNearestTarget?.({
+              center: position,
+              radius: cloneConfig.eShurikenHomingRadius,
+            });
+            if (nearestTarget) {
+              homingDirection.copy(nearestTarget.point).sub(position);
+              if (homingDirection.lengthSq() > 0.000001) {
+                homingDirection.normalize();
+                const steer =
+                  1 -
+                  Math.exp(
+                    -Math.max(0.01, cloneConfig.eShurikenHomingTurnRate) * delta
+                  );
+                currentDirection
+                  .lerp(homingDirection, THREE.MathUtils.clamp(steer, 0, 1))
+                  .normalize();
+              }
+            }
+            velocity.copy(currentDirection).multiplyScalar(shotSpeed);
             entry.spinPhase += entry.spinRate * delta;
             entry.mesh.quaternion.setFromUnitVectors(
               projectileForward,
@@ -3156,37 +3260,31 @@ export const createRuntime: CharacterRuntimeFactory = ({
     applyMana?.(manaGainOnReflectOrBasicDamage);
   };
 
-  const fireChargedSwordWave = (baseDamage: number) => {
+  const launchChargedSwordWaveProjectile = ({
+    origin,
+    direction,
+    baseDamage,
+  }: {
+    origin: THREE.Vector3;
+    direction: THREE.Vector3;
+    baseDamage: number;
+  }) => {
     if (!fireProjectile) return;
     const resolvedBaseDamage = Math.max(1, Math.round(baseDamage));
     const entry = acquireChargedSwordWave();
-
-    chargedSwordWaveDirection.copy(skillEAimDirection);
-    chargedSwordWaveDirection.y = 0;
-    if (chargedSwordWaveDirection.lengthSq() < 0.000001) {
-      chargedSwordWaveDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
-      chargedSwordWaveDirection.y = 0;
-    }
-    if (chargedSwordWaveDirection.lengthSq() < 0.000001) {
-      chargedSwordWaveDirection.set(0, 0, 1);
+    const resolvedDirection = direction.clone();
+    if (resolvedDirection.lengthSq() < 0.000001) {
+      resolvedDirection.set(0, 0, 1);
     } else {
-      chargedSwordWaveDirection.normalize();
+      resolvedDirection.normalize();
     }
-
-    avatar.updateMatrixWorld(true);
-    avatar.getWorldPosition(chargedSwordWaveOrigin);
-    chargedSwordWaveOrigin.y += chargedSwordWaveConfig.spawnHeight;
-    chargedSwordWaveOrigin.addScaledVector(
-      chargedSwordWaveDirection,
-      chargedSwordWaveConfig.spawnForward
-    );
 
     entry.mesh.visible = true;
-    entry.mesh.position.copy(chargedSwordWaveOrigin);
+    entry.mesh.position.copy(origin);
     entry.mesh.scale.setScalar(1.02);
     entry.mesh.quaternion.setFromUnitVectors(
       projectileForward,
-      chargedSwordWaveDirection
+      resolvedDirection
     );
     entry.material.opacity = 0.78;
     entry.material.emissiveIntensity = 1.34;
@@ -3195,8 +3293,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     fireProjectile({
       projectileType: "shuriken",
       mesh: entry.mesh,
-      origin: chargedSwordWaveOrigin,
-      direction: chargedSwordWaveDirection,
+      origin,
+      direction: resolvedDirection,
       speed: chargedSwordWaveConfig.speed,
       lifetime: chargedSwordWaveConfig.lifetime,
       gravity: 0,
@@ -3237,6 +3335,58 @@ export const createRuntime: CharacterRuntimeFactory = ({
           entry.material.emissiveIntensity = 1.2;
         },
       },
+    });
+  };
+
+  const launchReflectedChargedSwordWave = (
+    hitPoint: THREE.Vector3,
+    reflectedDirection: THREE.Vector3
+  ) => {
+    chargedSwordWaveDirection.copy(reflectedDirection);
+    if (chargedSwordWaveDirection.lengthSq() < 0.000001) {
+      chargedSwordWaveDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
+    }
+    if (chargedSwordWaveDirection.lengthSq() < 0.000001) {
+      chargedSwordWaveDirection.set(0, 0, 1);
+    } else {
+      chargedSwordWaveDirection.normalize();
+    }
+    const spawnOffset = Math.max(0.18, chargedSwordWaveConfig.radius * 0.7);
+    chargedSwordWaveOrigin
+      .copy(hitPoint)
+      .addScaledVector(chargedSwordWaveDirection, spawnOffset);
+    launchChargedSwordWaveProjectile({
+      origin: chargedSwordWaveOrigin,
+      direction: chargedSwordWaveDirection,
+      baseDamage: primarySwingConfig.maxDamage,
+    });
+  };
+
+  const fireChargedSwordWave = (baseDamage: number) => {
+    chargedSwordWaveDirection.copy(skillEAimDirection);
+    chargedSwordWaveDirection.y = 0;
+    if (chargedSwordWaveDirection.lengthSq() < 0.000001) {
+      chargedSwordWaveDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
+      chargedSwordWaveDirection.y = 0;
+    }
+    if (chargedSwordWaveDirection.lengthSq() < 0.000001) {
+      chargedSwordWaveDirection.set(0, 0, 1);
+    } else {
+      chargedSwordWaveDirection.normalize();
+    }
+
+    avatar.updateMatrixWorld(true);
+    avatar.getWorldPosition(chargedSwordWaveOrigin);
+    chargedSwordWaveOrigin.y += chargedSwordWaveConfig.spawnHeight;
+    chargedSwordWaveOrigin.addScaledVector(
+      chargedSwordWaveDirection,
+      chargedSwordWaveConfig.spawnForward
+    );
+
+    launchChargedSwordWaveProjectile({
+      origin: chargedSwordWaveOrigin,
+      direction: chargedSwordWaveDirection,
+      baseDamage,
     });
   };
 
@@ -3340,6 +3490,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }) ?? 0;
     if (hitCount > 0) {
       applyEnergy?.(hitCount * primarySwingConfig.energyGainOnHit);
+      applyMana?.(hitCount * manaGainOnReflectOrBasicDamage);
     }
     if (ratio >= chargedSwordWaveConfig.fullChargeThreshold) {
       fireChargedSwordWave(damage);
