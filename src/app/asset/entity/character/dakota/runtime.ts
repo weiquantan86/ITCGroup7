@@ -1813,10 +1813,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
   return new CharacterRuntimeObject({
     setProfile: baseRuntime.setProfile,
     triggerSlash: baseRuntime.triggerSlash,
-    handleRightClick: (facing) => {
-      if (chargeState.isCharging) return;
-      baseRuntime.handleRightClick(facing);
-    },
     handlePrimaryDown: beginCharge,
     handlePrimaryUp: releaseCharge,
     handlePrimaryCancel: cancelCharge,

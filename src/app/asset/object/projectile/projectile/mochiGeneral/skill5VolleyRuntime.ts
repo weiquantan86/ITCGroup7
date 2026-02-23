@@ -41,6 +41,9 @@ const SKILL5_PROJECTILE_TARGET_HEIGHT_OFFSET = 1;
 const SKILL5_PROJECTILE_SPREAD = 0.08;
 const SKILL5_PROJECTILE_SCALE_MIN = 0.94;
 const SKILL5_PROJECTILE_SCALE_MAX = 1.18;
+const SKILL5_SHADOW_ORB_COLOR = 0x08070d;
+const SKILL5_SHADOW_ORB_EMISSIVE = 0x2a1840;
+const SKILL5_SHADOW_ORB_EMISSIVE_INTENSITY = 1.34;
 
 const volleyOriginWorld = new THREE.Vector3();
 const volleyTargetWorld = new THREE.Vector3();
@@ -52,11 +55,11 @@ export const createMochiGeneralSkill5VolleyRuntime = (
 ): MochiGeneralSkill5VolleyRuntime => {
   const projectileGeometry = new THREE.SphereGeometry(0.54, 11, 9);
   const projectileMaterialTemplate = new THREE.MeshStandardMaterial({
-    color: 0xfff1d6,
-    roughness: 0.36,
+    color: SKILL5_SHADOW_ORB_COLOR,
+    roughness: 0.3,
     metalness: 0.08,
-    emissive: 0xb91c1c,
-    emissiveIntensity: 0.52,
+    emissive: SKILL5_SHADOW_ORB_EMISSIVE,
+    emissiveIntensity: SKILL5_SHADOW_ORB_EMISSIVE_INTENSITY,
   });
   const projectiles: MochiGeneralSkill5Projectile[] = [];
   const projectileUpdater = new LinearProjectileUpdater();

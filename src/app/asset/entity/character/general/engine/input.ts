@@ -19,7 +19,6 @@ type BindPlayerInputArgs = {
   onPrimaryDown: () => void;
   onPrimaryUp: () => void;
   onPrimaryCancel: () => void;
-  onSecondaryDown: () => void;
   onSkill: (skillKey: SkillKey, now: number) => void;
 };
 
@@ -59,7 +58,6 @@ export const bindPlayerInput = ({
   onPrimaryDown,
   onPrimaryUp,
   onPrimaryCancel,
-  onSecondaryDown,
   onSkill,
 }: BindPlayerInputArgs) => {
   const maxYawStepPerEvent = 0.28;
@@ -86,10 +84,6 @@ export const bindPlayerInput = ({
       }
       onPrimaryDown();
       return;
-    }
-    if (event.button === 2) {
-      event.preventDefault();
-      onSecondaryDown();
     }
   };
 
@@ -135,10 +129,6 @@ export const bindPlayerInput = ({
     );
   };
 
-  const handleContextMenu = (event: Event) => {
-    event.preventDefault();
-  };
-
   const handleKeyDown = (event: KeyboardEvent) => {
     const mapped = keyMap[event.code];
     if (mapped) {
@@ -167,7 +157,6 @@ export const bindPlayerInput = ({
   };
 
   mount.addEventListener("pointerdown", handlePointerDown);
-  mount.addEventListener("contextmenu", handleContextMenu);
   window.addEventListener("pointerup", handlePointerUp);
   document.addEventListener("pointerlockchange", handlePointerLockChange);
   document.addEventListener("pointerlockerror", handlePointerLockError);
@@ -179,7 +168,6 @@ export const bindPlayerInput = ({
   return {
     dispose: () => {
       mount.removeEventListener("pointerdown", handlePointerDown);
-      mount.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener("pointerlockchange", handlePointerLockChange);
       document.removeEventListener("pointerlockerror", handlePointerLockError);
       document.removeEventListener("mousemove", handleMouseMove);

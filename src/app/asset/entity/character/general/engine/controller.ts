@@ -665,18 +665,6 @@ export const createPlayer = ({
     });
   };
 
-  const triggerPrimaryAttack = () => {
-    if (!characterRuntime) return;
-    if (isRuntimeBasicAttackLocked()) return;
-    const aim = projectileSystem.resolveCameraAim({ camera });
-    characterRuntime.handleRightClick({
-      yaw: lookState.yaw,
-      pitch: lookState.pitch,
-      aimWorld: aim.point,
-      aimOriginWorld: aim.origin,
-    });
-  };
-
   const inputBindings = bindPlayerInput({
     mount,
     pressedKeys,
@@ -699,10 +687,6 @@ export const createPlayer = ({
     },
     onPrimaryCancel: () => {
       characterRuntime?.handlePrimaryCancel?.();
-    },
-    onSecondaryDown: () => {
-      if (isRuntimeBasicAttackLocked()) return;
-      triggerPrimaryAttack();
     },
     onSkill: (skillKey, now) => {
       skillState.tryUseSkill(skillKey, now);

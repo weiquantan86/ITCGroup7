@@ -38,9 +38,6 @@ Description：...`,
       },
     },
   },
-  controls: {
-    rightClick: "slash",
-  },
   slash: {
     enabled: true,
     color: 0xeab308,

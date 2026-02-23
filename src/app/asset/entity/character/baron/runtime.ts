@@ -3244,22 +3244,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillEVolley.explosionDamage = skillEConfig.explosionDamage;
   };
 
-  const applyBasicSlashHit = () => {
-    const hitCount =
-      performMeleeAttack?.({
-        damage: 18,
-        maxDistance: 8,
-        hitRadius: 0.35,
-        maxHits: 1,
-      }) ?? 0;
-    if (hitCount <= 0) return;
-    const energyGainOnHit = Math.max(0, profile.energy?.hitGain ?? 0);
-    if (energyGainOnHit > 0) {
-      applyEnergy?.(energyGainOnHit);
-    }
-    applyMana?.(manaGainOnReflectOrBasicDamage);
-  };
-
   const launchChargedSwordWaveProjectile = ({
     origin,
     direction,
@@ -3388,12 +3372,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
       direction: chargedSwordWaveDirection,
       baseDamage,
     });
-  };
-
-  const handleRightClick: CharacterRuntime["handleRightClick"] = (facing) => {
-    if (skillRState.active) return;
-    baseRuntime.handleRightClick(facing);
-    applyBasicSlashHit();
   };
 
   const getMovementSpeedMultiplier = () =>
@@ -3578,7 +3556,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
   return new CharacterRuntimeObject({
     setProfile: baseRuntime.setProfile,
     triggerSlash: baseRuntime.triggerSlash,
-    handleRightClick,
     handlePrimaryDown: beginCharge,
     handlePrimaryUp: releaseCharge,
     handlePrimaryCancel: cancelCharge,

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { MochiGeneralCombatEntry } from "./combatBehavior";
 import type { StatusEffectApplication } from "../../character/general/types";
+import { createMochiGeneralShadowChargeFx } from "./shadowChargeFx";
 
 type ThrownMochiState = {
   entry: MochiGeneralCombatEntry;
@@ -77,6 +78,12 @@ type MeteorTrailParticle = {
   endScale: number;
 };
 
+type PendingRageSkill1Burst = {
+  entry: MochiGeneralCombatEntry;
+  origin: THREE.Vector3;
+  fireAtMs: number;
+};
+
 export type MochiGeneralSkill2Runtime = {
   onBossTick: (args: {
     entry: MochiGeneralCombatEntry;
@@ -133,6 +140,8 @@ const SKILL2_RAGE_FX_MULTIPLIER = 1.4;
 const SKILL2_RAGE_SKILL1_SINGLE_BURST_COUNT = 2;
 const SKILL2_RAGE_SKILL1_SINGLE_BURST_TRIGGER_MIN_RATIO = 0.16;
 const SKILL2_RAGE_SKILL1_SINGLE_BURST_TRIGGER_MAX_RATIO = 0.68;
+const SKILL2_RAGE_SKILL1_PRE_FIRE_CHARGE_MS = 120;
+const SKILL2_RAGE_SKILL1_PRE_FIRE_STAGGER_MS = 38;
 const SKILL2_TRACKING_FLOW_SPEED = 8.2;
 const SKILL2_TRACKING_FLOW_POSITION_FREQUENCY = 6.4;
 const SKILL2_TRACKING_FLOW_EMISSIVE_MIN = 0.14;
@@ -153,6 +162,7 @@ const rageSkill1BurstOrigin = new THREE.Vector3();
 export const createMochiGeneralSkill2Runtime = (
   scene: THREE.Scene
 ): MochiGeneralSkill2Runtime => {
+  const shadowChargeFx = createMochiGeneralShadowChargeFx(scene);
   const proxyGeometry = new THREE.SphereGeometry(SKILL2_PROXY_RADIUS, 12, 10);
   const proxyMaterialTemplate = new THREE.MeshStandardMaterial({
     color: 0xfbf2d7,
@@ -240,6 +250,7 @@ export const createMochiGeneralSkill2Runtime = (
   });
 
   const thrownStates = new Map<MochiGeneralCombatEntry, ThrownMochiState>();
+  const pendingRageSkill1Bursts: PendingRageSkill1Burst[] = [];
   const throwFlashParticles: ThrowFlashParticle[] = [];
   const throwShockwaves: ThrowShockwave[] = [];
   const meteorTrailParticles: MeteorTrailParticle[] = [];
@@ -772,7 +783,7 @@ export const createMochiGeneralSkill2Runtime = (
     return triggerTimes;
   };
 
-  const emitPendingRageSkill1Bursts = ({
+  const schedulePendingRageSkill1Bursts = ({
     thrownState,
     spawnSkill1SingleBurst,
     gameEnded,
@@ -787,7 +798,17 @@ export const createMochiGeneralSkill2Runtime = (
     gameEnded: boolean;
     forceAll: boolean;
   }) => {
-    if (!spawnSkill1SingleBurst || !thrownState.entry.rageActive) return;
+    if (
+      !spawnSkill1SingleBurst ||
+      !thrownState.entry.rageActive ||
+      gameEnded ||
+      !thrownState.entry.monster.isAlive
+    ) {
+      return;
+    }
+
+    let queuedCount = 0;
+    const queueStartAtMs = performance.now() + SKILL2_RAGE_SKILL1_PRE_FIRE_CHARGE_MS;
 
     while (
       thrownState.rageSkill1BurstFiredCount <
@@ -799,12 +820,64 @@ export const createMochiGeneralSkill2Runtime = (
         ];
       if (!forceAll && thrownState.age < nextTriggerTime) break;
       rageSkill1BurstOrigin.copy(thrownState.object.position);
-      spawnSkill1SingleBurst({
+      shadowChargeFx.spawnBurst(rageSkill1BurstOrigin, {
+        count: thrownState.entry.rageActive ? 14 : 10,
+        radiusScale: 0.92,
+        inwardSpeedScale: 1.18,
+        lifeScale: 1.08,
+      });
+      pendingRageSkill1Bursts.push({
         entry: thrownState.entry,
-        origin: rageSkill1BurstOrigin,
-        gameEnded,
+        origin: rageSkill1BurstOrigin.clone(),
+        fireAtMs:
+          queueStartAtMs + queuedCount * SKILL2_RAGE_SKILL1_PRE_FIRE_STAGGER_MS,
       });
       thrownState.rageSkill1BurstFiredCount += 1;
+      queuedCount += 1;
+    }
+  };
+
+  const processPendingRageSkill1Bursts = ({
+    spawnSkill1SingleBurst,
+    gameEnded,
+  }: {
+    spawnSkill1SingleBurst?: (args: {
+      entry: MochiGeneralCombatEntry;
+      origin: THREE.Vector3;
+      gameEnded: boolean;
+    }) => void;
+    gameEnded: boolean;
+  }) => {
+    if (gameEnded) {
+      pendingRageSkill1Bursts.length = 0;
+      return;
+    }
+    if (!spawnSkill1SingleBurst) return;
+
+    const nowMs = performance.now();
+    for (let i = pendingRageSkill1Bursts.length - 1; i >= 0; i -= 1) {
+      const pendingBurst = pendingRageSkill1Bursts[i];
+      if (!pendingBurst.entry.monster.isAlive) {
+        pendingRageSkill1Bursts.splice(i, 1);
+        continue;
+      }
+      if (nowMs < pendingBurst.fireAtMs) continue;
+      spawnSkill1SingleBurst({
+        entry: pendingBurst.entry,
+        origin: pendingBurst.origin,
+        gameEnded,
+      });
+      pendingRageSkill1Bursts.splice(i, 1);
+    }
+  };
+
+  const removePendingRageSkill1BurstsForEntry = (
+    entry: MochiGeneralCombatEntry
+  ) => {
+    for (let i = pendingRageSkill1Bursts.length - 1; i >= 0; i -= 1) {
+      if (pendingRageSkill1Bursts[i]?.entry === entry) {
+        pendingRageSkill1Bursts.splice(i, 1);
+      }
     }
   };
 
@@ -974,7 +1047,7 @@ export const createMochiGeneralSkill2Runtime = (
         updateTrackingFlowFx(thrownState, delta, entry.rageActive);
         spawnMeteorTrailParticles(thrownState, entry, delta);
 
-        emitPendingRageSkill1Bursts({
+        schedulePendingRageSkill1Bursts({
           thrownState,
           spawnSkill1SingleBurst,
           gameEnded,
@@ -987,7 +1060,7 @@ export const createMochiGeneralSkill2Runtime = (
           objectPosition.distanceToSquared(playerWorldProbe) <=
             collisionDistance * collisionDistance
         ) {
-          emitPendingRageSkill1Bursts({
+          schedulePendingRageSkill1Bursts({
             thrownState,
             spawnSkill1SingleBurst,
             gameEnded,
@@ -1015,7 +1088,7 @@ export const createMochiGeneralSkill2Runtime = (
         }
 
         if (thrownState.age >= SKILL2_OUTBOUND_MAX_DURATION) {
-          emitPendingRageSkill1Bursts({
+          schedulePendingRageSkill1Bursts({
             thrownState,
             spawnSkill1SingleBurst,
             gameEnded,
@@ -1092,6 +1165,7 @@ export const createMochiGeneralSkill2Runtime = (
     }) => {
       updateThrowFx(delta);
       updateMeteorTrailFx(delta);
+      shadowChargeFx.update(delta);
       updateThrownMochiStates({
         delta,
         player,
@@ -1100,18 +1174,24 @@ export const createMochiGeneralSkill2Runtime = (
         gameEnded,
         spawnSkill1SingleBurst,
       });
+      processPendingRageSkill1Bursts({
+        spawnSkill1SingleBurst,
+        gameEnded,
+      });
       updateStickyDebuffFx({
         delta,
       });
     },
     onBossRemoved: (entry) => {
       clearThrownState(entry);
+      removePendingRageSkill1BurstsForEntry(entry);
     },
     dispose: () => {
       const activeEntries = Array.from(thrownStates.keys());
       for (let i = 0; i < activeEntries.length; i += 1) {
         clearThrownState(activeEntries[i]);
       }
+      pendingRageSkill1Bursts.length = 0;
       for (let i = throwFlashParticles.length - 1; i >= 0; i -= 1) {
         removeThrowFlashParticleAt(i);
       }
@@ -1137,6 +1217,7 @@ export const createMochiGeneralSkill2Runtime = (
       meteorTrailGeometry.dispose();
       meteorTrailWhiteMaterialTemplate.dispose();
       meteorTrailBlackMaterialTemplate.dispose();
+      shadowChargeFx.dispose();
       stickyFxRemaining = 0;
       stickyFxIntensity = 1;
     },

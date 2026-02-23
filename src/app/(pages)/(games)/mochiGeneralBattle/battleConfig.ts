@@ -45,6 +45,10 @@ export interface MochiSoldierSurgeState {
   defeatedMonsters: number;
   elapsedSeconds: number;
   score: number;
+  damageScore: number;
+  hitPenaltyCount: number;
+  hitPenaltyScore: number;
+  victoryTimeBonusScore: number;
   playerDead: boolean;
   gameEnded: boolean;
   victory: boolean;
@@ -57,6 +61,10 @@ export const createInitialMochiSoldierSurgeState = (): MochiSoldierSurgeState =>
   defeatedMonsters: 0,
   elapsedSeconds: 0,
   score: 0,
+  damageScore: 0,
+  hitPenaltyCount: 0,
+  hitPenaltyScore: 0,
+  victoryTimeBonusScore: 0,
   playerDead: false,
   gameEnded: false,
   victory: false,

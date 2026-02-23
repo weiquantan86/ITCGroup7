@@ -422,6 +422,7 @@ export const createMochiGeneralCombatRuntime = (
         delta,
         player,
         applyDamage,
+        gameEnded,
         projectileBlockers,
         handleProjectileBlockHit,
       });

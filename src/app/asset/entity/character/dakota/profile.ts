@@ -46,9 +46,6 @@ Description: Enter Gravity state. Move speed is halved. During this state, basic
       },
     },
   },
-  controls: {
-    rightClick: "slash",
-  },
   camera: {
     followHeadBone: true,
   },

@@ -16,13 +16,19 @@ import { mochiGeneralProfile } from "./profile";
 
 type EntranceSmokeParticle = {
   mesh: THREE.Mesh;
-  material: THREE.MeshStandardMaterial;
+  material: THREE.MeshLambertMaterial;
   velocity: THREE.Vector3;
   spin: THREE.Vector3;
   age: number;
   life: number;
   startScale: number;
   endScale: number;
+};
+
+type PendingEntranceSmokeBurst = {
+  center: THREE.Vector3;
+  remaining: number;
+  carry: number;
 };
 
 type PreparedBossModel = {
@@ -58,8 +64,10 @@ export type MochiGeneralBossLifecycle = {
   dispose: () => void;
 };
 
-const BOSS_ENTRANCE_SMOKE_COUNT = 96;
-const BOSS_ENTRANCE_SMOKE_POOL_SIZE = BOSS_ENTRANCE_SMOKE_COUNT;
+const BOSS_ENTRANCE_SMOKE_COUNT = 72;
+const BOSS_ENTRANCE_SMOKE_POOL_SIZE = 96;
+const BOSS_ENTRANCE_SMOKE_EMIT_WINDOW = 0.18;
+const BOSS_ENTRANCE_SMOKE_MAX_PER_FRAME = 12;
 
 const cloneObjectMaterials = (object: THREE.Object3D) => {
   object.traverse((child) => {
@@ -143,11 +151,9 @@ export const createMochiGeneralBossLifecycle = ({
   smokeGroup.name = "mochiGeneralEntranceSmoke";
   scene.add(smokeGroup);
 
-  const smokeGeometry = new THREE.SphereGeometry(1, 12, 10);
-  const smokeMaterialTemplate = new THREE.MeshStandardMaterial({
+  const smokeGeometry = new THREE.SphereGeometry(1, 8, 6);
+  const smokeMaterialTemplate = new THREE.MeshLambertMaterial({
     color: 0x7a8597,
-    roughness: 1,
-    metalness: 0,
     transparent: true,
     opacity: 0.78,
     depthWrite: false,
@@ -156,6 +162,7 @@ export const createMochiGeneralBossLifecycle = ({
   });
   const activeSmokeParticles: EntranceSmokeParticle[] = [];
   const idleSmokeParticles: EntranceSmokeParticle[] = [];
+  const pendingSmokeBursts: PendingEntranceSmokeBurst[] = [];
   const preparedBossModels: PreparedBossModel[] = [];
 
   let prototype: THREE.Object3D | null = null;
@@ -287,58 +294,103 @@ export const createMochiGeneralBossLifecycle = ({
     }
   };
 
+  const activateEntranceSmokeParticle = (center: THREE.Vector3): boolean => {
+    const particle = idleSmokeParticles.pop();
+    if (!particle) return false;
+
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.sqrt(Math.random()) * 5.2;
+    const outwardSpeed = 2.1 + Math.random() * 6.2;
+    const upwardSpeed = 2.6 + Math.random() * 6.8;
+    const life = 1.1 + Math.random() * 1.4;
+    const startScale = 1.1 + Math.random() * 2.2;
+    const endScale = startScale * (2.7 + Math.random() * 1.9);
+
+    const brightness = 0.78 + Math.random() * 0.34;
+    const { mesh, material } = particle;
+    material.color.copy(smokeMaterialTemplate.color).multiplyScalar(brightness);
+    material.emissive.copy(smokeMaterialTemplate.emissive);
+    material.emissiveIntensity = smokeMaterialTemplate.emissiveIntensity;
+    material.opacity = 0.5 + Math.random() * 0.38;
+
+    mesh.position.set(
+      center.x + Math.cos(angle) * radius,
+      groundY + 0.35 + Math.random() * 2.8,
+      center.z + Math.sin(angle) * radius
+    );
+    mesh.rotation.set(
+      Math.random() * Math.PI * 2,
+      Math.random() * Math.PI * 2,
+      Math.random() * Math.PI * 2
+    );
+    mesh.scale.setScalar(startScale);
+    mesh.visible = true;
+
+    particle.velocity.set(
+      Math.cos(angle) * outwardSpeed + (Math.random() - 0.5) * 1.2,
+      upwardSpeed,
+      Math.sin(angle) * outwardSpeed + (Math.random() - 0.5) * 1.2
+    );
+    particle.spin.set(
+      (Math.random() - 0.5) * 2.8,
+      (Math.random() - 0.5) * 2.8,
+      (Math.random() - 0.5) * 2.8
+    );
+    particle.age = 0;
+    particle.life = life;
+    particle.startScale = startScale;
+    particle.endScale = endScale;
+    activeSmokeParticles.push(particle);
+    return true;
+  };
+
   const spawnEntranceSmoke = (center: THREE.Vector3) => {
-    for (let i = 0; i < BOSS_ENTRANCE_SMOKE_COUNT; i += 1) {
-      const particle = idleSmokeParticles.pop();
-      if (!particle) break;
+    pendingSmokeBursts.push({
+      center: center.clone(),
+      remaining: BOSS_ENTRANCE_SMOKE_COUNT,
+      carry: 0,
+    });
+  };
 
-      const angle = Math.random() * Math.PI * 2;
-      const radius = Math.sqrt(Math.random()) * 5.2;
-      const outwardSpeed = 2.1 + Math.random() * 6.2;
-      const upwardSpeed = 2.6 + Math.random() * 6.8;
-      const life = 1.1 + Math.random() * 1.4;
-      const startScale = 1.1 + Math.random() * 2.2;
-      const endScale = startScale * (2.7 + Math.random() * 1.9);
-
-      const brightness = 0.78 + Math.random() * 0.34;
-      const { mesh, material } = particle;
-      material.color.copy(smokeMaterialTemplate.color).multiplyScalar(brightness);
-      material.emissive.copy(smokeMaterialTemplate.emissive);
-      material.emissiveIntensity = smokeMaterialTemplate.emissiveIntensity;
-      material.opacity = 0.5 + Math.random() * 0.38;
-
-      mesh.position.set(
-        center.x + Math.cos(angle) * radius,
-        groundY + 0.35 + Math.random() * 2.8,
-        center.z + Math.sin(angle) * radius
-      );
-      mesh.rotation.set(
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2
-      );
-      mesh.scale.setScalar(startScale);
-      mesh.visible = true;
-
-      particle.velocity.set(
-        Math.cos(angle) * outwardSpeed + (Math.random() - 0.5) * 1.2,
-        upwardSpeed,
-        Math.sin(angle) * outwardSpeed + (Math.random() - 0.5) * 1.2
-      );
-      particle.spin.set(
-        (Math.random() - 0.5) * 2.8,
-        (Math.random() - 0.5) * 2.8,
-        (Math.random() - 0.5) * 2.8
-      );
-      particle.age = 0;
-      particle.life = life;
-      particle.startScale = startScale;
-      particle.endScale = endScale;
-      activeSmokeParticles.push(particle);
+  const recycleActiveSmokeParticleAt = (index: number) => {
+    const lastIndex = activeSmokeParticles.length - 1;
+    const particle = activeSmokeParticles[index];
+    if (!particle) return;
+    const tail = activeSmokeParticles[lastIndex];
+    activeSmokeParticles.pop();
+    if (index < lastIndex && tail) {
+      activeSmokeParticles[index] = tail;
     }
+    idleSmokeParticles.push(particle);
   };
 
   const updateEntranceSmoke = (delta: number) => {
+    const emissionRatePerSecond =
+      BOSS_ENTRANCE_SMOKE_COUNT / BOSS_ENTRANCE_SMOKE_EMIT_WINDOW;
+    for (let i = pendingSmokeBursts.length - 1; i >= 0; i -= 1) {
+      const burst = pendingSmokeBursts[i];
+      burst.carry += emissionRatePerSecond * delta;
+      const requestedSpawnCount = Math.min(
+        burst.remaining,
+        BOSS_ENTRANCE_SMOKE_MAX_PER_FRAME,
+        Math.floor(burst.carry)
+      );
+      if (requestedSpawnCount <= 0) continue;
+      burst.carry -= requestedSpawnCount;
+      let emitted = 0;
+      for (let n = 0; n < requestedSpawnCount; n += 1) {
+        if (!activateEntranceSmokeParticle(burst.center)) break;
+        emitted += 1;
+      }
+      if (emitted < requestedSpawnCount) {
+        burst.carry += requestedSpawnCount - emitted;
+      }
+      burst.remaining -= emitted;
+      if (burst.remaining <= 0) {
+        pendingSmokeBursts.splice(i, 1);
+      }
+    }
+
     for (let i = activeSmokeParticles.length - 1; i >= 0; i -= 1) {
       const particle = activeSmokeParticles[i];
       particle.age += delta;
@@ -346,8 +398,7 @@ export const createMochiGeneralBossLifecycle = ({
 
       if (t >= 1) {
         particle.mesh.visible = false;
-        activeSmokeParticles.splice(i, 1);
-        idleSmokeParticles.push(particle);
+        recycleActiveSmokeParticleAt(i);
         continue;
       }
 
@@ -516,6 +567,7 @@ export const createMochiGeneralBossLifecycle = ({
       }
       activeSmokeParticles.length = 0;
       idleSmokeParticles.length = 0;
+      pendingSmokeBursts.length = 0;
       smokeGeometry.dispose();
       smokeMaterialTemplate.dispose();
       while (entries.length > 0) {

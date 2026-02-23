@@ -7,8 +7,6 @@ import type { Projectile } from "../../../object/projectile/types";
 
 export type ThreeModule = typeof import("three");
 
-export type RightClickAction = "slash";
-
 export interface CharacterFacing {
   yaw: number;
   pitch: number;
@@ -17,10 +15,6 @@ export interface CharacterFacing {
 }
 
 export type SkillKey = "q" | "e" | "r";
-
-export interface CharacterControls {
-  rightClick?: RightClickAction | null;
-}
 
 export type SlashShape = "fan" | "rect" | "cube";
 
@@ -112,7 +106,6 @@ export interface CharacterProfile {
   movement?: CharacterMovementConfig;
   camera?: CharacterCameraConfig;
   kit?: CharacterKit;
-  controls?: CharacterControls;
   slash?: SlashConfig;
   animateArms?: (args: {
     arms: THREE.Object3D[];
@@ -282,7 +275,6 @@ export interface StatusEffectApplyModifier {
 export interface CharacterRuntime {
   setProfile: (nextProfile: CharacterProfile) => void;
   triggerSlash: (facing: CharacterFacing) => void;
-  handleRightClick: (facing: CharacterFacing) => void;
   handlePrimaryDown?: () => void;
   handlePrimaryUp?: () => void;
   handlePrimaryCancel?: () => void;

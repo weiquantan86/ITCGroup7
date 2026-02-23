@@ -39,6 +39,14 @@ type RewardEntry = {
   label: string;
   count: number;
 };
+type RewardClaimResponse = {
+  error?: string;
+  granted?: Partial<SurgeSnackRewards>;
+  obtainedSnack?: Partial<SurgeSnackRewards>;
+  winBonus?: Partial<SurgeSnackRewards>;
+  scoreStep?: number;
+  rewardPacks?: number;
+};
 
 type ScoreDeltaFx = {
   id: number;
@@ -48,8 +56,12 @@ type ScoreDeltaFx = {
 
 const REWARD_LINE_STAGGER_MS = 280;
 const REWARD_COUNT_STEP_MS = 90;
+const REWARD_CONVERSION_STEP_MS = 160;
+const REWARD_CONVERSION_SETTLE_DELAY_MS = 220;
 const SCORE_DELTA_LIFETIME_MS = 980;
 const SCORE_DELTA_LANE_COUNT = 3;
+const MOCHI_GENERAL_VICTORY_SCORE_STEP = 100;
+const MOCHI_GENERAL_DEFEAT_SCORE_STEP = 400;
 
 const cloneRewards = (rewards: SurgeSnackRewards): SurgeSnackRewards => ({
   energy_sugar: rewards.energy_sugar || 0,
@@ -57,6 +69,12 @@ const cloneRewards = (rewards: SurgeSnackRewards): SurgeSnackRewards => ({
   core_crunch_seed: rewards.core_crunch_seed || 0,
   star_gel_essence: rewards.star_gel_essence || 0,
 });
+
+const resolveMochiGeneralScoreStep = (victory: boolean) => {
+  return victory
+    ? MOCHI_GENERAL_VICTORY_SCORE_STEP
+    : MOCHI_GENERAL_DEFEAT_SCORE_STEP;
+};
 
 const formatDurationLabel = (seconds: number) => {
   const safeSeconds = Math.max(0, Math.floor(seconds));
@@ -96,6 +114,9 @@ export default function MochiGeneralBattleClient({
   const [winBonusAnimatedCounts, setWinBonusAnimatedCounts] = useState<
     Record<string, number>
   >({});
+  const [rewardScoreStep, setRewardScoreStep] = useState<number | null>(null);
+  const [rewardPackTarget, setRewardPackTarget] = useState<number | null>(null);
+  const [animatedRewardPackCount, setAnimatedRewardPackCount] = useState(0);
   const [scoreDeltaFxList, setScoreDeltaFxList] = useState<ScoreDeltaFx[]>([]);
   const rewardSubmittedRef = useRef(false);
   const rewardAnimationTimersRef = useRef<number[]>([]);
@@ -146,6 +167,39 @@ export default function MochiGeneralBattleClient({
     [buildRewardEntries, winBonusRewards]
   );
 
+  const resolvedRewardScoreStep = useMemo(() => {
+    if (typeof rewardScoreStep === "number" && rewardScoreStep > 0) {
+      return rewardScoreStep;
+    }
+    return resolveMochiGeneralScoreStep(surgeState.victory);
+  }, [rewardScoreStep, surgeState.victory]);
+
+  const resolvedRewardPackTarget = useMemo(() => {
+    if (typeof rewardPackTarget === "number" && rewardPackTarget >= 0) {
+      return Math.max(0, Math.floor(rewardPackTarget));
+    }
+    const scoreStep = Math.max(1, Math.floor(resolvedRewardScoreStep));
+    return Math.floor(Math.max(0, surgeState.score) / scoreStep);
+  }, [rewardPackTarget, resolvedRewardScoreStep, surgeState.score]);
+
+  const rewardConvertedScoreTarget = useMemo(() => {
+    const rawTarget = resolvedRewardPackTarget * resolvedRewardScoreStep;
+    return Math.max(0, Math.min(Math.floor(surgeState.score), Math.floor(rawTarget)));
+  }, [resolvedRewardPackTarget, resolvedRewardScoreStep, surgeState.score]);
+
+  const rewardConvertedScoreAnimated = useMemo(() => {
+    const rawAnimated = animatedRewardPackCount * resolvedRewardScoreStep;
+    return Math.max(0, Math.min(rewardConvertedScoreTarget, Math.floor(rawAnimated)));
+  }, [animatedRewardPackCount, resolvedRewardScoreStep, rewardConvertedScoreTarget]);
+
+  const rewardScoreRemainder = useMemo(() => {
+    return Math.max(0, Math.floor(surgeState.score) - rewardConvertedScoreTarget);
+  }, [surgeState.score, rewardConvertedScoreTarget]);
+
+  const rewardConversionInProgress =
+    rewardClaimStatus === "claimed" &&
+    animatedRewardPackCount < resolvedRewardPackTarget;
+
   const handleSceneStateChange = useCallback((state: SceneUiState) => {
     const next = (state as Record<string, MochiSoldierSurgeState | undefined>)[
       SURGE_SCENE_STATE_KEY
@@ -158,6 +212,10 @@ export default function MochiGeneralBattleClient({
       defeatedMonsters: next.defeatedMonsters || 0,
       elapsedSeconds: next.elapsedSeconds || 0,
       score: next.score || 0,
+      damageScore: next.damageScore || 0,
+      hitPenaltyCount: next.hitPenaltyCount || 0,
+      hitPenaltyScore: next.hitPenaltyScore || 0,
+      victoryTimeBonusScore: next.victoryTimeBonusScore || 0,
       playerDead: Boolean(next.playerDead),
       gameEnded: Boolean(next.gameEnded),
       victory: Boolean(next.victory),
@@ -174,6 +232,9 @@ export default function MochiGeneralBattleClient({
     setRevealedWinBonusLines(0);
     setObtainedAnimatedCounts({});
     setWinBonusAnimatedCounts({});
+    setRewardScoreStep(null);
+    setRewardPackTarget(null);
+    setAnimatedRewardPackCount(0);
     clearScoreDeltaTimers();
     setScoreDeltaFxList([]);
     scorePreviousValueRef.current = 0;
@@ -228,12 +289,7 @@ export default function MochiGeneralBattleClient({
             victory: surgeState.victory,
           }),
         });
-        const data = (await response.json()) as {
-          error?: string;
-          granted?: Partial<SurgeSnackRewards>;
-          obtainedSnack?: Partial<SurgeSnackRewards>;
-          winBonus?: Partial<SurgeSnackRewards>;
-        };
+        const data = (await response.json()) as RewardClaimResponse;
         if (!response.ok) {
           throw new Error(data.error || "Failed to claim rewards.");
         }
@@ -254,8 +310,24 @@ export default function MochiGeneralBattleClient({
           (total, key) => total + granted[key],
           0
         );
+        const fallbackScoreStep = resolveMochiGeneralScoreStep(surgeState.victory);
+        const normalizedScoreStepRaw = Number(data.scoreStep);
+        const normalizedScoreStep =
+          Number.isFinite(normalizedScoreStepRaw) && normalizedScoreStepRaw > 0
+            ? Math.max(1, Math.floor(normalizedScoreStepRaw))
+            : fallbackScoreStep;
+        const fallbackPackCount = Math.floor(
+          Math.max(0, surgeState.score) / normalizedScoreStep
+        );
+        const normalizedPackCountRaw = Number(data.rewardPacks);
+        const normalizedPackCount =
+          Number.isFinite(normalizedPackCountRaw) && normalizedPackCountRaw >= 0
+            ? Math.max(0, Math.floor(normalizedPackCountRaw))
+            : fallbackPackCount;
         setObtainedSnackRewards(obtainedSnack);
         setWinBonusRewards(winBonus);
+        setRewardScoreStep(normalizedScoreStep);
+        setRewardPackTarget(normalizedPackCount);
         setRewardClaimStatus("claimed");
         if (grantedCount <= 0) {
           setRewardClaimMessage("No snack reward earned in this run.");
@@ -294,54 +366,83 @@ export default function MochiGeneralBattleClient({
     setRevealedWinBonusLines(0);
     setObtainedAnimatedCounts({});
     setWinBonusAnimatedCounts({});
+    setAnimatedRewardPackCount(0);
 
     if (!surgeState.gameEnded || rewardClaimStatus !== "claimed") return;
 
-    obtainedSnackEntries.forEach((entry, index) => {
-      const revealTimer = window.setTimeout(() => {
-        setRevealedObtainedLines((prev) => Math.max(prev, index + 1));
-        if (entry.count <= 1) {
-          setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
-          return;
-        }
-        let currentCount = 1;
-        setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-        const countTimer = window.setInterval(() => {
-          currentCount += 1;
-          if (currentCount >= entry.count) {
-            currentCount = entry.count;
-            window.clearInterval(countTimer);
+    const scheduleRewardLineAnimation = (startDelayMs: number) => {
+      obtainedSnackEntries.forEach((entry, index) => {
+        const revealTimer = window.setTimeout(() => {
+          setRevealedObtainedLines((prev) => Math.max(prev, index + 1));
+          if (entry.count <= 1) {
+            setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
+            return;
           }
+          let currentCount = 1;
           setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-        }, REWARD_COUNT_STEP_MS);
-        rewardAnimationTimersRef.current.push(countTimer);
-      }, index * REWARD_LINE_STAGGER_MS);
-      rewardAnimationTimersRef.current.push(revealTimer);
-    });
+          const countTimer = window.setInterval(() => {
+            currentCount += 1;
+            if (currentCount >= entry.count) {
+              currentCount = entry.count;
+              window.clearInterval(countTimer);
+            }
+            setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
+          }, REWARD_COUNT_STEP_MS);
+          rewardAnimationTimersRef.current.push(countTimer);
+        }, startDelayMs + index * REWARD_LINE_STAGGER_MS);
+        rewardAnimationTimersRef.current.push(revealTimer);
+      });
 
-    const winStartDelay =
-      Math.max(1, obtainedSnackEntries.length) * REWARD_LINE_STAGGER_MS + 220;
-    winBonusEntries.forEach((entry, index) => {
-      const revealTimer = window.setTimeout(() => {
-        setRevealedWinBonusLines((prev) => Math.max(prev, index + 1));
-        if (entry.count <= 1) {
-          setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
-          return;
-        }
-        let currentCount = 1;
-        setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-        const countTimer = window.setInterval(() => {
-          currentCount += 1;
-          if (currentCount >= entry.count) {
-            currentCount = entry.count;
-            window.clearInterval(countTimer);
+      const winStartDelay =
+        startDelayMs +
+        Math.max(1, obtainedSnackEntries.length) * REWARD_LINE_STAGGER_MS +
+        220;
+      winBonusEntries.forEach((entry, index) => {
+        const revealTimer = window.setTimeout(() => {
+          setRevealedWinBonusLines((prev) => Math.max(prev, index + 1));
+          if (entry.count <= 1) {
+            setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
+            return;
           }
+          let currentCount = 1;
           setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-        }, REWARD_COUNT_STEP_MS);
-        rewardAnimationTimersRef.current.push(countTimer);
-      }, winStartDelay + index * REWARD_LINE_STAGGER_MS);
-      rewardAnimationTimersRef.current.push(revealTimer);
-    });
+          const countTimer = window.setInterval(() => {
+            currentCount += 1;
+            if (currentCount >= entry.count) {
+              currentCount = entry.count;
+              window.clearInterval(countTimer);
+            }
+            setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
+          }, REWARD_COUNT_STEP_MS);
+          rewardAnimationTimersRef.current.push(countTimer);
+        }, winStartDelay + index * REWARD_LINE_STAGGER_MS);
+        rewardAnimationTimersRef.current.push(revealTimer);
+      });
+    };
+
+    if (resolvedRewardPackTarget <= 0) {
+      scheduleRewardLineAnimation(REWARD_CONVERSION_SETTLE_DELAY_MS);
+    } else {
+      let currentPack = 0;
+      const conversionTickSize = Math.max(
+        1,
+        Math.ceil(resolvedRewardPackTarget / 36)
+      );
+      const conversionIntervalMs =
+        resolvedRewardPackTarget > 36 ? 90 : REWARD_CONVERSION_STEP_MS;
+      const conversionTimer = window.setInterval(() => {
+        currentPack += conversionTickSize;
+        if (currentPack >= resolvedRewardPackTarget) {
+          currentPack = resolvedRewardPackTarget;
+        }
+        setAnimatedRewardPackCount(currentPack);
+        if (currentPack >= resolvedRewardPackTarget) {
+          window.clearInterval(conversionTimer);
+          scheduleRewardLineAnimation(REWARD_CONVERSION_SETTLE_DELAY_MS);
+        }
+      }, conversionIntervalMs);
+      rewardAnimationTimersRef.current.push(conversionTimer);
+    }
 
     return () => {
       rewardAnimationTimersRef.current.forEach((timer) => {
@@ -350,7 +451,13 @@ export default function MochiGeneralBattleClient({
       });
       rewardAnimationTimersRef.current = [];
     };
-  }, [surgeState.gameEnded, rewardClaimStatus, obtainedSnackEntries, winBonusEntries]);
+  }, [
+    surgeState.gameEnded,
+    rewardClaimStatus,
+    obtainedSnackEntries,
+    winBonusEntries,
+    resolvedRewardPackTarget,
+  ]);
 
   useEffect(() => {
     const previousScore = scorePreviousValueRef.current;
@@ -418,84 +525,145 @@ export default function MochiGeneralBattleClient({
                   : "Player Eliminated"}
               </h3>
 
-              <div className="mt-8 rounded-[22px] border border-white/10 bg-slate-950/70 p-6 text-center md:p-8">
-                <p className="text-2xl font-semibold text-slate-200 md:text-3xl">Numbers Killed:</p>
-                <p className="mt-2 text-4xl font-semibold tabular-nums text-slate-100 md:text-5xl">
-                  {surgeState.defeatedMonsters}
+              <div className="mt-8 rounded-[22px] border border-white/10 bg-slate-950/70 p-6 text-left md:p-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">
+                  Total Score
+                </p>
+                <p className="mt-2 text-5xl font-bold tabular-nums text-cyan-100 md:text-6xl">
+                  {surgeState.score}
                 </p>
 
-                <p className="mt-8 text-2xl font-semibold text-slate-200 md:text-3xl">Obtained Snack:</p>
-                {rewardClaimStatus === "claiming" ? (
-                  <p className="mt-3 text-xl text-slate-300">Calculating...</p>
-                ) : obtainedSnackEntries.length === 0 ? (
-                  <p className="mt-3 text-xl text-slate-300">None</p>
-                ) : (
-                  <ul className="mt-4 space-y-3 text-xl md:text-2xl">
-                    {obtainedSnackEntries.slice(0, revealedObtainedLines).map((entry) => {
-                      const shownCount = obtainedAnimatedCounts[entry.key] ?? 1;
-                      const isCounting = shownCount < entry.count;
-                      return (
-                        <li
-                          key={entry.key}
-                          className={`mx-auto flex max-w-[680px] items-center justify-center gap-3 rounded-xl border px-5 py-3 transition ${
-                            isCounting
-                              ? "border-cyan-300/45 bg-cyan-500/12 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.24)]"
-                              : "border-white/12 bg-white/[0.03] text-slate-100"
-                          }`}
-                        >
-                          <span className="font-semibold">{entry.label}</span>
-                          <span
-                            className={`inline-flex min-w-[96px] items-center justify-center rounded-full px-3 py-1 text-lg font-bold tabular-nums ${
-                              isCounting
-                                ? "animate-pulse bg-cyan-300/25 text-cyan-100"
-                                : "bg-slate-100/12 text-slate-100"
-                            }`}
-                          >
-                            x {shownCount}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-slate-900/70 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Settlement Bill
+                    </p>
+                    <ul className="mt-3 space-y-2 text-sm text-slate-200 md:text-base">
+                      <li className="flex items-center justify-between gap-4">
+                        <span className="text-slate-400">Completion Time</span>
+                        <span className="font-semibold tabular-nums">
+                          {formatDurationLabel(surgeState.elapsedSeconds)}
+                        </span>
+                      </li>
+                      <li className="flex items-center justify-between gap-4">
+                        <span className="text-slate-400">Damage Score</span>
+                        <span className="font-semibold tabular-nums text-emerald-300">
+                          +{surgeState.damageScore}
+                        </span>
+                      </li>
+                      <li className="flex items-center justify-between gap-4">
+                        <span className="text-slate-400">Time Bonus</span>
+                        <span className="font-semibold tabular-nums text-emerald-300">
+                          +{surgeState.victoryTimeBonusScore}
+                        </span>
+                      </li>
+                      <li className="flex items-center justify-between gap-4">
+                        <span className="text-slate-400">Times Hit</span>
+                        <span className="font-semibold tabular-nums">
+                          {surgeState.hitPenaltyCount}
+                        </span>
+                      </li>
+                      <li className="flex items-center justify-between gap-4">
+                        <span className="text-slate-400">Hit Penalty</span>
+                        <span className="font-semibold tabular-nums text-rose-300">
+                          -{surgeState.hitPenaltyScore}
+                        </span>
+                      </li>
+                      <li className="flex items-center justify-between gap-4 border-t border-white/10 pt-2">
+                        <span className="text-slate-300">Final Score</span>
+                        <span className="font-bold tabular-nums text-cyan-100">
+                          {surgeState.score}
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
 
-                <p className="mt-8 text-2xl font-semibold text-slate-200 md:text-3xl">Win Bonus:</p>
-                {rewardClaimStatus === "claiming" ? (
-                  <p className="mt-3 text-xl text-slate-300">Calculating...</p>
-                ) : winBonusEntries.length === 0 ? (
-                  <p className="mt-3 text-xl text-slate-300">None</p>
-                ) : (
-                  <ul className="mt-4 space-y-3 text-xl md:text-2xl">
-                    {winBonusEntries.slice(0, revealedWinBonusLines).map((entry) => {
-                      const shownCount = winBonusAnimatedCounts[entry.key] ?? 1;
-                      const isCounting = shownCount < entry.count;
-                      return (
-                        <li
-                          key={entry.key}
-                          className={`mx-auto flex max-w-[680px] items-center justify-center gap-3 rounded-xl border px-5 py-3 transition ${
-                            isCounting
-                              ? "border-amber-300/45 bg-amber-500/12 text-amber-100 shadow-[0_0_28px_rgba(251,191,36,0.2)]"
-                              : "border-white/12 bg-white/[0.03] text-slate-100"
+                  <div className="rounded-xl border border-cyan-300/25 bg-cyan-950/25 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                      Score To Reward
+                    </p>
+                    <ul className="mt-3 space-y-2 text-sm text-cyan-100 md:text-base">
+                      <li className="flex items-center justify-between gap-4">
+                        <span className="text-cyan-200/80">Rule</span>
+                        <span className="font-semibold tabular-nums">
+                          Every {resolvedRewardScoreStep} score = 1 pack
+                        </span>
+                      </li>
+                      <li className="flex items-center justify-between gap-4">
+                        <span className="text-cyan-200/80">Converted Score</span>
+                        <span
+                          className={`font-semibold tabular-nums ${
+                            rewardConversionInProgress
+                              ? "animate-pulse text-cyan-100"
+                              : "text-cyan-100"
                           }`}
                         >
-                          <span className="font-semibold">{entry.label}</span>
-                          <span
-                            className={`inline-flex min-w-[96px] items-center justify-center rounded-full px-3 py-1 text-lg font-bold tabular-nums ${
+                          {rewardConvertedScoreAnimated}/{rewardConvertedScoreTarget}
+                        </span>
+                      </li>
+                      <li className="flex items-center justify-between gap-4">
+                        <span className="text-cyan-200/80">Reward Packs</span>
+                        <span
+                          className={`font-semibold tabular-nums ${
+                            rewardConversionInProgress
+                              ? "animate-pulse text-cyan-100"
+                              : "text-cyan-100"
+                          }`}
+                        >
+                          {animatedRewardPackCount}/{resolvedRewardPackTarget}
+                        </span>
+                      </li>
+                      <li className="flex items-center justify-between gap-4">
+                        <span className="text-cyan-200/80">Remaining Score</span>
+                        <span className="font-semibold tabular-nums text-cyan-100">
+                          {rewardScoreRemainder}
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-xl border border-white/10 bg-slate-900/70 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    Converted Rewards
+                  </p>
+                  {rewardClaimStatus === "claiming" ? (
+                    <p className="mt-3 text-sm text-slate-300">Calculating...</p>
+                  ) : obtainedSnackEntries.length === 0 ? (
+                    <p className="mt-3 text-sm text-slate-300">None</p>
+                  ) : (
+                    <ul className="mt-3 space-y-2 text-sm md:text-base">
+                      {obtainedSnackEntries.slice(0, revealedObtainedLines).map((entry) => {
+                        const shownCount = obtainedAnimatedCounts[entry.key] ?? 1;
+                        const isCounting = shownCount < entry.count;
+                        return (
+                          <li
+                            key={entry.key}
+                            className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition ${
                               isCounting
-                                ? "animate-pulse bg-amber-300/25 text-amber-100"
-                                : "bg-slate-100/12 text-slate-100"
+                                ? "border-cyan-300/45 bg-cyan-500/12 text-cyan-100 shadow-[0_0_22px_rgba(34,211,238,0.2)]"
+                                : "border-white/12 bg-white/[0.03] text-slate-100"
                             }`}
                           >
-                            x {shownCount}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                            <span className="font-semibold">{entry.label}</span>
+                            <span
+                              className={`inline-flex min-w-[84px] items-center justify-center rounded-full px-3 py-1 text-sm font-bold tabular-nums ${
+                                isCounting
+                                  ? "animate-pulse bg-cyan-300/25 text-cyan-100"
+                                  : "bg-slate-100/12 text-slate-100"
+                              }`}
+                            >
+                              x {shownCount}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
 
                 <p
-                  className={`mt-6 text-base md:text-lg ${
+                  className={`mt-6 text-sm md:text-base ${
                     rewardClaimStatus === "error"
                       ? "text-rose-300"
                       : rewardClaimStatus === "claimed"

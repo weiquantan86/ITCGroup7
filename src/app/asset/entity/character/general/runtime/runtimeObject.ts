@@ -3,7 +3,6 @@ import type { CharacterRuntime, CharacterRuntimeUpdate } from "../types";
 type CharacterRuntimeObjectInit = {
   setProfile: CharacterRuntime["setProfile"];
   triggerSlash: CharacterRuntime["triggerSlash"];
-  handleRightClick: CharacterRuntime["handleRightClick"];
   update: (args: CharacterRuntimeUpdate) => void;
   dispose: CharacterRuntime["dispose"];
   isFacingLocked: CharacterRuntime["isFacingLocked"];
@@ -32,7 +31,6 @@ type CharacterRuntimeObjectInit = {
 export class CharacterRuntimeObject implements CharacterRuntime {
   readonly setProfile: CharacterRuntime["setProfile"];
   readonly triggerSlash: CharacterRuntime["triggerSlash"];
-  readonly handleRightClick: CharacterRuntime["handleRightClick"];
   readonly update: (args: CharacterRuntimeUpdate) => void;
   readonly dispose: CharacterRuntime["dispose"];
   readonly isFacingLocked: CharacterRuntime["isFacingLocked"];
@@ -60,7 +58,6 @@ export class CharacterRuntimeObject implements CharacterRuntime {
   constructor(init: CharacterRuntimeObjectInit) {
     this.setProfile = init.setProfile;
     this.triggerSlash = init.triggerSlash;
-    this.handleRightClick = init.handleRightClick;
     this.update = init.update;
     this.dispose = init.dispose;
     this.isFacingLocked = init.isFacingLocked;

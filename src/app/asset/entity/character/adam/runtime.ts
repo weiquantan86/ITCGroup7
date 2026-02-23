@@ -1706,14 +1706,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
   return new CharacterRuntimeObject({
     setProfile: baseRuntime.setProfile,
     triggerSlash: baseRuntime.triggerSlash,
-    handleRightClick: (facing) => {
-      if (skillQChargeState.active) return;
-      if (skillR.active) {
-        detonateSkillRInPlace(performance.now());
-        return;
-      }
-      baseRuntime.handleRightClick(facing);
-    },
     handleSkillQ,
     handlePrimaryDown: () => {
       if (skillR.active) {

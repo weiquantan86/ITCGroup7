@@ -207,15 +207,6 @@ export const createCharacterRuntime = ({
     lockFacing = !useCameraAim;
   };
 
-  const handleRightClick = (facing: CharacterFacing) => {
-    const action =
-      currentProfile?.controls?.rightClick ??
-      (currentProfile?.slash?.enabled ? "slash" : null);
-    if (action === "slash") {
-      triggerSlash(facing);
-    }
-  };
-
   const handleSkillQ = () => false;
   const handleSkillE = () => false;
   const handleSkillR = () => false;
@@ -412,7 +403,6 @@ export const createCharacterRuntime = ({
   return new CharacterRuntimeObject({
     setProfile,
     triggerSlash,
-    handleRightClick,
     handleSkillQ,
     handleSkillE,
     handleSkillR,

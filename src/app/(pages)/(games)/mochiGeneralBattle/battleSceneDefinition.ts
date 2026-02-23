@@ -200,15 +200,24 @@ export const createMochiGeneralBattleScene = (
   const runStartedAtMs = performance.now();
   let elapsedSeconds = 0;
   let score = 0;
+  let damageScore = 0;
+  let hitPenaltyCount = 0;
+  let hitPenaltyScore = 0;
+  let victoryTimeBonusScore = 0;
 
   const addScore = (amount: number) => {
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    score = Math.max(0, score + amount);
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    const normalized = Math.max(0, amount);
+    score = Math.max(0, score + normalized);
+    return normalized;
   };
 
   const applyScorePenalty = (amount: number) => {
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    score = Math.max(0, score - amount);
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    const normalized = Math.max(0, amount);
+    const before = score;
+    score = Math.max(0, score - normalized);
+    return before - score;
   };
 
   const resolveVictoryTimeBonus = (seconds: number) => {
@@ -263,7 +272,8 @@ export const createMochiGeneralBattleScene = (
     hitboxMaterialTemplate,
     onBossDamaged: (appliedDamage) => {
       if (gameEnded || appliedDamage <= 0) return;
-      addScore(appliedDamage);
+      const gained = addScore(appliedDamage);
+      damageScore += gained;
     },
   });
 
@@ -276,6 +286,10 @@ export const createMochiGeneralBattleScene = (
       defeatedMonsters: bossStats.defeated,
       elapsedSeconds,
       score: Math.max(0, Math.floor(score)),
+      damageScore: Math.max(0, Math.floor(damageScore)),
+      hitPenaltyCount: Math.max(0, Math.floor(hitPenaltyCount)),
+      hitPenaltyScore: Math.max(0, Math.floor(hitPenaltyScore)),
+      victoryTimeBonusScore: Math.max(0, Math.floor(victoryTimeBonusScore)),
       playerDead,
       gameEnded,
       victory,
@@ -300,7 +314,8 @@ export const createMochiGeneralBattleScene = (
     gameEnded = true;
     victory = didWin;
     if (didWin) {
-      addScore(resolveVictoryTimeBonus(elapsedSecondsRaw));
+      const bonus = resolveVictoryTimeBonus(elapsedSecondsRaw);
+      victoryTimeBonusScore += addScore(bonus);
     }
     emitState(true);
   };
@@ -342,7 +357,8 @@ export const createMochiGeneralBattleScene = (
       applyDamage: (amount) => {
         const applied = applyDamage(amount);
         if (applied > 0) {
-          applyScorePenalty(SCORE_PENALTY_ON_BOSS_HIT);
+          hitPenaltyCount += 1;
+          hitPenaltyScore += applyScorePenalty(SCORE_PENALTY_ON_BOSS_HIT);
         }
         return applied;
       },

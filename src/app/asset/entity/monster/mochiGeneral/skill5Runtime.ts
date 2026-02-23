@@ -2,8 +2,18 @@ import * as THREE from "three";
 import { createMochiGeneralSkill5VolleyRuntime } from "../../../object/projectile/projectile/mochiGeneral/skill5VolleyRuntime";
 import type { ProjectileBlockHitHandler } from "../../../object/projectile/blocking";
 import type { MochiGeneralCombatEntry } from "./combatBehavior";
+import { createMochiGeneralShadowChargeFx } from "./shadowChargeFx";
 
 const skill5OriginWorld = new THREE.Vector3();
+const SKILL5_CHARGE_FX_INTERVAL_MS = 84;
+const SKILL5_PRE_FIRE_CHARGE_MS = 150;
+const SKILL5_PRE_FIRE_STAGGER_MS = 36;
+
+type PendingSkill5Shot = {
+  entry: MochiGeneralCombatEntry;
+  target: THREE.Object3D;
+  fireAtMs: number;
+};
 
 export type MochiGeneralSkill5Runtime = {
   onBossTick: (args: {
@@ -16,6 +26,7 @@ export type MochiGeneralSkill5Runtime = {
     delta: number;
     player: THREE.Object3D;
     applyDamage: (amount: number) => number;
+    gameEnded: boolean;
     projectileBlockers: THREE.Object3D[];
     handleProjectileBlockHit?: ProjectileBlockHitHandler;
   }) => void;
@@ -27,6 +38,9 @@ export const createMochiGeneralSkill5Runtime = (
   scene: THREE.Scene
 ): MochiGeneralSkill5Runtime => {
   const projectileRuntime = createMochiGeneralSkill5VolleyRuntime(scene);
+  const shadowChargeFx = createMochiGeneralShadowChargeFx(scene);
+  const nextChargeAtByEntry = new WeakMap<MochiGeneralCombatEntry, number>();
+  const pendingShots: PendingSkill5Shot[] = [];
 
   const resolveSkill5Origin = (entry: MochiGeneralCombatEntry, out: THREE.Vector3) => {
     const heldMochi = entry.rig?.heldMochi;
@@ -56,8 +70,53 @@ export const createMochiGeneralSkill5Runtime = (
     });
   };
 
+  const emitCastingChargeFx = (entry: MochiGeneralCombatEntry, gameEnded: boolean) => {
+    if (!entry.skill5Casting || gameEnded || !entry.monster.isAlive) {
+      nextChargeAtByEntry.delete(entry);
+      return;
+    }
+    const now = performance.now();
+    const nextAt = nextChargeAtByEntry.get(entry) ?? 0;
+    if (now < nextAt) return;
+    resolveSkill5Origin(entry, skill5OriginWorld);
+    shadowChargeFx.spawnBurst(skill5OriginWorld, {
+      count: entry.rageActive ? 8 : 6,
+      radiusScale: 0.74,
+      inwardSpeedScale: 0.88,
+      lifeScale: 0.98,
+    });
+    nextChargeAtByEntry.set(entry, now + SKILL5_CHARGE_FX_INTERVAL_MS);
+  };
+
+  const processPendingShots = (nowMs: number, gameEnded: boolean) => {
+    for (let i = pendingShots.length - 1; i >= 0; i -= 1) {
+      const pending = pendingShots[i];
+      if (!pending.entry.monster.isAlive || gameEnded) {
+        pendingShots.splice(i, 1);
+        continue;
+      }
+      if (nowMs < pending.fireAtMs) continue;
+      spawnSingleShot({
+        entry: pending.entry,
+        player: pending.target,
+        gameEnded,
+      });
+      pendingShots.splice(i, 1);
+    }
+  };
+
+  const removePendingShotsForEntry = (entry: MochiGeneralCombatEntry) => {
+    for (let i = pendingShots.length - 1; i >= 0; i -= 1) {
+      if (pendingShots[i]?.entry === entry) {
+        pendingShots.splice(i, 1);
+      }
+    }
+  };
+
   return {
     onBossTick: ({ entry, player, gameEnded }) => {
+      emitCastingChargeFx(entry, gameEnded);
+
       const pendingBurstCount = Math.max(
         entry.skill5BurstPendingCount,
         entry.skill5BurstRequested ? 1 : 0
@@ -66,11 +125,19 @@ export const createMochiGeneralSkill5Runtime = (
 
       entry.skill5BurstRequested = false;
       entry.skill5BurstPendingCount = 0;
+      const startAt = performance.now() + SKILL5_PRE_FIRE_CHARGE_MS;
       for (let i = 0; i < pendingBurstCount; i += 1) {
-        spawnSingleShot({
+        resolveSkill5Origin(entry, skill5OriginWorld);
+        shadowChargeFx.spawnBurst(skill5OriginWorld, {
+          count: entry.rageActive ? 16 : 12,
+          radiusScale: 1.06,
+          inwardSpeedScale: 1.18,
+          lifeScale: 1.18,
+        });
+        pendingShots.push({
           entry,
-          player,
-          gameEnded,
+          target: player,
+          fireAtMs: startAt + i * SKILL5_PRE_FIRE_STAGGER_MS,
         });
       }
     },
@@ -79,9 +146,12 @@ export const createMochiGeneralSkill5Runtime = (
       delta,
       player,
       applyDamage,
+      gameEnded,
       projectileBlockers,
       handleProjectileBlockHit,
     }) => {
+      shadowChargeFx.update(delta);
+      processPendingShots(now, gameEnded);
       projectileRuntime.update({
         now,
         delta,
@@ -91,8 +161,13 @@ export const createMochiGeneralSkill5Runtime = (
         handleProjectileBlockHit,
       });
     },
-    onBossRemoved: () => {},
+    onBossRemoved: (entry) => {
+      nextChargeAtByEntry.delete(entry);
+      removePendingShotsForEntry(entry);
+    },
     dispose: () => {
+      pendingShots.length = 0;
+      shadowChargeFx.dispose();
       projectileRuntime.dispose();
     },
   };

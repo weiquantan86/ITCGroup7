@@ -2105,18 +2105,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     cancelCharge();
   };
 
-  const handleRightClick = (facing: Parameters<typeof baseRuntime.handleRightClick>[0]) => {
-    const now = performance.now();
-    updateDemonFormState(now);
-    if (demonFormState.transitionPhase !== "none") return;
-    if (demonFormState.active) {
-      fireDemonBasicProjectile(now);
-      return;
-    }
-    if (punchState.phase !== "idle") return;
-    baseRuntime.handleRightClick(facing);
-  };
-
   const updatePunchPose = (now: number) => {
     const arm = armRig.arm;
     if (!arm) return;
@@ -2335,7 +2323,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
   return new CharacterRuntimeObject({
     setProfile: baseRuntime.setProfile,
     triggerSlash: baseRuntime.triggerSlash,
-    handleRightClick,
     handlePrimaryDown,
     handlePrimaryUp,
     handlePrimaryCancel,

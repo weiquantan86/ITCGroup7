@@ -49,9 +49,6 @@ Description：Release a massive tornado forward that detonates on impact. While 
       },
     },
   },
-  controls: {
-    rightClick: "slash",
-  },
   slash: {
     enabled: true,
     color: 0x6d28d9,

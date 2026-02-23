@@ -46,9 +46,6 @@ Description：...`,
       },
     },
   },
-  controls: {
-    rightClick: "slash",
-  },
   camera: {
     followHeadBone: true,
   },
