@@ -79,6 +79,33 @@ const eyeMat = new THREE.MeshStandardMaterial({
   emissiveIntensity: 1.8,
 });
 
+function createEyeGeometry(mirrored = false) {
+  const size = 0.15;
+  const depth = 0.05;
+  const half = size / 2;
+  const shape = new THREE.Shape();
+
+  if (mirrored) {
+    shape.moveTo(half, -half);
+    shape.lineTo(-half, -half);
+    shape.lineTo(half, half);
+  } else {
+    shape.moveTo(-half, -half);
+    shape.lineTo(half, -half);
+    shape.lineTo(-half, half);
+  }
+
+  shape.closePath();
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: false,
+  });
+  geometry.translate(0, 0, -depth / 2);
+
+  return geometry;
+}
+
 const root = new THREE.Group();
 root.name = "madaRoot";
 
@@ -115,12 +142,12 @@ hornTipRight.position.set(0.29, 0.7, -0.02);
 hornTipLeft.rotation.z = Math.PI / 6;
 hornTipRight.rotation.z = -Math.PI / 6;
 
-const eyeLeft = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.05), eyeMat);
-const eyeRight = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.05), eyeMat);
-eyeLeft.position.set(-0.15, 0.07, 0.4);
-eyeRight.position.set(0.15, 0.07, 0.4);
-eyeLeft.rotation.z = -0.5;
-eyeRight.rotation.z = 0.5;
+const eyeLeft = new THREE.Mesh(createEyeGeometry(false), eyeMat);
+const eyeRight = new THREE.Mesh(createEyeGeometry(true), eyeMat);
+eyeLeft.position.set(-0.18, 0.09, 0.4);
+eyeRight.position.set(0.18, 0.09, 0.4);
+eyeLeft.rotation.set(0, -0.3, 0.1);
+eyeRight.rotation.set(0, 0.3, -0.1);
 
 const armGeo = new THREE.CapsuleGeometry(0.14, 0.65, 6, 12);
 

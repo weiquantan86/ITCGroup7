@@ -172,7 +172,7 @@ export default async function UserPage() {
                 href="/mochiSoldierSurge"
               />
               <MenuButton label="Mochi General Battle" className="h-full" href="/mochiGeneralBattle" />
-              <MenuButton label="Game" className="h-full" />
+              <MenuButton label="? ? ?" className="h-full" href="/madacombat" />
             </Panel>
 
             <Panel className="grid h-full min-h-0 grid-rows-2 gap-6">

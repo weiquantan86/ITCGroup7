@@ -22,6 +22,8 @@ export default function SceneLauncher({
   deltaStartAtMs,
   maxPixelRatio = 2,
   useDefaultLights = true,
+  antialias = true,
+  enableShadows = true,
 }: {
   sceneId?: string;
   gameMode?: string;
@@ -38,6 +40,8 @@ export default function SceneLauncher({
   deltaStartAtMs?: number;
   maxPixelRatio?: number;
   useDefaultLights?: boolean;
+  antialias?: boolean;
+  enableShadows?: boolean;
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
@@ -81,13 +85,15 @@ export default function SceneLauncher({
           onStateChange: onSceneStateChange,
         });
 
-        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer = new THREE.WebGLRenderer({ antialias });
         renderer.setSize(mount.clientWidth, mount.clientHeight);
         renderer.setPixelRatio(
           Math.min(window.devicePixelRatio || 1, resolvedMaxPixelRatio)
         );
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.enabled = enableShadows;
+        if (enableShadows) {
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        }
         mount.appendChild(renderer.domElement);
 
         if (useDefaultLights) {
@@ -180,6 +186,8 @@ export default function SceneLauncher({
     deltaStartAtMs,
     maxPixelRatio,
     useDefaultLights,
+    antialias,
+    enableShadows,
   ]);
 
   return (
