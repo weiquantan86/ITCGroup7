@@ -33,7 +33,7 @@ Description: Enter Mech-Electric state. Requires at least 70 EN to activate, dra
         cost: 60,
         description: `CD: 15s
 Mana: 60
-Description: Enter Light-Jump state for 10s. Gain 1.2x move speed, feet emit green particles, and charged basic attack fires a 2-shot burst.`,
+Description: Enter Light-Jump state for 10s. Gain 1.2x move speed, feet emit gray particles, and charged basic attack fires a 2-shot burst.`,
       },
       r: {
         id: "r",
@@ -51,6 +51,6 @@ Description: Enter Gravity state. Move speed is halved. During this state, basic
   },
   slash: {
     enabled: true,
-    color: 0x16a34a,
+    color: 0x9ca3af,
   },
 };

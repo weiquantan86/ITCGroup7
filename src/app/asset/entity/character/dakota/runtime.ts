@@ -5,6 +5,14 @@ import type { CharacterRuntimeFactory } from "../general/types";
 import { profile } from "./profile";
 
 const minDirectionSq = 0.000001;
+const dakotaPrimaryColor = 0x9ca3af;
+const dakotaEmissiveColor = 0x6b7280;
+const dakotaAccentColor = 0xd1d5db;
+const dakotaHudTrackStroke = "rgba(156,163,175,0.30)";
+const dakotaHudBridgeStroke = "rgba(156,163,175,0.32)";
+const dakotaHudTempleStroke = "rgba(156,163,175,0.24)";
+const dakotaHudFillStroke = "#d1d5db";
+const dakotaHudGlow = "rgba(209,213,219,0.72)";
 
 type ChargeHud = {
   setVisible: (visible: boolean) => void;
@@ -102,17 +110,17 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
   const crimsonFlickerInterval = 0.45;
 
   const applyDefaultPalette = () => {
-    trackLeft.setAttribute("stroke", "rgba(34,197,94,0.30)");
-    trackRight.setAttribute("stroke", "rgba(34,197,94,0.30)");
-    fillLeft.setAttribute("stroke", "#16a34a");
-    fillRight.setAttribute("stroke", "#16a34a");
-    fillLeft.style.filter = "drop-shadow(0 0 10px rgba(22,163,74,0.72))";
-    fillRight.style.filter = "drop-shadow(0 0 10px rgba(22,163,74,0.72))";
-    bridgeTrack.setAttribute("stroke", "rgba(34,197,94,0.32)");
-    bridgeFill.setAttribute("stroke", "#16a34a");
-    bridgeFill.style.filter = "drop-shadow(0 0 8px rgba(22,163,74,0.72))";
-    templeLeft.setAttribute("stroke", "rgba(34,197,94,0.24)");
-    templeRight.setAttribute("stroke", "rgba(34,197,94,0.24)");
+    trackLeft.setAttribute("stroke", dakotaHudTrackStroke);
+    trackRight.setAttribute("stroke", dakotaHudTrackStroke);
+    fillLeft.setAttribute("stroke", dakotaHudFillStroke);
+    fillRight.setAttribute("stroke", dakotaHudFillStroke);
+    fillLeft.style.filter = `drop-shadow(0 0 10px ${dakotaHudGlow})`;
+    fillRight.style.filter = `drop-shadow(0 0 10px ${dakotaHudGlow})`;
+    bridgeTrack.setAttribute("stroke", dakotaHudBridgeStroke);
+    bridgeFill.setAttribute("stroke", dakotaHudFillStroke);
+    bridgeFill.style.filter = `drop-shadow(0 0 8px ${dakotaHudGlow})`;
+    templeLeft.setAttribute("stroke", dakotaHudTempleStroke);
+    templeRight.setAttribute("stroke", dakotaHudTempleStroke);
   };
 
   const applyMonochromePalette = (white: boolean) => {
@@ -316,7 +324,7 @@ const createFootParticleFx = (avatar: THREE.Object3D): FootParticleFx => {
   const particleGeometry = new THREE.SphereGeometry(0.026, 8, 6);
   const particles = Array.from({ length: 72 }, () => {
     const material = new THREE.MeshBasicMaterial({
-      color: 0x16a34a,
+      color: dakotaAccentColor,
       transparent: true,
       opacity: 0,
       blending: THREE.AdditiveBlending,
@@ -498,10 +506,10 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
 
   const coreGeometry = new THREE.SphereGeometry(0.07, 16, 12);
   const coreMaterial = new THREE.MeshStandardMaterial({
-    color: 0x16a34a,
+    color: dakotaPrimaryColor,
     roughness: 0.22,
     metalness: 0.08,
-    emissive: 0x15803d,
+    emissive: dakotaEmissiveColor,
     emissiveIntensity: 0.6,
     transparent: true,
     opacity: 0.88,
@@ -510,7 +518,7 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
 
   const ringGeometry = new THREE.TorusGeometry(0.1, 0.012, 8, 24);
   const ringMaterial = new THREE.MeshBasicMaterial({
-    color: 0x4ade80,
+    color: dakotaAccentColor,
     transparent: true,
     opacity: 0.6,
     blending: THREE.AdditiveBlending,
@@ -591,9 +599,9 @@ const createGunChargeFx = (avatar: THREE.Object3D): GunChargeFx => {
       applyCrimsonPalette();
       return;
     }
-    coreMaterial.color.set(0x16a34a);
-    coreMaterial.emissive.set(0x15803d);
-    ringMaterial.color.set(0x4ade80);
+    coreMaterial.color.set(dakotaPrimaryColor);
+    coreMaterial.emissive.set(dakotaEmissiveColor);
+    ringMaterial.color.set(dakotaAccentColor);
   };
 
   group.add(core, ring, particleGroup);
@@ -785,7 +793,7 @@ const createGravityStateFx = (avatar: THREE.Object3D): GravityStateFx => {
   let useHeadFallbackOffset = true;
   let lastUpdateAt = 0;
   let flickerElapsed = 0;
-  let whiteDominant = true;
+  let flickerPhase = 0;
   const flickerInterval = 0.1;
 
   const resolveAnchor = () => {
@@ -816,13 +824,18 @@ const createGravityStateFx = (avatar: THREE.Object3D): GravityStateFx => {
   };
 
   const applyPalette = () => {
-    if (whiteDominant) {
+    if (flickerPhase === 0) {
       coreMaterial.color.set(0xf8fafc);
       haloMaterial.color.set(0x0a0a0a);
       return;
     }
-    coreMaterial.color.set(0x0a0a0a);
-    haloMaterial.color.set(0xf8fafc);
+    if (flickerPhase === 1) {
+      coreMaterial.color.set(0x0a0a0a);
+      haloMaterial.color.set(0xf8fafc);
+      return;
+    }
+    coreMaterial.color.set(0xdc2626);
+    haloMaterial.color.set(0x7f1d1d);
   };
 
   return {
@@ -834,7 +847,7 @@ const createGravityStateFx = (avatar: THREE.Object3D): GravityStateFx => {
       if (!active) {
         lastUpdateAt = 0;
         flickerElapsed = 0;
-        whiteDominant = true;
+        flickerPhase = 0;
       }
       applyPalette();
     },
@@ -850,7 +863,7 @@ const createGravityStateFx = (avatar: THREE.Object3D): GravityStateFx => {
       flickerElapsed += deltaSeconds;
       while (flickerElapsed >= flickerInterval) {
         flickerElapsed -= flickerInterval;
-        whiteDominant = !whiteDominant;
+        flickerPhase = (flickerPhase + 1) % 3;
         applyPalette();
       }
 
@@ -1352,8 +1365,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const projectileGeometry = new THREE.SphereGeometry(0.095, 16, 14);
   const projectileMaterial = new THREE.MeshStandardMaterial({
-    color: 0x16a34a,
-    emissive: 0x15803d,
+    color: dakotaPrimaryColor,
+    emissive: dakotaEmissiveColor,
     emissiveIntensity: 0.95,
     roughness: 0.28,
     metalness: 0.08,

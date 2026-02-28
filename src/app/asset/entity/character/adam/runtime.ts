@@ -302,6 +302,48 @@ type SkillRVortexOrb = {
   phase: number;
 };
 
+type SkillROuterLine = {
+  mesh: THREE.LineLoop<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  tiltX: number;
+  tiltZ: number;
+  rotationSpeed: number;
+  wobbleSpeed: number;
+  wobbleAmount: number;
+  phase: number;
+};
+
+type SkillRLingeringOrb = {
+  mesh: THREE.Mesh;
+  orbitRadius: number;
+  orbitSpeed: number;
+  heightOffset: number;
+  phase: number;
+};
+
+type SkillRLingeringExplosionEntry = {
+  group: THREE.Group;
+  core: THREE.Mesh;
+  ring: THREE.Mesh;
+  bladeA: THREE.Mesh;
+  bladeB: THREE.Mesh;
+  coreGeometry: THREE.SphereGeometry;
+  ringGeometry: THREE.TorusGeometry;
+  bladeGeometry: THREE.PlaneGeometry;
+  orbGeometry: THREE.SphereGeometry;
+  coreMaterial: THREE.MeshBasicMaterial;
+  ringMaterial: THREE.MeshBasicMaterial;
+  bladeMaterial: THREE.MeshBasicMaterial;
+  orbMaterial: THREE.MeshBasicMaterial;
+  orbs: SkillRLingeringOrb[];
+  center: THREE.Vector3;
+  radius: number;
+  tickDamage: number;
+  startedAt: number;
+  expiresAt: number;
+  nextTickAt: number;
+  phase: number;
+};
+
 type SkillQArcOrb = {
   mesh: THREE.Mesh;
   orbitRadius: number;
@@ -497,6 +539,39 @@ export const createRuntime: CharacterRuntimeFactory = ({
     maxHits: 2,
     nextTickAt: 0,
   };
+  const skillRStackConfig = {
+    bonusExplosionDamagePerStack: 5,
+    speedGainPerStack: 0.08,
+    maxSpeedScale: 3.1,
+    visualFullStack: 16,
+    outerLineMinCount: 3,
+    outerLineMaxCount: 14,
+    outerLineStacksPerLine: 2,
+    visualColor: {
+      sphereBase: new THREE.Color(0x22c55e),
+      sphereDeep: new THREE.Color(0x052e16),
+      emissiveBase: new THREE.Color(0x22c55e),
+      emissiveDeep: new THREE.Color(0x0f4d2a),
+      vortexCoreBase: new THREE.Color(0xdcfce7),
+      vortexCoreDeep: new THREE.Color(0x86efac),
+      vortexRingBase: new THREE.Color(0x86efac),
+      vortexRingDeep: new THREE.Color(0x22c55e),
+      vortexOrbBase: new THREE.Color(0xbbf7d0),
+      vortexOrbDeep: new THREE.Color(0x4ade80),
+      outerLineBase: new THREE.Color(0xbbf7d0),
+      outerLineDeep: new THREE.Color(0x22c55e),
+    },
+  };
+  const skillRLingeringExplosionConfig = {
+    durationMs: 5000,
+    tickMs: 500,
+    tickDamagePerStack: 2.5,
+    maxHitsPerTick: 12,
+    minStackToActivate: 10,
+  };
+  const skillRStackState = {
+    count: 0,
+  };
   const skillQVolley = {
     count: 3,
     chargeMs: 2000,
@@ -625,6 +700,41 @@ export const createRuntime: CharacterRuntimeFactory = ({
       };
     }
   );
+  const skillROuterLineGeometry = new THREE.BufferGeometry();
+  const skillROuterLinePoints = 64;
+  const skillROuterLineVertices: THREE.Vector3[] = [];
+  for (let i = 0; i < skillROuterLinePoints; i += 1) {
+    const angle = (i / skillROuterLinePoints) * Math.PI * 2;
+    skillROuterLineVertices.push(
+      new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle))
+    );
+  }
+  skillROuterLineGeometry.setFromPoints(skillROuterLineVertices);
+  const skillROuterLineMaterial = new THREE.LineBasicMaterial({
+    color: 0xbbf7d0,
+    transparent: true,
+    opacity: 0.68,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const skillROuterLines: SkillROuterLine[] = Array.from(
+    { length: skillRStackConfig.outerLineMaxCount },
+    (_, index) => {
+      const mesh = new THREE.LineLoop(skillROuterLineGeometry, skillROuterLineMaterial);
+      const radiusScale = 1.04 + index * 0.055;
+      mesh.scale.setScalar(skillRSphereConfig.radius * radiusScale);
+      skillRSphere.add(mesh);
+      return {
+        mesh,
+        tiltX: (Math.random() - 0.5) * 0.42,
+        tiltZ: (Math.random() - 0.5) * 0.42,
+        rotationSpeed: (index % 2 === 0 ? 1 : -1) * (1.45 + index * 0.17),
+        wobbleSpeed: 2.1 + index * 0.34,
+        wobbleAmount: 0.08 + index * 0.02,
+        phase: Math.random() * Math.PI * 2,
+      };
+    }
+  );
   const skillQProjectileGeometry = new THREE.SphereGeometry(
     skillQVolley.radius,
     36,
@@ -725,6 +835,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillQArcSphere = new THREE.Sphere();
   const skillQArcCenterWorld = new THREE.Vector3();
   const skillQArcCenterLocal = new THREE.Vector3();
+  const skillRLingeringDamageDirection = new THREE.Vector3(0, 0, 1);
+  const activeSkillRLingeringExplosions: SkillRLingeringExplosionEntry[] = [];
   const activeSkillQArcDebuffs = new Map<string, SkillQArcDebuffEntry>();
   let skillRSphereInFlight = false;
 
@@ -733,6 +845,39 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const resolveEmpoweredBasicAttackDamage = (speed: number) =>
     resolveBaseProjectileDamage(speed) * 3;
+
+  const setSkillRStackCount = (count: number) => {
+    skillRStackState.count = Math.max(0, Math.floor(count));
+  };
+
+  const resetSkillRStacks = () => {
+    setSkillRStackCount(0);
+  };
+
+  const addSkillRStack = (amount = 1) => {
+    if (!skillR.active || !skillRSphere.visible) return;
+    setSkillRStackCount(skillRStackState.count + Math.max(1, Math.floor(amount)));
+  };
+
+  const resolveSkillRStackVisualRatio = () =>
+    1 -
+    Math.exp(
+      -Math.max(0, skillRStackState.count) /
+        Math.max(1, skillRStackConfig.visualFullStack)
+    );
+
+  const resolveSkillRSpeedScale = () =>
+    THREE.MathUtils.clamp(
+      1 + skillRStackState.count * skillRStackConfig.speedGainPerStack,
+      1,
+      skillRStackConfig.maxSpeedScale
+    );
+
+  const resolveSkillRExplosionBonusDamage = (stackCount: number) =>
+    Math.max(
+      0,
+      Math.floor(stackCount) * skillRStackConfig.bonusExplosionDamagePerStack
+    );
 
   const acquireSkillQProjectile = () => {
     for (let i = 0; i < skillQProjectilePool.length; i += 1) {
@@ -787,6 +932,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
     }
     return best;
+  };
+
+  const isObjectWithinSkillRSphere = (object: THREE.Object3D | null | undefined) => {
+    let current = object ?? null;
+    while (current) {
+      if (current === skillRSphere) return true;
+      current = current.parent;
+    }
+    return false;
   };
 
   const captureArmNeutralIfNeeded = (
@@ -859,13 +1013,24 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const resetSkillRSphereAttachment = () => {
     skillRSphere.visible = false;
+    skillRSphere.rotation.set(0, 0, 0);
     skillRSphere.scale.setScalar(1);
+    skillRSphereMaterial.color.copy(skillRStackConfig.visualColor.sphereBase);
+    skillRSphereMaterial.emissive.copy(skillRStackConfig.visualColor.emissiveBase);
+    skillRSphereMaterial.opacity = 0.42;
+    skillRSphereMaterial.emissiveIntensity = 1.05;
     skillRVortexGroup.visible = false;
     skillRVortexGroup.scale.setScalar(1);
+    skillRVortexCoreMaterial.color.copy(skillRStackConfig.visualColor.vortexCoreBase);
+    skillRVortexRingMaterial.color.copy(skillRStackConfig.visualColor.vortexRingBase);
+    skillRVortexOrbMaterial.color.copy(skillRStackConfig.visualColor.vortexOrbBase);
+    skillROuterLineMaterial.color.copy(skillRStackConfig.visualColor.outerLineBase);
+    skillROuterLineMaterial.opacity = 0.68;
     skillRContact.nextTickAt = 0;
     skillRSphere.removeFromParent();
     avatar.add(skillRSphere);
     skillRSphere.position.set(0, 0, 0);
+    resetSkillRStacks();
   };
 
   const deactivateSkillR = () => {
@@ -883,14 +1048,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const spawnSkillRExplosionRangeFx = (
     parent: THREE.Object3D,
     center: THREE.Vector3,
-    radius: number
+    radius: number,
+    stackCount = 0
   ) => {
-    const resolvedRadius = Math.max(0.5, radius);
+    const resolvedStack = Math.max(0, Math.floor(stackCount));
+    const stackIntensity = THREE.MathUtils.clamp(1 + resolvedStack * 0.09, 1, 2.8);
+    const resolvedRadius =
+      Math.max(0.5, radius) * THREE.MathUtils.clamp(1 + resolvedStack * 0.018, 1, 1.7);
     const ringGeometry = new THREE.TorusGeometry(1, 0.08, 10, 56);
     const ringMaterial = new THREE.MeshBasicMaterial({
       color: 0x86efac,
       transparent: true,
-      opacity: 0.62,
+      opacity: 0.58,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
@@ -904,7 +1073,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const shellMaterial = new THREE.MeshBasicMaterial({
       color: 0x22c55e,
       transparent: true,
-      opacity: 0.24,
+      opacity: 0.22,
       wireframe: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -913,10 +1082,25 @@ export const createRuntime: CharacterRuntimeFactory = ({
     shell.position.copy(center);
     shell.scale.setScalar(resolvedRadius * 0.22);
 
-    parent.add(ring, shell);
+    const shockGeometry = new THREE.TorusGeometry(1, 0.05, 8, 44);
+    const shockMaterial = new THREE.MeshBasicMaterial({
+      color: 0xbbf7d0,
+      transparent: true,
+      opacity: 0.48,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const shock = new THREE.Mesh(shockGeometry, shockMaterial);
+    shock.rotation.x = Math.PI / 2;
+    shock.rotation.z = Math.PI / 4;
+    shock.position.copy(center);
+    shock.position.y += 0.16;
+    shock.scale.setScalar(resolvedRadius * 0.14);
+
+    parent.add(ring, shell, shock);
 
     const startedAt = performance.now();
-    const lifeMs = 360;
+    const lifeMs = THREE.MathUtils.lerp(360, 620, (stackIntensity - 1) / 1.8);
     ring.onBeforeRender = () => {
       const progress = THREE.MathUtils.clamp(
         (performance.now() - startedAt) / lifeMs,
@@ -930,17 +1114,229 @@ export const createRuntime: CharacterRuntimeFactory = ({
       shell.scale.setScalar(
         THREE.MathUtils.lerp(resolvedRadius * 0.22, resolvedRadius, progress)
       );
-      ringMaterial.opacity = 0.62 * fade * fade;
-      shellMaterial.opacity = 0.24 * fade;
-      if (progress >= 1 || !ring.parent || !shell.parent) {
+      shock.scale.setScalar(
+        THREE.MathUtils.lerp(resolvedRadius * 0.14, resolvedRadius * 1.12, progress)
+      );
+      shock.rotation.z += 0.06 * stackIntensity;
+      ringMaterial.opacity = 0.58 * stackIntensity * fade * fade;
+      shellMaterial.opacity = 0.22 * stackIntensity * fade;
+      shockMaterial.opacity = 0.48 * stackIntensity * fade * fade;
+      if (progress >= 1 || !ring.parent || !shell.parent || !shock.parent) {
         ring.onBeforeRender = () => {};
-        parent.remove(ring, shell);
+        parent.remove(ring, shell, shock);
         ringGeometry.dispose();
         ringMaterial.dispose();
         shellGeometry.dispose();
         shellMaterial.dispose();
+        shockGeometry.dispose();
+        shockMaterial.dispose();
       }
     };
+  };
+
+  const clearSkillRLingeringExplosionEntry = (
+    entry: SkillRLingeringExplosionEntry
+  ) => {
+    entry.group.removeFromParent();
+    entry.coreGeometry.dispose();
+    entry.ringGeometry.dispose();
+    entry.bladeGeometry.dispose();
+    entry.orbGeometry.dispose();
+    entry.coreMaterial.dispose();
+    entry.ringMaterial.dispose();
+    entry.bladeMaterial.dispose();
+    entry.orbMaterial.dispose();
+  };
+
+  const clearAllSkillRLingeringExplosions = () => {
+    for (let i = activeSkillRLingeringExplosions.length - 1; i >= 0; i -= 1) {
+      clearSkillRLingeringExplosionEntry(activeSkillRLingeringExplosions[i]);
+    }
+    activeSkillRLingeringExplosions.length = 0;
+  };
+
+  const spawnSkillRLingeringExplosion = ({
+    parent,
+    center,
+    stackCount,
+    now,
+  }: {
+    parent: THREE.Object3D;
+    center: THREE.Vector3;
+    stackCount: number;
+    now: number;
+  }) => {
+    const resolvedStack = Math.max(0, Math.floor(stackCount));
+    if (resolvedStack < skillRLingeringExplosionConfig.minStackToActivate) {
+      return;
+    }
+    const resolvedRadius =
+      skillRECombo.explosionRadius *
+      THREE.MathUtils.clamp(0.72 + resolvedStack * 0.012, 0.72, 1.2);
+    const group = new THREE.Group();
+    group.position.copy(center);
+    group.position.y += 0.14;
+    parent.add(group);
+
+    const coreGeometry = new THREE.SphereGeometry(
+      Math.max(0.25, resolvedRadius * 0.2),
+      16,
+      12
+    );
+    const coreMaterial = new THREE.MeshBasicMaterial({
+      color: 0x86efac,
+      transparent: true,
+      opacity: 0.74,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    group.add(core);
+
+    const ringGeometry = new THREE.TorusGeometry(
+      Math.max(0.35, resolvedRadius * 0.66),
+      Math.max(0.05, resolvedRadius * 0.08),
+      10,
+      56
+    );
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0x22c55e,
+      transparent: true,
+      opacity: 0.54,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.rotation.x = Math.PI * 0.5;
+    group.add(ring);
+
+    const bladeGeometry = new THREE.PlaneGeometry(
+      Math.max(0.6, resolvedRadius * 1.8),
+      Math.max(0.15, resolvedRadius * 0.34)
+    );
+    const bladeMaterial = new THREE.MeshBasicMaterial({
+      color: 0xbbf7d0,
+      transparent: true,
+      opacity: 0.46,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const bladeA = new THREE.Mesh(bladeGeometry, bladeMaterial);
+    const bladeB = new THREE.Mesh(bladeGeometry, bladeMaterial);
+    bladeA.rotation.x = Math.PI * 0.5;
+    bladeB.rotation.x = Math.PI * 0.5;
+    bladeB.rotation.z = Math.PI * 0.5;
+    group.add(bladeA, bladeB);
+
+    const orbGeometry = new THREE.SphereGeometry(
+      Math.max(0.04, resolvedRadius * 0.08),
+      8,
+      6
+    );
+    const orbMaterial = new THREE.MeshBasicMaterial({
+      color: 0xdcfce7,
+      transparent: true,
+      opacity: 0.84,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const orbCount = THREE.MathUtils.clamp(6 + Math.floor(resolvedStack * 0.6), 6, 14);
+    const orbs: SkillRLingeringOrb[] = Array.from({ length: orbCount }, (_, index) => {
+      const mesh = new THREE.Mesh(orbGeometry, orbMaterial);
+      group.add(mesh);
+      return {
+        mesh,
+        orbitRadius:
+          resolvedRadius * THREE.MathUtils.lerp(0.48, 0.96, ((index % 5) + 1) / 6),
+        orbitSpeed: THREE.MathUtils.lerp(3.8, 8.4, Math.random()),
+        heightOffset: resolvedRadius * THREE.MathUtils.lerp(-0.18, 0.2, Math.random()),
+        phase: (index / Math.max(1, orbCount)) * Math.PI * 2 + Math.random() * 0.4,
+      };
+    });
+
+    activeSkillRLingeringExplosions.push({
+      group,
+      core,
+      ring,
+      bladeA,
+      bladeB,
+      coreGeometry,
+      ringGeometry,
+      bladeGeometry,
+      orbGeometry,
+      coreMaterial,
+      ringMaterial,
+      bladeMaterial,
+      orbMaterial,
+      orbs,
+      center: center.clone(),
+      radius: resolvedRadius,
+      tickDamage: resolvedStack * skillRLingeringExplosionConfig.tickDamagePerStack,
+      startedAt: now,
+      expiresAt: now + skillRLingeringExplosionConfig.durationMs,
+      nextTickAt: now + skillRLingeringExplosionConfig.tickMs,
+      phase: Math.random() * Math.PI * 2,
+    });
+  };
+
+  const updateSkillRLingeringExplosions = (now: number) => {
+    if (!activeSkillRLingeringExplosions.length) return;
+
+    for (let i = activeSkillRLingeringExplosions.length - 1; i >= 0; i -= 1) {
+      const entry = activeSkillRLingeringExplosions[i];
+      if (!entry.group.parent || now >= entry.expiresAt) {
+        clearSkillRLingeringExplosionEntry(entry);
+        activeSkillRLingeringExplosions.splice(i, 1);
+        continue;
+      }
+
+      const t = (now - entry.startedAt) * 0.001;
+      const lifeProgress = THREE.MathUtils.clamp(
+        (now - entry.startedAt) / skillRLingeringExplosionConfig.durationMs,
+        0,
+        1
+      );
+      const fade = THREE.MathUtils.clamp((1 - lifeProgress) / 0.24, 0, 1);
+      const pulse = 1 + Math.sin(t * 8 + entry.phase) * 0.12;
+
+      entry.core.scale.setScalar(pulse);
+      entry.ring.rotation.y = t * 8.5;
+      entry.ring.rotation.z = Math.sin(t * 3.2 + entry.phase) * 0.24;
+      entry.bladeA.rotation.z = t * 11.8 + entry.phase;
+      entry.bladeB.rotation.z = -t * 9.6 + entry.phase * 0.72;
+
+      entry.coreMaterial.opacity = THREE.MathUtils.clamp(0.74 * fade, 0, 0.74);
+      entry.ringMaterial.opacity = THREE.MathUtils.clamp(0.54 * fade, 0, 0.54);
+      entry.bladeMaterial.opacity = THREE.MathUtils.clamp(0.46 * fade, 0, 0.46);
+      entry.orbMaterial.opacity = THREE.MathUtils.clamp(0.84 * fade, 0, 0.84);
+
+      for (let j = 0; j < entry.orbs.length; j += 1) {
+        const orb = entry.orbs[j];
+        const orbitAngle = t * orb.orbitSpeed + orb.phase;
+        orb.mesh.position.set(
+          Math.cos(orbitAngle) * orb.orbitRadius,
+          orb.heightOffset + Math.sin(t * 4.2 + orb.phase) * entry.radius * 0.08,
+          Math.sin(orbitAngle) * orb.orbitRadius
+        );
+      }
+
+      while (now >= entry.nextTickAt && entry.nextTickAt <= entry.expiresAt) {
+        if (entry.tickDamage > 0 && performMeleeAttack) {
+          performMeleeAttack({
+            damage: entry.tickDamage,
+            maxDistance: 0.1,
+            maxHits: skillRLingeringExplosionConfig.maxHitsPerTick,
+            origin: entry.center,
+            direction: skillRLingeringDamageDirection,
+            contactCenter: entry.center,
+            contactRadius: entry.radius,
+          });
+        }
+        entry.nextTickAt += skillRLingeringExplosionConfig.tickMs;
+      }
+    }
   };
 
   const setSkillQChargeFxActive = (active: boolean) => {
@@ -1206,23 +1602,68 @@ export const createRuntime: CharacterRuntimeFactory = ({
       return;
     }
     skillRVortexGroup.visible = true;
-    const t = now * 0.001;
+    const stackRatio = resolveSkillRStackVisualRatio();
+    const speedScale = resolveSkillRSpeedScale();
+    const t = now * 0.001 * speedScale;
+    const sphereDarkness = THREE.MathUtils.lerp(1, 0.52, stackRatio);
+    const emissiveDarkness = THREE.MathUtils.lerp(1, 0.72, stackRatio);
+    const outerLineCount = THREE.MathUtils.clamp(
+      skillRStackConfig.outerLineMinCount +
+        Math.floor(skillRStackState.count / skillRStackConfig.outerLineStacksPerLine),
+      skillRStackConfig.outerLineMinCount,
+      skillROuterLines.length
+    );
 
-    const corePulse = 1 + Math.sin(now * 0.018) * 0.08;
+    skillRSphereMaterial.color
+      .copy(skillRStackConfig.visualColor.sphereBase)
+      .lerp(skillRStackConfig.visualColor.sphereDeep, stackRatio)
+      .multiplyScalar(sphereDarkness);
+    skillRSphereMaterial.emissive
+      .copy(skillRStackConfig.visualColor.emissiveBase)
+      .lerp(skillRStackConfig.visualColor.emissiveDeep, stackRatio)
+      .multiplyScalar(emissiveDarkness);
+    skillRSphereMaterial.opacity = THREE.MathUtils.clamp(
+      0.42 + stackRatio * 0.16,
+      0.42,
+      0.58
+    );
+    skillRSphere.rotation.y = t * 1.9;
+    skillRSphere.rotation.x = Math.sin(t * 1.1) * 0.18;
+
+    skillRVortexCoreMaterial.color
+      .copy(skillRStackConfig.visualColor.vortexCoreBase)
+      .lerp(skillRStackConfig.visualColor.vortexCoreDeep, stackRatio);
+    skillRVortexRingMaterial.color
+      .copy(skillRStackConfig.visualColor.vortexRingBase)
+      .lerp(skillRStackConfig.visualColor.vortexRingDeep, stackRatio);
+    skillRVortexOrbMaterial.color
+      .copy(skillRStackConfig.visualColor.vortexOrbBase)
+      .lerp(skillRStackConfig.visualColor.vortexOrbDeep, stackRatio);
+    skillROuterLineMaterial.color
+      .copy(skillRStackConfig.visualColor.outerLineBase)
+      .lerp(skillRStackConfig.visualColor.outerLineDeep, stackRatio)
+      .multiplyScalar(THREE.MathUtils.lerp(1, 0.66, stackRatio));
+
+    const corePulse = 1 + Math.sin(now * 0.018 * speedScale) * 0.08;
     skillRVortexCore.scale.setScalar(corePulse);
     skillRVortexCoreMaterial.opacity = THREE.MathUtils.clamp(
-      0.34 + Math.sin(now * 0.015) * 0.08,
+      0.34 + stackRatio * 0.14 + Math.sin(now * 0.015 * speedScale) * 0.08,
       0.24,
-      0.46
+      0.64
     );
     skillRVortexRingMaterial.opacity = THREE.MathUtils.clamp(
-      0.42 + Math.sin(now * 0.012) * 0.1,
+      0.42 + stackRatio * 0.16 + Math.sin(now * 0.012 * speedScale) * 0.1,
       0.28,
-      0.56
+      0.72
     );
     skillRVortexOrbMaterial.opacity = THREE.MathUtils.clamp(
-      0.8 + Math.sin(now * 0.022) * 0.1,
+      0.8 + stackRatio * 0.1 + Math.sin(now * 0.022 * speedScale) * 0.1,
       0.64,
+      0.98
+    );
+    skillROuterLineMaterial.opacity = THREE.MathUtils.clamp(
+      0.68 + stackRatio * 0.2 + Math.sin(now * 0.018 * speedScale) * 0.08,
+      0.48,
       0.92
     );
 
@@ -1231,8 +1672,21 @@ export const createRuntime: CharacterRuntimeFactory = ({
       const wobble = Math.sin(t * ring.wobbleSpeed + ring.phase) * ring.wobbleAmount;
       ring.mesh.rotation.set(
         ring.tiltX + wobble,
-        ring.tiltY + t * ring.yawSpeed,
+        ring.tiltY + t * ring.yawSpeed * (1 + stackRatio * 0.24),
         ring.tiltZ + wobble * 0.65
+      );
+    }
+
+    for (let i = 0; i < skillROuterLines.length; i += 1) {
+      const line = skillROuterLines[i];
+      line.mesh.visible = i < outerLineCount;
+      if (!line.mesh.visible) continue;
+      const wobble =
+        Math.sin(t * line.wobbleSpeed + line.phase) * line.wobbleAmount * 0.8;
+      line.mesh.rotation.set(
+        line.tiltX + wobble,
+        t * line.rotationSpeed * (1 + stackRatio * 0.5) + line.phase,
+        line.tiltZ - wobble
       );
     }
 
@@ -1240,7 +1694,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const verticalJitter = skillRSphereConfig.radius * 0.11;
     for (let i = 0; i < skillRVortexOrbs.length; i += 1) {
       const orb = skillRVortexOrbs[i];
-      const orbitAngle = t * orb.orbitSpeed + orb.phase;
+      const orbitAngle = t * orb.orbitSpeed * (1 + stackRatio * 0.42) + orb.phase;
       const radialOffset =
         orb.orbitRadius + Math.sin(t * orb.swirlSpeed + orb.phase * 1.7) * radialJitter;
       orb.mesh.position.set(
@@ -1291,6 +1745,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
         direction: skillRContactDirection,
         contactCenter: skillRContactCenterWorld,
         contactRadius,
+        onHitTarget: () => {
+          addSkillRStack(1);
+        },
       });
       skillRContact.nextTickAt += skillRContact.intervalMs;
     }
@@ -1331,9 +1788,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     avatar.updateMatrixWorld(true);
     skillRSphere.position.copy(avatar.worldToLocal(skillRArmMidpoint));
-    const pulse = 1 + Math.sin(now * 0.012) * 0.04;
+    const stackRatio = resolveSkillRStackVisualRatio();
+    const speedScale = resolveSkillRSpeedScale();
+    const pulse = 1 + Math.sin(now * 0.012 * speedScale) * (0.04 + stackRatio * 0.04);
     skillRSphere.scale.setScalar(pulse);
-    skillRSphereMaterial.emissiveIntensity = 1.05 + Math.sin(now * 0.02) * 0.2;
+    skillRSphereMaterial.emissiveIntensity =
+      1.05 + stackRatio * 0.5 + Math.sin(now * 0.02 * speedScale) * 0.22;
     skillRSphere.updateMatrixWorld(true);
     updateSkillRVortex(now);
     applySkillRContactDamage(now);
@@ -1348,6 +1808,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillR.active = true;
     skillR.expiresAt = now + skillRDurationMs;
     skillRContact.nextTickAt = now + skillRContact.intervalMs;
+    resetSkillRStacks();
     skillRSphere.visible = true;
     return true;
   };
@@ -1468,6 +1929,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (!skillR.active || skillRSphereInFlight || !fireProjectile) return false;
     const worldRoot = avatar.parent;
     if (!worldRoot) return false;
+    const stackCount = skillRStackState.count;
+    const explosionBonusDamage = resolveSkillRExplosionBonusDamage(stackCount);
     cancelCharge();
     deactivateSkillE(false);
     avatar.updateMatrixWorld(true);
@@ -1495,12 +1958,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
       energyGainOnHit: 8,
       splitOnImpact: true,
       explosionRadius: skillRECombo.explosionRadius,
-      explosionDamage: skillRComboExplosionDamage,
+      explosionDamage: skillRComboExplosionDamage + explosionBonusDamage,
       lifecycle: {
         applyForces: () => {
           updateSkillRVortex(performance.now());
         },
-        onRemove: ({ reason, triggerExplosion, position }) => {
+        onRemove: ({ reason, triggerExplosion, position, now: removeNow }) => {
           if (reason === "expired") {
             triggerExplosion();
           }
@@ -1508,8 +1971,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
             spawnSkillRExplosionRangeFx(
               worldRoot,
               position.clone(),
-              skillRECombo.explosionRadius
+              skillRECombo.explosionRadius,
+              stackCount
             );
+            spawnSkillRLingeringExplosion({
+              parent: worldRoot,
+              center: position.clone(),
+              stackCount,
+              now: removeNow,
+            });
           }
           skillRSphereInFlight = false;
           resetSkillRSphereAttachment();
@@ -1526,6 +1996,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (!skillR.active || skillRSphereInFlight || !fireProjectile) return false;
     const worldRoot = avatar.parent;
     if (!worldRoot) return false;
+    const stackCount = skillRStackState.count;
+    const explosionBonusDamage = resolveSkillRExplosionBonusDamage(stackCount);
 
     cancelCharge();
     deactivateSkillE(false);
@@ -1562,7 +2034,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       energyGainOnHit: 0,
       splitOnImpact: true,
       explosionRadius: skillRECombo.explosionRadius,
-      explosionDamage: skillRComboExplosionDamage,
+      explosionDamage: skillRComboExplosionDamage + explosionBonusDamage,
       removeOnTargetHit: false,
       removeOnWorldHit: false,
       lifecycle: {
@@ -1577,7 +2049,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
             spawnSkillRExplosionRangeFx(
               worldRoot,
               position.clone(),
-              skillRECombo.explosionRadius
+              skillRECombo.explosionRadius,
+              stackCount
             );
           }
           skillRSphereInFlight = false;
@@ -1680,6 +2153,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     deactivateSkillR();
     setSkillQChargeFxActive(false);
     clearAllSkillQArcDebuffs();
+    clearAllSkillRLingeringExplosions();
     skillQProjectilePool.forEach((entry) => {
       entry.aura.setVisible(false);
       entry.mesh.rotation.set(0, 0, 0);
@@ -1703,6 +2177,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
       ? activeProjectileBlockers
       : emptyProjectileBlockers;
 
+  const handleProjectileBlockHit = ({ blockerHit }: { blockerHit: THREE.Intersection }) => {
+    if (!skillR.active || !skillRSphere.visible) return false;
+    if (!isObjectWithinSkillRSphere(blockerHit.object)) return false;
+    addSkillRStack(1);
+    // Return false so the projectile is still treated as blocked by the sphere.
+    return false;
+  };
+
   return new CharacterRuntimeObject({
     setProfile: baseRuntime.setProfile,
     triggerSlash: baseRuntime.triggerSlash,
@@ -1719,6 +2201,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     handleSkillE,
     handleSkillR,
     getProjectileBlockers,
+    handleProjectileBlockHit,
     isMovementLocked: () => skillR.active || skillQChargeState.active,
     getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs,
@@ -1747,6 +2230,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
       updateSkillQChargeFx(args.now);
       updateSkillQArcDebuffs(args.now);
+      updateSkillRLingeringExplosions(args.now);
       if (chargeState.isCharging) {
         const elapsed = args.now - chargeState.startTime;
         const ratio = THREE.MathUtils.clamp(
@@ -1957,6 +2441,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillRVortexRingMaterial.dispose();
       skillRVortexOrbGeometry.dispose();
       skillRVortexOrbMaterial.dispose();
+      skillROuterLineGeometry.dispose();
+      skillROuterLineMaterial.dispose();
       skillRSphereGeometry.dispose();
       skillRSphereMaterial.dispose();
       skillQChargeAura.group.removeFromParent();

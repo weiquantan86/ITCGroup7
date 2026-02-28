@@ -52,22 +52,22 @@ mkdirSync(dirname(outPath), { recursive: true });
 const scene = new THREE.Scene();
 
 const primaryMat = new THREE.MeshStandardMaterial({
-  color: 0x16a34a,
+  color: 0x9ca3af,
   roughness: 0.55,
   metalness: 0.08,
 });
 const darkMat = new THREE.MeshStandardMaterial({
-  color: 0x14532d,
+  color: 0x3f3f46,
   roughness: 0.7,
   metalness: 0.05,
 });
 const accentMat = new THREE.MeshStandardMaterial({
-  color: 0x0ea5e9,
+  color: 0xd4d4d8,
   roughness: 0.35,
   metalness: 0.2,
 });
 const eyeMat = new THREE.MeshStandardMaterial({
-  color: 0x0f172a,
+  color: 0x18181b,
   roughness: 0.4,
   metalness: 0.0,
 });
@@ -80,7 +80,7 @@ const torso = new THREE.Mesh(
 );
 torso.position.y = 0.94;
 
-const head = new THREE.Mesh(new THREE.SphereGeometry(0.46, 24, 18), primaryMat);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 24, 18), primaryMat);
 head.name = "head";
 head.position.y = 1.75;
 
@@ -91,11 +91,11 @@ eyeRight.position.set(0.16, 0.02, 0.36);
 head.add(eyeLeft, eyeRight);
 
 const faceGlasses = new THREE.Mesh(
-  new THREE.BoxGeometry(0.44, 0.25, 0.1),
+  new THREE.BoxGeometry(0.5, 0.3, 0.2),
   accentMat
 );
 faceGlasses.name = "faceGlasses";
-faceGlasses.position.set(0, 0.02, 0.45);
+faceGlasses.position.set(0, 0.02, 0.4);
 head.add(faceGlasses);
 
 const headsetBase = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.35, 0.2), darkMat);
