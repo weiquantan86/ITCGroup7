@@ -1,7 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { regenerateCharacterGlbs } from "../../asset/entity/character/regenerateCharacterGlbs";
 
 export async function POST() {
   if (process.env.NODE_ENV !== "development") {
@@ -9,25 +6,32 @@ export async function POST() {
   }
 
   try {
-    const { stdout, stderr } = await execFileAsync("node", [
-      "src/app/asset/entity/character/gen_all_characters.mjs",
-    ]);
+    const summary = await regenerateCharacterGlbs();
+    const ok = summary.failedScripts.length === 0;
+    const status = ok ? 200 : 500;
+
     return new Response(
       JSON.stringify({
-        ok: true,
-        stdout: stdout || "",
-        stderr: stderr || "",
+        ok,
+        ...summary,
       }),
       {
-        status: 200,
+        status,
         headers: { "content-type": "application/json" },
       }
     );
   } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === "string"
+          ? err
+          : "Generation failed";
+
     return new Response(
       JSON.stringify({
         ok: false,
-        message: err?.message || "Generation failed",
+        message,
       }),
       {
         status: 500,

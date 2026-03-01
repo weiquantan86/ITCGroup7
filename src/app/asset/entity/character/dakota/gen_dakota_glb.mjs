@@ -75,7 +75,7 @@ const eyeMat = new THREE.MeshStandardMaterial({
 const group = new THREE.Group();
 
 const torso = new THREE.Mesh(
-  new THREE.CapsuleGeometry(0.36, 1.3, 6, 18),
+  new THREE.CapsuleGeometry(0.36, 1.05, 6, 18),
   primaryMat
 );
 torso.position.y = 0.94;
@@ -84,18 +84,36 @@ const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 24, 18), primaryMat);
 head.name = "head";
 head.position.y = 1.75;
 
-const eyeLeft = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), eyeMat);
-const eyeRight = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), eyeMat);
-eyeLeft.position.set(-0.16, 0.02, 0.36);
-eyeRight.position.set(0.16, 0.02, 0.36);
-head.add(eyeLeft, eyeRight);
+const createOctagonPrismGeometry = (width, height, depth, cornerCut) => {
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const cut = Math.min(cornerCut, halfWidth * 0.45, halfHeight * 0.45);
+  const shape = new THREE.Shape();
+
+  shape.moveTo(-halfWidth + cut, halfHeight);
+  shape.lineTo(halfWidth - cut, halfHeight);
+  shape.lineTo(halfWidth, halfHeight - cut);
+  shape.lineTo(halfWidth, -halfHeight + cut);
+  shape.lineTo(halfWidth - cut, -halfHeight);
+  shape.lineTo(-halfWidth + cut, -halfHeight);
+  shape.lineTo(-halfWidth, -halfHeight + cut);
+  shape.lineTo(-halfWidth, halfHeight - cut);
+  shape.closePath();
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: false,
+  });
+  geometry.center();
+  return geometry;
+};
 
 const faceGlasses = new THREE.Mesh(
-  new THREE.BoxGeometry(0.5, 0.3, 0.2),
+  createOctagonPrismGeometry(0.5, 0.3, 0.2, 0.06),
   accentMat
 );
 faceGlasses.name = "faceGlasses";
-faceGlasses.position.set(0, 0.02, 0.4);
+faceGlasses.position.set(0, 0.02, 0.3);
 head.add(faceGlasses);
 
 const headsetBase = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.35, 0.2), darkMat);

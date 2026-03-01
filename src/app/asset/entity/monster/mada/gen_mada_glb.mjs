@@ -71,6 +71,13 @@ const darkMat = new THREE.MeshStandardMaterial({
   roughness: 0.72,
   metalness: 0.05,
 });
+const seamMat = new THREE.MeshStandardMaterial({
+  color: 0x6b1010,
+  roughness: 0.66,
+  metalness: 0.12,
+  emissive: 0x1a0303,
+  emissiveIntensity: 0.18,
+});
 const eyeMat = new THREE.MeshStandardMaterial({
   color: 0xff4d4d,
   roughness: 0.18,
@@ -121,12 +128,24 @@ feetGroup.name = "feetGroup";
 const bodyBaseY = 0.9;
 const headBaseY = 1.7;
 
-const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.1, 6, 18), shellMat);
+const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.42, 1.35, 6), shellMat);
 torso.name = "torso";
-torso.scale.y = 0.92;
+torso.scale.y = 0.9;
 
-const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 24, 18), shellMat);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.43, 24, 18), shellMat);
 head.name = "head";
+const eyeGroup = new THREE.Group();
+eyeGroup.name = "eyeGroup";
+const headSeamBand = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.435, 0.435, 0.05, 24, 1, true),
+  seamMat
+);
+headSeamBand.position.y = 0.03;
+const headSeamClampFront = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.04), seamMat);
+const headSeamClampBack = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.04), seamMat);
+headSeamClampFront.position.set(0, 0.03, 0.41);
+headSeamClampBack.position.set(0, 0.03, -0.41);
+head.add(headSeamBand, headSeamClampFront, headSeamClampBack);
 
 const hornLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.012, 0.48, 8), darkMat);
 const hornRight = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.012, 0.48, 8), darkMat);
@@ -135,8 +154,8 @@ hornRight.position.set(0.18, 0.48, -0.02);
 hornLeft.rotation.z = Math.PI / 6;
 hornRight.rotation.z = -Math.PI / 6;
 
-const hornTipLeft = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.14, 8), darkMat);
-const hornTipRight = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.14, 8), darkMat);
+const hornTipLeft = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 8), darkMat);
+const hornTipRight = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 8), darkMat);
 hornTipLeft.position.set(-0.29, 0.7, -0.02);
 hornTipRight.position.set(0.29, 0.7, -0.02);
 hornTipLeft.rotation.z = Math.PI / 6;
@@ -144,22 +163,25 @@ hornTipRight.rotation.z = -Math.PI / 6;
 
 const eyeLeft = new THREE.Mesh(createEyeGeometry(false), eyeMat);
 const eyeRight = new THREE.Mesh(createEyeGeometry(true), eyeMat);
-eyeLeft.position.set(-0.18, 0.09, 0.4);
-eyeRight.position.set(0.18, 0.09, 0.4);
+eyeLeft.name = "eyeLeft";
+eyeRight.name = "eyeRight";
+eyeLeft.position.set(-0.18, 0.09, 0.38);
+eyeRight.position.set(0.18, 0.09, 0.38);
 eyeLeft.rotation.set(0, -0.3, 0.1);
 eyeRight.rotation.set(0, 0.3, -0.1);
+eyeGroup.add(eyeLeft, eyeRight);
 
-const armGeo = new THREE.CapsuleGeometry(0.14, 0.65, 6, 12);
+const armGeo = new THREE.CapsuleGeometry(0.14, 0.8, 6, 12);
 
 const armLeftGroup = new THREE.Group();
 armLeftGroup.name = "armLeft";
-armLeftGroup.position.set(-0.55, 0.58, 0);
-armLeftGroup.rotation.z = Math.PI / 32;
+armLeftGroup.position.set(-0.5, 0.58, 0);
+armLeftGroup.rotation.set(0, 0, 0);
 
 const armRightGroup = new THREE.Group();
 armRightGroup.name = "armRight";
-armRightGroup.position.set(0.55, 0.58, 0);
-armRightGroup.rotation.z = -Math.PI / 32;
+armRightGroup.position.set(0.5, 0.58, 0);
+armRightGroup.rotation.set(0, 0, 0);
 
 const armLeft = new THREE.Mesh(armGeo, shellMat);
 const armRight = new THREE.Mesh(armGeo, shellMat);
@@ -175,7 +197,7 @@ handRight.position.y = -1.08;
 armLeftGroup.add(armLeft, handLeft);
 armRightGroup.add(armRight, handRight);
 
-const legGeo = new THREE.CapsuleGeometry(0.18, 0.55, 6, 12);
+const legGeo = new THREE.CapsuleGeometry(0.14, 0.55, 6, 12);
 
 const legLeftGroup = new THREE.Group();
 legLeftGroup.name = "legLeft";
@@ -204,7 +226,7 @@ bodyGroup.position.y = bodyBaseY;
 bodyGroup.add(torso);
 
 headGroup.position.y = headBaseY;
-headGroup.add(head, hornLeft, hornRight, hornTipLeft, hornTipRight, eyeLeft, eyeRight);
+headGroup.add(head, hornLeft, hornRight, hornTipLeft, hornTipRight, eyeGroup);
 
 handGroup.position.y = bodyBaseY;
 handGroup.scale.y = torso.scale.y;

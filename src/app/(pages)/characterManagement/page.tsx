@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { unstable_noStore as noStore } from "next/cache";
 import pool from "../../../database/client";
+import { regenerateCharacterGlbs } from "../../asset/entity/character/regenerateCharacterGlbs";
 import CharacterManagementShell from "./CharacterManagementShell";
 
 function ErrorState({ message }: { message: string }) {
@@ -27,6 +29,8 @@ function ErrorState({ message }: { message: string }) {
 }
 
 export default async function CharacterManagementPage() {
+  noStore();
+
   const cookieStore = await cookies();
   const userIdValue = cookieStore.get("user_id")?.value;
   if (!userIdValue) {
@@ -36,6 +40,14 @@ export default async function CharacterManagementPage() {
   const userId = Number.parseInt(userIdValue, 10);
   if (!Number.isFinite(userId)) {
     return <ErrorState message="Load failed: login information is invalid." />;
+  }
+
+  const generationSummary = await regenerateCharacterGlbs();
+  if (generationSummary.failedScripts.length > 0) {
+    console.error(
+      "Character GLB regeneration failed:",
+      generationSummary.failedScripts
+    );
   }
 
   try {

@@ -527,7 +527,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
   const skillRECombo = {
     speed: 14,
-    distance: 5,
+    distance: 10,
     damage: 74,
     explosionRadius: 12,
     explosionDamage: 60,

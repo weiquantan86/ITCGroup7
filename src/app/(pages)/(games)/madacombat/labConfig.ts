@@ -1,4 +1,5 @@
 export const MADA_LAB_STATE_KEY = "madaLabState";
+export const MADA_TERMINAL_UNLOCK_EVENT = "madacombat:terminal-unlock";
 
 export type MadaLabState = {
   madaHealth: number;
@@ -8,6 +9,7 @@ export type MadaLabState = {
   fluidPatches: number;
   circuitBreaks: number;
   statusLabel: string;
+  terminalInRange: boolean;
 };
 
 export const createInitialMadaLabState = (): MadaLabState => ({
@@ -18,4 +20,5 @@ export const createInitialMadaLabState = (): MadaLabState => ({
   fluidPatches: 0,
   circuitBreaks: 0,
   statusLabel: "Containment stabilizing",
+  terminalInRange: false,
 });

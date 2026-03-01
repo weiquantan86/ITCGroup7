@@ -10,13 +10,18 @@ import type {
   SceneSetupContext,
   SceneSetupResult,
 } from "../../../asset/scenes/general/sceneTypes";
-import { MADA_LAB_STATE_KEY, type MadaLabState } from "./labConfig";
+import {
+  MADA_LAB_STATE_KEY,
+  MADA_TERMINAL_UNLOCK_EVENT,
+  type MadaLabState,
+} from "./labConfig";
 
 type BoxCollider = {
   minX: number;
   maxX: number;
   minZ: number;
   maxZ: number;
+  enabled?: boolean;
 };
 
 const GROUND_Y = -1.4;
@@ -104,15 +109,51 @@ export const createMadaLabScene = (
   const animators: Array<(now: number, delta: number) => void> = [];
 
   let madaHealth = MADA_MAX_HEALTH;
+  let madaActivated = false;
+  let terminalInRange = false;
+  let terminalDestroyed = false;
+  let breachSequenceStarted = false;
+  let breachSequenceStartedAt = 0;
+  let breachPendingTunnelExit = false;
+  let playerWasInsideTunnel = false;
+  let terminalExplosionStartedAt = 0;
   let electricActivity = 82;
   let shieldPulse = 0;
   let lastStateKey = "";
   let nextUiEmitAt = 0;
   let circuitBreakCount = 0;
   let fluidPatchCount = 0;
+  const frontWallDepth = 1.4;
+  const frontWallZ = bounds.maxZ + 0.8;
+  const tunnelWidth = 8.8;
+  const tunnelHeight = 7.4;
+  const tunnelDepth = 25.6;
+  const tunnelStartZ = frontWallZ + frontWallDepth / 2;
+  const tunnelCenterZ = tunnelStartZ + tunnelDepth / 2;
+  const tunnelEndZ = tunnelStartZ + tunnelDepth;
+  const terminalInteractionRadius = 2.05;
+  const tunnelExitThresholdZ = frontWallZ + 0.1;
+  const breachSequenceDurationMs = 3000;
+  const terminalAnchor = new THREE.Vector3(
+    0,
+    GROUND_Y + 1.25,
+    tunnelEndZ - 1.15
+  );
+  const playableBounds = {
+    minX: bounds.minX,
+    maxX: bounds.maxX,
+    minZ: bounds.minZ,
+    maxZ: tunnelEndZ - 0.45,
+  };
+  const playerWorldPosition = new THREE.Vector3();
+  const ambientBaseColor = new THREE.Color(0xe4fbff);
+  const ambientAlarmColor = new THREE.Color(0xff5f5f);
 
   const ambient = new THREE.AmbientLight(0xe4fbff, 2.1);
   scene.add(ambient);
+  const breachAlarmLight = new THREE.PointLight(0xff3b30, 0, 90, 2);
+  breachAlarmLight.position.set(0, GROUND_Y + 8.6, -10);
+  scene.add(breachAlarmLight);
 
   const addCollider = (
     x: number,
@@ -121,12 +162,15 @@ export const createMadaLabScene = (
     depth: number,
     padding = 0.55
   ) => {
-    colliders.push({
+    const collider = {
       minX: x - width / 2 - padding,
       maxX: x + width / 2 + padding,
       minZ: z - depth / 2 - padding,
       maxZ: z + depth / 2 + padding,
-    });
+      enabled: true,
+    };
+    colliders.push(collider);
+    return collider;
   };
 
   const emitState = (force = false, now = performance.now()) => {
@@ -144,9 +188,14 @@ export const createMadaLabScene = (
       electricActivity: clamp(Math.round(electricActivity), 0, 100),
       fluidPatches: fluidPatchCount,
       circuitBreaks: circuitBreakCount,
+      terminalInRange,
       statusLabel:
         madaHealth <= 0
           ? "Containment failure"
+          : breachSequenceStarted
+          ? "Containment breach"
+          : !madaActivated
+          ? "Specimen dormant"
           : containmentIntegrity <= 30
           ? "Containment unstable"
           : containmentIntegrity <= 60
@@ -239,10 +288,33 @@ export const createMadaLabScene = (
   solidGroup.add(backWall);
   trackMesh(backWall);
 
-  const frontWall = createWall(ROOM_WIDTH - 8, ROOM_HEIGHT, 1.4);
-  frontWall.position.set(0, GROUND_Y + ROOM_HEIGHT / 2, bounds.maxZ + 0.8);
-  solidGroup.add(frontWall);
-  trackMesh(frontWall);
+  const frontWallSideWidth = (ROOM_WIDTH - 8 - tunnelWidth) / 2;
+  const frontWallLeft = createWall(frontWallSideWidth, ROOM_HEIGHT, frontWallDepth);
+  frontWallLeft.position.set(
+    -(tunnelWidth / 2 + frontWallSideWidth / 2),
+    GROUND_Y + ROOM_HEIGHT / 2,
+    frontWallZ
+  );
+  solidGroup.add(frontWallLeft);
+  trackMesh(frontWallLeft);
+
+  const frontWallRight = createWall(frontWallSideWidth, ROOM_HEIGHT, frontWallDepth);
+  frontWallRight.position.set(
+    tunnelWidth / 2 + frontWallSideWidth / 2,
+    GROUND_Y + ROOM_HEIGHT / 2,
+    frontWallZ
+  );
+  solidGroup.add(frontWallRight);
+  trackMesh(frontWallRight);
+
+  const frontWallTop = createWall(tunnelWidth, ROOM_HEIGHT - tunnelHeight, frontWallDepth);
+  frontWallTop.position.set(
+    0,
+    GROUND_Y + tunnelHeight + (ROOM_HEIGHT - tunnelHeight) / 2,
+    frontWallZ
+  );
+  solidGroup.add(frontWallTop);
+  trackMesh(frontWallTop);
 
   const leftWall = createWall(1.4, ROOM_HEIGHT, ROOM_DEPTH - 8);
   leftWall.position.set(bounds.minX - 0.8, GROUND_Y + ROOM_HEIGHT / 2, 0);
@@ -261,6 +333,194 @@ export const createMadaLabScene = (
   ceiling.position.set(0, GROUND_Y + ROOM_HEIGHT + 0.5, 0);
   solidGroup.add(ceiling);
   trackMesh(ceiling);
+
+  const tunnelGroup = new THREE.Group();
+  tunnelGroup.position.set(0, 0, 0);
+
+  const tunnelFloor = new THREE.Mesh(
+    new THREE.BoxGeometry(tunnelWidth + 0.36, 0.18, tunnelDepth),
+    trimMaterial
+  );
+  tunnelFloor.position.set(0, GROUND_Y + 0.09, tunnelCenterZ);
+  tunnelGroup.add(tunnelFloor);
+
+  const tunnelCeiling = new THREE.Mesh(
+    new THREE.BoxGeometry(tunnelWidth + 0.5, 0.24, tunnelDepth),
+    trimMaterial
+  );
+  tunnelCeiling.position.set(0, GROUND_Y + tunnelHeight, tunnelCenterZ);
+  tunnelGroup.add(tunnelCeiling);
+
+  const tunnelLeftWall = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, tunnelHeight, tunnelDepth),
+    wallMaterial
+  );
+  tunnelLeftWall.position.set(-(tunnelWidth / 2 + 0.17), GROUND_Y + tunnelHeight / 2, tunnelCenterZ);
+  tunnelGroup.add(tunnelLeftWall);
+
+  const tunnelRightWall = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, tunnelHeight, tunnelDepth),
+    wallMaterial
+  );
+  tunnelRightWall.position.set(tunnelWidth / 2 + 0.17, GROUND_Y + tunnelHeight / 2, tunnelCenterZ);
+  tunnelGroup.add(tunnelRightWall);
+
+  const tunnelEndWall = new THREE.Mesh(
+    new THREE.BoxGeometry(tunnelWidth + 0.36, tunnelHeight, 0.28),
+    wallMaterial
+  );
+  tunnelEndWall.position.set(0, GROUND_Y + tunnelHeight / 2, tunnelEndZ - 0.14);
+  tunnelGroup.add(tunnelEndWall);
+
+  const terminalGroup = new THREE.Group();
+  tunnelGroup.add(terminalGroup);
+
+  const terminalPedestal = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 1.2, 1.1),
+    trimMaterial
+  );
+  terminalPedestal.position.copy(terminalAnchor);
+  terminalPedestal.position.y = GROUND_Y + 0.68;
+  terminalGroup.add(terminalPedestal);
+
+  const terminalStem = new THREE.Mesh(
+    new THREE.BoxGeometry(0.42, 1.05, 0.36),
+    wallMaterial
+  );
+  terminalStem.position.set(0, GROUND_Y + 1.56, terminalAnchor.z - 0.1);
+  terminalGroup.add(terminalStem);
+
+  const terminalConsole = new THREE.Mesh(
+    new THREE.BoxGeometry(1.62, 0.96, 0.34),
+    trimMaterial
+  );
+  terminalConsole.position.set(0, GROUND_Y + 2.18, terminalAnchor.z - 0.18);
+  terminalConsole.rotation.x = -0.22;
+  terminalGroup.add(terminalConsole);
+
+  const terminalScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.18, 0.64),
+    new THREE.MeshBasicMaterial({
+      color: 0x7df7ff,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+    })
+  );
+  terminalScreen.position.set(0, GROUND_Y + 2.2, terminalAnchor.z - 0.37);
+  terminalScreen.rotation.set(-0.22, Math.PI, 0);
+  terminalGroup.add(terminalScreen);
+
+  const terminalSideLightLeft = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.72, 0.08),
+    glowLime.clone()
+  );
+  terminalSideLightLeft.position.set(-0.78, GROUND_Y + 2.18, terminalAnchor.z - 0.22);
+  terminalGroup.add(terminalSideLightLeft);
+
+  const terminalSideLightRight = terminalSideLightLeft.clone();
+  terminalSideLightRight.position.x = 0.78;
+  terminalGroup.add(terminalSideLightRight);
+
+  const terminalExplosionGroup = new THREE.Group();
+  terminalExplosionGroup.visible = false;
+  tunnelGroup.add(terminalExplosionGroup);
+
+  const terminalExplosionFlashMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff8a65,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  const terminalExplosionFlash = new THREE.Mesh(
+    new THREE.SphereGeometry(0.55, 12, 10),
+    terminalExplosionFlashMaterial
+  );
+  terminalExplosionGroup.add(terminalExplosionFlash);
+
+  const terminalExplosionSmokeMaterial = new THREE.MeshBasicMaterial({
+    color: 0x090909,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  const terminalExplosionSmoke = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 14, 12),
+    terminalExplosionSmokeMaterial
+  );
+  terminalExplosionGroup.add(terminalExplosionSmoke);
+
+  const terminalExplosionShards = Array.from({ length: 6 }, (_, index) => {
+    const shard = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.26, 0.08),
+      trimMaterial.clone()
+    );
+    const angle = (index / 6) * Math.PI * 2;
+    shard.position.set(Math.cos(angle) * 0.34, 0.14, Math.sin(angle) * 0.28);
+    terminalExplosionGroup.add(shard);
+    return {
+      mesh: shard,
+      angle,
+      lift: 0.2 + index * 0.04,
+    };
+  });
+  terminalExplosionGroup.position.set(0, GROUND_Y + 1.9, terminalAnchor.z - 0.2);
+
+  registerAnimator((now) => {
+    const screenMaterial = terminalScreen.material as THREE.MeshBasicMaterial;
+    if (!terminalDestroyed) {
+      const pulse = 0.58 + (0.5 + 0.5 * Math.sin(now * 0.0048)) * 0.24;
+      screenMaterial.opacity = pulse;
+      terminalScreen.scale.x = 0.98 + Math.sin(now * 0.0026) * 0.015;
+      terminalSideLightLeft.scale.y = 0.84 + Math.sin(now * 0.005 + 0.3) * 0.12;
+      terminalSideLightRight.scale.y = 0.84 + Math.sin(now * 0.005 + 1.1) * 0.12;
+    }
+
+    if (terminalExplosionStartedAt <= 0) {
+      terminalExplosionGroup.visible = false;
+      terminalExplosionFlashMaterial.opacity = 0;
+      terminalExplosionSmokeMaterial.opacity = 0;
+      return;
+    }
+
+    const progress = THREE.MathUtils.clamp(
+      (now - terminalExplosionStartedAt) / 850,
+      0,
+      1
+    );
+    if (progress >= 1) {
+      terminalExplosionGroup.visible = false;
+      terminalExplosionFlashMaterial.opacity = 0;
+      terminalExplosionSmokeMaterial.opacity = 0;
+      return;
+    }
+
+    terminalExplosionGroup.visible = true;
+    terminalExplosionFlash.scale.setScalar(0.6 + progress * 1.8);
+    terminalExplosionSmoke.scale.setScalar(0.8 + progress * 2.2);
+    terminalExplosionFlashMaterial.opacity = (1 - progress) * 0.78;
+    terminalExplosionSmokeMaterial.opacity = (1 - progress) * 0.34;
+    terminalExplosionGroup.rotation.y += 0.08;
+
+    for (let i = 0; i < terminalExplosionShards.length; i += 1) {
+      const shard = terminalExplosionShards[i];
+      const drift = 0.4 + progress * 1.4;
+      shard.mesh.position.set(
+        Math.cos(shard.angle) * drift,
+        shard.lift + progress * 0.7,
+        Math.sin(shard.angle) * drift * 0.9
+      );
+      shard.mesh.rotation.x += 0.14;
+      shard.mesh.rotation.y += 0.19;
+    }
+  });
+
+  solidGroup.add(tunnelGroup);
+  trackObject(tunnelGroup);
+  addCollider(-(tunnelWidth / 2 + 0.17), tunnelCenterZ, 0.34, tunnelDepth, 0.08);
+  addCollider(tunnelWidth / 2 + 0.17, tunnelCenterZ, 0.34, tunnelDepth, 0.08);
+  addCollider(0, tunnelEndZ - 0.14, tunnelWidth + 0.36, 0.28, 0.08);
+  const terminalCollider = addCollider(0, terminalAnchor.z - 0.12, 2, 1.8, 0.1);
 
   const createPanelWindow = (x: number) => {
     const panel = new THREE.Group();
@@ -677,13 +937,16 @@ export const createMadaLabScene = (
   platform.position.y = GROUND_Y + 0.65;
   chamber.add(platform);
 
+  const containmentShellGroup = new THREE.Group();
+  chamber.add(containmentShellGroup);
+
   const platformRing = new THREE.Mesh(
     new THREE.TorusGeometry(4.9, 0.14, 10, 40),
     glowLime
   );
   platformRing.rotation.x = Math.PI / 2;
   platformRing.position.y = GROUND_Y + 1.45;
-  chamber.add(platformRing);
+  containmentShellGroup.add(platformRing);
 
   const shell = new THREE.Mesh(
     new THREE.CylinderGeometry(4.2, 4.2, 8.6, 24, 1, true),
@@ -695,7 +958,7 @@ export const createMadaLabScene = (
     })
   );
   shell.position.y = GROUND_Y + 5.15;
-  chamber.add(shell);
+  containmentShellGroup.add(shell);
 
   const topCap = new THREE.Mesh(
     new THREE.TorusGeometry(4.25, 0.16, 10, 40),
@@ -703,7 +966,7 @@ export const createMadaLabScene = (
   );
   topCap.rotation.x = Math.PI / 2;
   topCap.position.y = GROUND_Y + 9.45;
-  chamber.add(topCap);
+  containmentShellGroup.add(topCap);
 
   const middleBand = new THREE.Mesh(
     new THREE.TorusGeometry(4.42, 0.12, 10, 40),
@@ -711,7 +974,7 @@ export const createMadaLabScene = (
   );
   middleBand.rotation.x = Math.PI / 2;
   middleBand.position.y = GROUND_Y + 5.8;
-  chamber.add(middleBand);
+  containmentShellGroup.add(middleBand);
 
   [
     [-3.2, -3.2],
@@ -724,7 +987,7 @@ export const createMadaLabScene = (
       trimMaterial
     );
     strut.position.set(x, GROUND_Y + 5.15, z);
-    chamber.add(strut);
+    containmentShellGroup.add(strut);
   });
 
   const crackGroup = new THREE.Group();
@@ -743,7 +1006,36 @@ export const createMadaLabScene = (
     crack.rotation.z = rotZ as number;
     crackGroup.add(crack);
   });
-  chamber.add(crackGroup);
+  containmentShellGroup.add(crackGroup);
+
+  const breachSmokeGroup = new THREE.Group();
+  breachSmokeGroup.visible = false;
+  fxGroup.add(breachSmokeGroup);
+  trackObject(breachSmokeGroup);
+
+  const breachSmokePuffs = Array.from({ length: 22 }, (_, index) => {
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x050505,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 14, 12),
+      material
+    );
+    breachSmokeGroup.add(mesh);
+    return {
+      mesh,
+      material,
+      radius: 4 + (index % 6) * 1.8 + Math.random() * 0.8,
+      angle: (index / 22) * Math.PI * 2 + Math.random() * 0.4,
+      height: 1.1 + Math.random() * 5.2,
+      drift: (Math.random() - 0.5) * 1.8,
+      phase: Math.random() * Math.PI * 2,
+      scale: 1.6 + Math.random() * 2.8,
+    };
+  });
 
   registerAnimator((now, delta) => {
     const pulse = 0.72 + (0.5 + 0.5 * Math.sin(now * 0.0022)) * 0.25 + shieldPulse * 0.12;
@@ -751,17 +1043,56 @@ export const createMadaLabScene = (
     topCap.rotation.z += delta * 0.6;
     middleBand.rotation.z -= delta * 0.35;
     shell.scale.setScalar(1 + shieldPulse * 0.04);
+
+    const breachProgress = breachSequenceStarted
+      ? THREE.MathUtils.clamp(
+          (now - breachSequenceStartedAt) / breachSequenceDurationMs,
+          0,
+          1
+        )
+      : 0;
+    const breachPulse =
+      breachSequenceStarted && breachProgress < 1
+        ? 0.72 + (0.5 + 0.5 * Math.sin(now * 0.018)) * 0.28
+        : 0;
+    ambient.color.copy(ambientBaseColor).lerp(ambientAlarmColor, breachPulse * 0.5);
+    breachAlarmLight.intensity = breachPulse * 26;
+    breachAlarmLight.distance = 90 + breachPulse * 18;
+
+    breachSmokeGroup.visible = breachSequenceStarted && breachProgress < 1;
+    for (let i = 0; i < breachSmokePuffs.length; i += 1) {
+      const puff = breachSmokePuffs[i];
+      if (!breachSmokeGroup.visible) {
+        puff.material.opacity = 0;
+        continue;
+      }
+
+      const swirl = now * 0.00055 + puff.phase;
+      const radius = puff.radius + breachProgress * 7.5;
+      puff.mesh.position.set(
+        Math.cos(puff.angle + swirl * 0.8) * radius + puff.drift * breachProgress,
+        GROUND_Y + 1.8 + puff.height + breachProgress * 5.4,
+        -12 + Math.sin(puff.angle + swirl) * radius * 0.72
+      );
+      puff.mesh.scale.setScalar(puff.scale + breachProgress * 4.2);
+      puff.material.opacity = THREE.MathUtils.clamp(
+        0.34 * (1 - breachProgress * 0.6),
+        0,
+        0.34
+      );
+    }
   });
 
   solidGroup.add(chamber);
   trackObject(chamber);
-  addCollider(0, -12, 11.2, 11.2, 0.85);
+  const chamberCollider = addCollider(0, -12, 11.2, 11.2, 0.85);
 
   const madaRig = new THREE.Group();
   madaRig.position.set(0, GROUND_Y + 2, -12);
   const madaModelRoot = new THREE.Group();
   madaRig.add(madaModelRoot);
   labGroup.add(madaRig);
+  madaRig.rotation.y = 0;
 
   const fallbackMaterial = new THREE.MeshStandardMaterial({
     color: 0x352930,
@@ -775,6 +1106,70 @@ export const createMadaLabScene = (
   fallbackBody.position.y = 1.7;
   madaModelRoot.add(fallbackBody);
   trackMesh(fallbackBody);
+
+  let madaEyeNodes: THREE.Object3D[] = [];
+  const applyMadaActivationState = () => {
+    for (let i = 0; i < madaEyeNodes.length; i += 1) {
+      madaEyeNodes[i].visible = madaActivated;
+    }
+  };
+  const bindMadaActivationNodes = (model: THREE.Object3D | null) => {
+    madaEyeNodes = [];
+    if (!model) return;
+
+    const eyeGroup = model.getObjectByName("eyeGroup");
+    if (eyeGroup) {
+      madaEyeNodes.push(eyeGroup);
+    } else {
+      const eyeLeft = model.getObjectByName("eyeLeft");
+      const eyeRight = model.getObjectByName("eyeRight");
+      if (eyeLeft) madaEyeNodes.push(eyeLeft);
+      if (eyeRight) madaEyeNodes.push(eyeRight);
+    }
+
+    applyMadaActivationState();
+  };
+  const setMadaActivated = (active: boolean) => {
+    if (madaActivated === active) return;
+    madaActivated = active;
+    applyMadaActivationState();
+  };
+
+  const destroyTerminal = (now: number) => {
+    if (terminalDestroyed) return;
+    terminalDestroyed = true;
+    breachPendingTunnelExit = true;
+    terminalInRange = false;
+    terminalExplosionStartedAt = now;
+    terminalGroup.visible = false;
+    terminalCollider.enabled = false;
+    emitState(true, now);
+  };
+
+  const startContainmentBreach = (now: number) => {
+    if (breachSequenceStarted) return;
+    breachSequenceStarted = true;
+    breachSequenceStartedAt = now;
+    breachPendingTunnelExit = false;
+    containmentShellGroup.visible = false;
+    chamberCollider.enabled = false;
+    setMadaActivated(true);
+    shieldPulse = Math.max(shieldPulse, 1);
+    emitState(true, now);
+  };
+
+  const handleTerminalUnlock = (event: Event) => {
+    const customEvent = event as CustomEvent<{ code?: string }>;
+    if (customEvent.detail?.code !== "1986") return;
+    destroyTerminal(performance.now());
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener(
+      MADA_TERMINAL_UNLOCK_EVENT,
+      handleTerminalUnlock as EventListener
+    );
+  }
 
   const loader = new GLTFLoader();
   let isDisposed = false;
@@ -806,6 +1201,7 @@ export const createMadaLabScene = (
         madaModelRoot.remove(madaModelRoot.children[0]);
       }
       madaModelRoot.add(model);
+      bindMadaActivationNodes(model);
       trackObject(model);
     },
     undefined,
@@ -818,11 +1214,12 @@ export const createMadaLabScene = (
     object: madaRig,
     category: "boss",
     label: "Mada Subject",
-    isActive: () => madaHealth > 0,
+    isActive: () => madaActivated && madaHealth > 0,
     getHealth: () => madaHealth,
     getMaxHealth: () => MADA_MAX_HEALTH,
     onHit: (hit) => {
-      if (madaHealth <= 0) return;
+      if (!madaActivated || madaHealth <= 0) return;
+      setMadaActivated(true);
       madaHealth = Math.max(0, madaHealth - Math.max(1, Math.floor(hit.damage)));
       shieldPulse = Math.min(1.4, shieldPulse + 0.55);
       emitState(true, hit.now);
@@ -832,22 +1229,49 @@ export const createMadaLabScene = (
 
   const worldTick = ({ now, delta, player }: PlayerWorldTickArgs) => {
     shieldPulse = Math.max(0, shieldPulse - delta * 1.5);
-    electricActivity =
-      60 +
-      12 * (0.5 + 0.5 * Math.sin(now * 0.0024)) +
-      shieldPulse * 20 +
-      (madaHealth <= MADA_MAX_HEALTH * 0.35 ? 8 : 0);
 
     for (let i = 0; i < animators.length; i += 1) {
       animators[i](now, delta);
     }
 
-    madaRig.position.y =
-      GROUND_Y + 2 + Math.sin(now * 0.0018) * 0.16 + shieldPulse * 0.06;
+    player.getWorldPosition(playerWorldPosition);
+    const playerInsideTunnel = playerWorldPosition.z > tunnelExitThresholdZ;
+    terminalInRange =
+      !terminalDestroyed &&
+      playerWorldPosition.distanceTo(terminalAnchor) <= terminalInteractionRadius;
+
+    if (
+      breachPendingTunnelExit &&
+      playerWasInsideTunnel &&
+      !playerInsideTunnel
+    ) {
+      startContainmentBreach(now);
+    }
+    playerWasInsideTunnel = playerInsideTunnel;
+
+    const breachActive =
+      breachSequenceStarted &&
+      now - breachSequenceStartedAt <= breachSequenceDurationMs;
+
+    electricActivity = breachActive
+      ? 94 + (0.5 + 0.5 * Math.sin(now * 0.011)) * 6 + shieldPulse * 12
+      : 60 +
+        12 * (0.5 + 0.5 * Math.sin(now * 0.0024)) +
+        shieldPulse * 20 +
+        (madaHealth <= MADA_MAX_HEALTH * 0.35 ? 8 : 0);
+
+    madaRig.position.y = madaActivated
+      ? GROUND_Y + 2 + Math.sin(now * 0.0018) * 0.16 + shieldPulse * 0.06
+      : GROUND_Y + 2;
     if (madaHealth > 0) {
-      player.getWorldPosition(specimenFocus);
-      specimenFocus.y = madaRig.position.y + 1.4;
-      madaRig.lookAt(specimenFocus);
+      if (madaActivated) {
+        player.getWorldPosition(specimenFocus);
+        specimenFocus.y = madaRig.position.y + 1.4;
+        madaRig.lookAt(specimenFocus);
+        madaRig.rotation.y += Math.PI;
+      } else {
+        madaRig.rotation.y = 0;
+      }
       madaRig.rotation.x = 0;
       madaRig.rotation.z = 0;
     } else {
@@ -861,15 +1285,24 @@ export const createMadaLabScene = (
     sceneId: "madaLab",
     groundY: GROUND_Y,
     playerSpawn: new THREE.Vector3(0, GROUND_Y, 28),
-    bounds,
+    bounds: playableBounds,
     projectileColliders: [solidGroup],
     attackTargets,
     isBlocked: (x, z) => {
-      if (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ) {
+      if (
+        x < playableBounds.minX ||
+        x > playableBounds.maxX ||
+        z < playableBounds.minZ ||
+        z > playableBounds.maxZ
+      ) {
+        return true;
+      }
+      if (z > bounds.maxZ && Math.abs(x) > tunnelWidth / 2 - 0.18) {
         return true;
       }
       for (let i = 0; i < colliders.length; i += 1) {
         const collider = colliders[i];
+        if (collider.enabled === false) continue;
         if (
           x >= collider.minX &&
           x <= collider.maxX &&
@@ -888,7 +1321,15 @@ export const createMadaLabScene = (
 
   const dispose = () => {
     isDisposed = true;
+    if (typeof window !== "undefined") {
+      window.removeEventListener(
+        MADA_TERMINAL_UNLOCK_EVENT,
+        handleTerminalUnlock as EventListener
+      );
+    }
     context?.onStateChange?.({});
+    scene.remove(ambient);
+    scene.remove(breachAlarmLight);
     attackTargets.length = 0;
     scene.remove(labGroup);
     disposeTrackedResources();

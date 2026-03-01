@@ -51,34 +51,51 @@ mkdirSync(dirname(outPath), { recursive: true });
 
 const scene = new THREE.Scene();
 
-const botGreen = new THREE.MeshStandardMaterial({ color: 0x8bc34a, roughness: 0.55, metalness: 0.05 });
-const botDark = new THREE.MeshStandardMaterial({ color: 0x3f4f3c, roughness: 0.7, metalness: 0.05 });
-const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.0 });
+const botGreen = new THREE.MeshStandardMaterial({ color: 0xa3daf2, roughness: 0.55, metalness: 0.05 });
+const botDark = new THREE.MeshStandardMaterial({ color: 0x4c7285, roughness: 0.7, metalness: 0.05 });
+const eyeMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.4, metalness: 0.0 });
 
 const group = new THREE.Group();
 
-const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.1, 6, 18), botGreen);
+const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.45, 1.35, 6), botGreen);
 torso.position.y = 0.9;
 torso.scale.y = 0.9;
 
 const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 24, 18), botGreen);
 head.position.y = 1.7;
+const headSeamBand = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.455, 0.455, 0.05, 24, 1, true),
+  botDark
+);
+headSeamBand.position.y = 0.03;
+const headSeamClampFront = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.04), botDark);
+const headSeamClampBack = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.04), botDark);
+headSeamClampFront.position.set(0, 0.03, 0.43);
+headSeamClampBack.position.set(0, 0.03, -0.43);
+head.add(headSeamBand, headSeamClampFront, headSeamClampBack);
 
-const antennaLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), botDark);
-const antennaRight = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), botDark);
+const antennaLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.03, 0.45, 8), botDark);
+const antennaRight = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.03, 0.45, 8), botDark);
 antennaLeft.position.set(-0.18, 2.2, 0);
 antennaRight.position.set(0.18, 2.2, 0);
 antennaLeft.rotation.z = Math.PI / 8;
 antennaRight.rotation.z = -Math.PI / 8;
-const antennaTipLeft = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), botDark);
-const antennaTipRight = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), botDark);
-antennaTipLeft.position.set(-0.3, 2.35, 0);
-antennaTipRight.position.set(0.3, 2.35, 0);
+const antennaTipLeft = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), botDark);
+const antennaTipRight = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), botDark);
+antennaTipLeft.position.set(-0.27, 2.42, 0);
+antennaTipRight.position.set(0.27, 2.42, 0);
+antennaTipLeft.rotation.set(0, 0, 0.45);
+antennaTipRight.rotation.set(0, 0, -0.45);
 
-const eyeLeft = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), eyeMat);
-const eyeRight = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), eyeMat);
-eyeLeft.position.set(-0.15, 1.78, 0.38);
-eyeRight.position.set(0.15, 1.78, 0.38);
+const eyeGeo = new THREE.SphereGeometry(0.11, 35, 28);
+const eyeLeft = new THREE.Mesh(eyeGeo, eyeMat);
+const eyeRight = new THREE.Mesh(eyeGeo, eyeMat);
+eyeLeft.position.set(-0.17, 1.75, 0.33);
+eyeRight.position.set(0.17, 1.75, 0.33);
+eyeLeft.rotation.set(0, 0, -0.3);
+eyeRight.rotation.set(0, 0, 0.3);
+eyeLeft.scale.set(1.0, 1, 1);
+eyeRight.scale.set(1.0, 1, 1);
 
 const armGeo = new THREE.CapsuleGeometry(0.14, 0.65, 6, 12);
 const armLeftGroup = new THREE.Group();

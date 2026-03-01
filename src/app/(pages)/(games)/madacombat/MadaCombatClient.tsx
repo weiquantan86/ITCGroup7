@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import SceneLauncher from "../../../asset/scenes/general/SceneLauncher";
 import type { SceneUiState } from "../../../asset/scenes/general/sceneTypes";
 import MadaPreview from "./MadaPreview";
 import {
   MADA_LAB_STATE_KEY,
+  MADA_TERMINAL_UNLOCK_EVENT,
   createInitialMadaLabState,
   type MadaLabState,
 } from "./labConfig";
@@ -29,7 +30,12 @@ const clampPercent = (value: number) => {
 export default function MadaCombatClient({
   selectedCharacter,
 }: MadaCombatClientProps) {
-  const [, setLabState] = useState<MadaLabState>(createInitialMadaLabState());
+  const [labState, setLabState] = useState<MadaLabState>(createInitialMadaLabState());
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalCode, setTerminalCode] = useState("");
+  const [terminalFeedback, setTerminalFeedback] = useState<"idle" | "error">("idle");
+  const [terminalUnlocked, setTerminalUnlocked] = useState(false);
+  const codeResetTimerRef = useRef<number | null>(null);
 
   const handleSceneStateChange = useCallback((state: SceneUiState) => {
     const next = (state as Record<string, MadaLabState | undefined>)[
@@ -44,8 +50,108 @@ export default function MadaCombatClient({
       fluidPatches: next.fluidPatches || 0,
       circuitBreaks: next.circuitBreaks || 0,
       statusLabel: next.statusLabel || "Containment stabilizing",
+      terminalInRange: Boolean(next.terminalInRange),
     });
   }, []);
+
+  useEffect(() => {
+    if (!labState.terminalInRange) {
+      setTerminalOpen(false);
+      setTerminalCode("");
+      setTerminalFeedback("idle");
+    }
+  }, [labState.terminalInRange]);
+
+  useEffect(() => {
+    const clearCodeResetTimer = () => {
+      if (codeResetTimerRef.current !== null) {
+        window.clearTimeout(codeResetTimerRef.current);
+        codeResetTimerRef.current = null;
+      }
+    };
+
+    const submitTerminalCode = (code: string) => {
+      if (code !== "1986") {
+        setTerminalFeedback("error");
+        clearCodeResetTimer();
+        codeResetTimerRef.current = window.setTimeout(() => {
+          setTerminalCode("");
+          setTerminalFeedback("idle");
+          codeResetTimerRef.current = null;
+        }, 420);
+        return;
+      }
+
+      clearCodeResetTimer();
+      setTerminalUnlocked(true);
+      setTerminalCode("");
+      setTerminalFeedback("idle");
+      setTerminalOpen(false);
+      window.dispatchEvent(
+        new CustomEvent(MADA_TERMINAL_UNLOCK_EVENT, {
+          detail: { code },
+        })
+      );
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) {
+        return;
+      }
+
+      if (
+        event.code === "KeyF" &&
+        labState.terminalInRange &&
+        !terminalUnlocked
+      ) {
+        event.preventDefault();
+        clearCodeResetTimer();
+        setTerminalFeedback("idle");
+        setTerminalOpen((current) => {
+          const next = !current;
+          if (!next) {
+            setTerminalCode("");
+          }
+          return next;
+        });
+        return;
+      }
+
+      if (!terminalOpen || terminalUnlocked) {
+        return;
+      }
+
+      if (event.code === "Backspace") {
+        event.preventDefault();
+        clearCodeResetTimer();
+        setTerminalFeedback("idle");
+        setTerminalCode((current) => current.slice(0, -1));
+        return;
+      }
+
+      if (!/^\d$/.test(event.key)) {
+        return;
+      }
+
+      event.preventDefault();
+      clearCodeResetTimer();
+      setTerminalFeedback("idle");
+      setTerminalCode((current) => {
+        if (current.length >= 4) return current;
+        const next = `${current}${event.key}`;
+        if (next.length === 4) {
+          submitTerminalCode(next);
+        }
+        return next;
+      });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      clearCodeResetTimer();
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [labState.terminalInRange, terminalOpen, terminalUnlocked]);
 
   const loadLabScene = useCallback(async () => {
     const { createMadaLabScene } = await import("./labSceneDefinition");
@@ -54,6 +160,10 @@ export default function MadaCombatClient({
       setupScene: createMadaLabScene,
     };
   }, []);
+
+  const terminalDisplayChars = Array.from({ length: 4 }, (_, index) =>
+    terminalCode[index] ?? "\u53e3"
+  );
 
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-[#02070a] text-slate-100">
@@ -82,7 +192,7 @@ export default function MadaCombatClient({
 
         <section className="mt-4 grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="flex min-h-0 flex-col gap-4">
-            <div className="rounded-[28px] border border-cyan-200/12 bg-[#071118]/90 p-4 shadow-[0_28px_80px_-42px_rgba(0,0,0,0.9)]">
+            <div className="relative rounded-[28px] border border-cyan-200/12 bg-[#071118]/90 p-4 shadow-[0_28px_80px_-42px_rgba(0,0,0,0.9)]">
               <SceneLauncher
                 gameMode="madacombat"
                 characterPath={selectedCharacter.path}
@@ -94,28 +204,70 @@ export default function MadaCombatClient({
                 useDefaultLights={false}
                 className="h-[74vh] min-h-[600px] w-full overflow-hidden rounded-[30px] border border-cyan-300/10 bg-[#02090c] shadow-[inset_0_0_48px_rgba(34,211,238,0.08)]"
               />
+              {labState.terminalInRange ? (
+                <div className="pointer-events-none absolute bottom-10 left-1/2 z-10 -translate-x-1/2 rounded-full border border-cyan-300/40 bg-[#021118]/88 px-5 py-2 font-mono text-sm tracking-[0.24em] text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.2)]">
+                  Press [F]
+                </div>
+              ) : null}
             </div>
           </div>
 
           <aside className="flex min-h-0 flex-col gap-4">
             <div className="rounded-[28px] border border-cyan-200/12 bg-[#071118]/92 p-5 shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)]">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
-                Field Notes
+                Containment Terminal
               </p>
-              <div className="mt-3 space-y-3 text-sm leading-relaxed text-slate-300">
-                <p>
-                  The room is framed as a damaged laboratory: metal wall panels,
-                  observation glass, containment rings, broken wall circuits, and
-                  bright electric arcs along the perimeter.
-                </p>
-                <p>
-                  Research benches, canisters, tanks, and monitor stations are
-                  placed around the chamber to sell the experiment-site setting.
-                </p>
-                <p>
-                  Multiple reactive puddles spread across the floor as unidentified
-                  chemical runoff.
-                </p>
+              <div className="mt-3 h-[248px] overflow-hidden rounded-[22px] border border-cyan-300/14 bg-[linear-gradient(180deg,rgba(7,17,24,0.98)_0%,rgba(3,10,14,0.96)_100%)]">
+                {terminalOpen && !terminalUnlocked ? (
+                  <div className="flex h-full flex-col justify-between px-4 py-4 font-mono text-[12px] leading-6 text-cyan-100">
+                    <div className="flex items-center justify-between border-b border-cyan-300/10 pb-3">
+                      <div>
+                        <p className="font-mono text-sm tracking-[0.22em] text-cyan-100">
+                          ACCESS GATE
+                        </p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.24em] text-cyan-200/55">
+                          Enter authorization code
+                        </p>
+                      </div>
+                      <div className="h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.9)]" />
+                    </div>
+                    <div className="flex flex-1 flex-col items-center justify-center">
+                      <div className="flex items-center gap-3">
+                        {terminalDisplayChars.map((char, index) => (
+                          <div
+                            key={`${char}-${index}`}
+                            className={`flex h-14 w-14 items-center justify-center rounded-[14px] border text-2xl tracking-[0.12em] ${
+                              terminalFeedback === "error"
+                                ? "border-red-400/70 text-red-200 shadow-[0_0_18px_rgba(248,113,113,0.18)]"
+                                : "border-cyan-300/24 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.08)]"
+                            } bg-[#02141c]`}
+                          >
+                            {char}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-5 text-[11px] uppercase tracking-[0.26em] text-cyan-200/55">
+                        Input: 4 digits
+                      </p>
+                      <p
+                        className={`mt-2 text-[11px] uppercase tracking-[0.22em] ${
+                          terminalFeedback === "error"
+                            ? "text-red-300"
+                            : "text-cyan-300/68"
+                        }`}
+                      >
+                        {terminalFeedback === "error"
+                          ? "Invalid code"
+                          : "Awaiting authorization"}
+                      </p>
+                    </div>
+                    <p className="mt-4 text-[11px] uppercase tracking-[0.24em] text-cyan-200/55">
+                      Number keys to enter. Backspace to erase.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-full bg-[radial-gradient(circle_at_50%_18%,rgba(34,211,238,0.08),transparent_42%),linear-gradient(180deg,rgba(0,0,0,0.06)_0%,rgba(0,0,0,0.24)_100%)]" />
+                )}
               </div>
             </div>
 
