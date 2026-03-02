@@ -15,6 +15,7 @@ type BindPlayerInputArgs = {
   lookState: PlayerLookState;
   isGrounded: () => boolean;
   isMovementLocked: () => boolean;
+  isInputLocked: () => boolean;
   onJump: () => void;
   onPrimaryDown: () => void;
   onPrimaryUp: () => void;
@@ -54,6 +55,7 @@ export const bindPlayerInput = ({
   lookState,
   isGrounded,
   isMovementLocked,
+  isInputLocked,
   onJump,
   onPrimaryDown,
   onPrimaryUp,
@@ -66,6 +68,7 @@ export const bindPlayerInput = ({
   let ignoreMouseMoveCount = 0;
 
   const handlePointerDown = (event: PointerEvent) => {
+    if (isInputLocked()) return;
     if (event.button === 0) {
       if (mount?.requestPointerLock) {
         if (document.pointerLockElement !== mount && !isPointerLockRequested) {
@@ -111,7 +114,7 @@ export const bindPlayerInput = ({
   };
 
   const handleMouseMove = (event: MouseEvent) => {
-    if (document.pointerLockElement !== mount) return;
+    if (document.pointerLockElement !== mount || isInputLocked()) return;
     if (ignoreMouseMoveCount > 0) {
       ignoreMouseMoveCount -= 1;
       return;
@@ -130,6 +133,13 @@ export const bindPlayerInput = ({
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (isInputLocked()) {
+      const mapped = keyMap[event.code];
+      if (mapped) {
+        pressedKeys.delete(mapped);
+      }
+      return;
+    }
     const mapped = keyMap[event.code];
     if (mapped) {
       pressedKeys.add(mapped);
@@ -166,6 +176,14 @@ export const bindPlayerInput = ({
   window.addEventListener("blur", handleBlur);
 
   return {
+    syncLockState: () => {
+      if (!isInputLocked()) return;
+      pressedKeys.clear();
+      onPrimaryCancel();
+      if (document.pointerLockElement === mount && document.exitPointerLock) {
+        document.exitPointerLock();
+      }
+    },
     dispose: () => {
       mount.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("pointerlockchange", handlePointerLockChange);

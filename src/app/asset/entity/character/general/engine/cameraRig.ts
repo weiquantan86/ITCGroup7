@@ -28,6 +28,7 @@ export const createPlayerCameraRig = ({
   hideLocalBody,
   showMiniMap,
 }: CreatePlayerCameraRigArgs) => {
+  let miniMapVisible = showMiniMap;
   const camera = new THREE.PerspectiveCamera(
     70,
     mount.clientWidth / mount.clientHeight,
@@ -56,7 +57,7 @@ export const createPlayerCameraRig = ({
   const miniPitchMax = THREE.MathUtils.degToRad(80);
 
   const updateMiniViewport = (width: number, height: number) => {
-    if (!showMiniMap) {
+    if (!showMiniMap || !miniMapVisible) {
       miniViewport.size = 0;
       return;
     }
@@ -133,7 +134,7 @@ export const createPlayerCameraRig = ({
     const height = mount.clientHeight;
     renderer.setViewport(0, 0, width, height);
     renderer.render(scene, camera);
-    if (!showMiniMap) return;
+    if (!showMiniMap || !miniMapVisible) return;
 
     const miniSize = miniViewport.size;
     const miniWidth = Math.floor(miniSize * 1.6);
@@ -154,12 +155,20 @@ export const createPlayerCameraRig = ({
     updateMiniViewport(width, height);
   };
 
+  const setMiniMapVisible = (visible: boolean) => {
+    const nextVisible = showMiniMap && visible;
+    if (miniMapVisible === nextVisible) return;
+    miniMapVisible = nextVisible;
+    updateMiniViewport(mount.clientWidth, mount.clientHeight);
+  };
+
   return {
     camera,
     miniCamera,
     update,
     render,
     resize,
+    setMiniMapVisible,
     updateMiniViewport,
   };
 };

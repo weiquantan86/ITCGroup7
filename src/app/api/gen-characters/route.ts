@@ -1,4 +1,4 @@
-import { regenerateCharacterGlbs } from "../../asset/entity/character/regenerateCharacterGlbs";
+import { regenerateCharacterGlbs } from "../../asset/entity/character/general/regenerateCharacterGlbs";
 
 export async function POST() {
   if (process.env.NODE_ENV !== "development") {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import CharacterScene from "../characterManagement/characterScene/CharacterScene";
-import { RARITY_CONFIG, Rarity } from "../../asset/entity/character/gacha/gachaConfig";
+import type { Rarity } from "../../asset/entity/character/general/gachaConfig";
 
 type GachaResult = {
   id: string;

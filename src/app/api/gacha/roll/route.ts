@@ -3,10 +3,9 @@ import { cookies } from "next/headers";
 import pool from "../../../../database/client";
 import { characterProfiles } from "../../../asset/entity/character/general/player/registry";
 import {
-  CHARACTER_RARITY,
   RARITY_CONFIG,
   getCharacterRarity,
-} from "../../../asset/entity/character/gacha/gachaConfig";
+} from "../../../asset/entity/character/general/gachaConfig";
 
 export async function POST() {
   const cookieStore = await cookies();
@@ -68,15 +67,8 @@ export async function POST() {
       random -= candidate.weight;
     }
 
-    // 5. Grant character
-    // We need the DB ID for the character name
-    // Assuming DB names are Capitalized (Adam, Grant) but IDs are lowercase (adam, grant)
-    // We need to map back or query carefully. DB names seem to be Title Case in initDB.
-    
-    // Let's query the ID for the name
-    // profile.label is usually "Adam", "Grant".
-    const charName = selected.profile.label; 
-    
+    const charName = selected.profile.label;
+
     const charDbResult = await pool.query(
       "SELECT id FROM characters WHERE name = $1",
       [charName]

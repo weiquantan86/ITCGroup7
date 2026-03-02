@@ -6,12 +6,6 @@ import { profile as carrotProfile } from "../../carrot/profile";
 import { createRuntime as createCarrotRuntime } from "../../carrot/runtime";
 import { profile as dakotaProfile } from "../../dakota/profile";
 import { createRuntime as createDakotaRuntime } from "../../dakota/runtime";
-import { profile as eliProfile } from "../../eli/profile";
-import { createRuntime as createEliRuntime } from "../../eli/runtime";
-import { profile as felixProfile } from "../../felix/profile";
-import { createRuntime as createFelixRuntime } from "../../felix/runtime";
-import { profile as grantProfile } from "../../grant/profile";
-import { createRuntime as createGrantRuntime } from "../../grant/runtime";
 import { profile as harperProfile } from "../../harper/profile";
 import { createRuntime as createHarperRuntime } from "../../harper/runtime";
 import type { CharacterEntry, CharacterProfile, CharacterStats } from "../types";
@@ -21,9 +15,6 @@ const entries: CharacterEntry[] = [
   { profile: baronProfile, createRuntime: createBaronRuntime },
   { profile: carrotProfile, createRuntime: createCarrotRuntime },
   { profile: dakotaProfile, createRuntime: createDakotaRuntime },
-  { profile: eliProfile, createRuntime: createEliRuntime },
-  { profile: felixProfile, createRuntime: createFelixRuntime },
-  { profile: grantProfile, createRuntime: createGrantRuntime },
   { profile: harperProfile, createRuntime: createHarperRuntime },
 ];
 const defaultStats: CharacterStats = {

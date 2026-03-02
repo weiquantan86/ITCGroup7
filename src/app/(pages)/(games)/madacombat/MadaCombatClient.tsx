@@ -27,6 +27,76 @@ const clampPercent = (value: number) => {
   return Math.max(0, Math.min(100, Math.round(value)));
 };
 
+function MadaEyeGlyph({ active }: { active: boolean }) {
+  return (
+    <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(239,68,68,0.12),transparent_42%)]" />
+      <div
+        className={`relative transition duration-300 ${
+          active
+            ? "scale-100 opacity-100"
+            : "scale-[0.98] opacity-75 saturate-[0.82]"
+        }`}
+      >
+        <svg
+          viewBox="0 0 280 140"
+          className={`h-28 w-56 transition duration-300 ${
+            active
+              ? "drop-shadow-[0_0_24px_rgba(248,113,113,0.45)]"
+              : "drop-shadow-[0_0_16px_rgba(34,211,238,0.18)]"
+          }`}
+          aria-hidden="true"
+        >
+          <path
+            d="M92 24 L78 8 L90 6 L104 22 Z"
+            fill="rgba(8,12,16,0.82)"
+          />
+          <path
+            d="M188 24 L202 8 L190 6 L176 22 Z"
+            fill="rgba(8,12,16,0.82)"
+          />
+          <path
+            d="M54 108 C58 68 88 36 140 36 C192 36 222 68 226 108 L54 108 Z"
+            fill="rgba(7,12,16,0.94)"
+          />
+          <ellipse
+            cx="140"
+            cy="84"
+            rx="82"
+            ry="24"
+            fill={active ? "rgba(127,29,29,0.42)" : "rgba(69,10,10,0.24)"}
+          />
+          <rect
+            x="58"
+            y="70"
+            width="164"
+            height="8"
+            rx="4"
+            fill={active ? "rgba(185,28,28,0.9)" : "rgba(127,29,29,0.7)"}
+          />
+          <path
+            d="M102 70 L82 56 L86 84 Z"
+            fill={active ? "rgba(252,165,165,0.96)" : "rgba(248,113,113,0.82)"}
+          />
+          <path
+            d="M178 70 L198 56 L194 84 Z"
+            fill={active ? "rgba(252,165,165,0.96)" : "rgba(248,113,113,0.82)"}
+          />
+          <ellipse
+            cx="140"
+            cy="76"
+            rx="88"
+            ry="22"
+            fill="none"
+            stroke={active ? "rgba(248,113,113,0.2)" : "rgba(125,211,252,0.14)"}
+            strokeWidth="2"
+          />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 export default function MadaCombatClient({
   selectedCharacter,
 }: MadaCombatClientProps) {
@@ -266,17 +336,28 @@ export default function MadaCombatClient({
                     </p>
                   </div>
                 ) : (
-                  <div className="h-full bg-[radial-gradient(circle_at_50%_18%,rgba(34,211,238,0.08),transparent_42%),linear-gradient(180deg,rgba(0,0,0,0.06)_0%,rgba(0,0,0,0.24)_100%)]" />
+                  <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_50%_18%,rgba(34,211,238,0.08),transparent_42%),linear-gradient(180deg,rgba(0,0,0,0.06)_0%,rgba(0,0,0,0.24)_100%)] px-4 py-5">
+                    {terminalUnlocked ? (
+                      <>
+                        <div className="flex flex-1 items-center justify-center">
+                          <MadaEyeGlyph active />
+                        </div>
+                        <p className="text-center text-[11px] uppercase tracking-[0.26em] text-red-200/88">
+                          EMERGENCY!
+                        </p>
+                      </>
+                    ) : null}
+                  </div>
                 )}
               </div>
             </div>
 
             <div className="flex min-h-[260px] flex-1 flex-col overflow-hidden rounded-[28px] border border-cyan-200/12 bg-[#071118]/92 p-5 shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)]">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
-                Mada Preview
+                {terminalUnlocked ? "Mada Preview" : "? ? ?"}
               </p>
               <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-[22px] border border-cyan-300/16 bg-[radial-gradient(circle_at_35%_18%,rgba(34,211,238,0.18),transparent_48%),linear-gradient(180deg,rgba(5,18,24,0.92)_0%,rgba(1,8,10,0.98)_100%)]">
-                <MadaPreview />
+                {terminalUnlocked ? <MadaPreview /> : null}
               </div>
             </div>
           </aside>

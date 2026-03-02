@@ -19,9 +19,6 @@ export const CHARACTER_RARITY: Record<string, Rarity> = {
   baron: 'rare',
   carrot: 'common',
   dakota: 'rare',
-  eli: 'epic',
-  felix: 'common',
-  grant: 'legendary',
   harper: 'epic',
 };
 

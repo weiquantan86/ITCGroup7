@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const charactersDir = here;
+const charactersDir = resolve(here, "..");
 const projectRoot = resolve(charactersDir, "..", "..", "..", "..", "..");
 
 const run = (file) =>

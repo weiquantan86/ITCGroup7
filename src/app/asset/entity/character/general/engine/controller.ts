@@ -64,6 +64,9 @@ export const createPlayer = ({
     groundY: world?.groundY ?? -1.4,
     playerSpawn: world?.playerSpawn,
     resetOnDeath: world?.resetOnDeath,
+    isInputLocked: world?.isInputLocked,
+    isMiniMapVisible: world?.isMiniMapVisible,
+    getLookOverride: world?.getLookOverride,
     isBlocked: world?.isBlocked,
     projectileColliders: world?.projectileColliders,
     recoveryZones: world?.recoveryZones,
@@ -336,8 +339,13 @@ export const createPlayer = ({
   const isRuntimeMovementLocked = () =>
     Boolean(characterRuntime?.isMovementLocked?.());
 
+  const isWorldInputLocked = () => Boolean(resolvedWorld.isInputLocked?.());
+
   const isRuntimeBasicAttackLocked = () =>
     Boolean(characterRuntime?.isBasicAttackLocked?.());
+
+  let miniMapVisible =
+    showMiniMap && (resolvedWorld.isMiniMapVisible?.() ?? true);
 
   const getRuntimeSkillCooldownRemainingMs = (key: SkillKey) => {
     const remainingMs = characterRuntime?.getSkillCooldownRemainingMs?.(key);
@@ -562,6 +570,8 @@ export const createPlayer = ({
     cameraRig,
     projectileSystem,
     getRuntime: () => characterRuntime,
+    isWorldInputLocked,
+    getWorldLookOverride: (now) => resolvedWorld.getLookOverride?.(now) ?? null,
     getVisualState: () => visualState,
     getSurvivalState: () => survivalState,
     getStatusEffectState: () => statusEffectState,
@@ -671,6 +681,7 @@ export const createPlayer = ({
     lookState,
     isGrounded: frameUpdater.isGrounded,
     isMovementLocked: isRuntimeMovementLocked,
+    isInputLocked: isWorldInputLocked,
     onJump: () => {
       frameUpdater.jump(jumpVelocity);
     },
@@ -693,12 +704,30 @@ export const createPlayer = ({
     },
   });
 
+  const syncWorldPresentationState = () => {
+    if (isWorldInputLocked()) {
+      inputBindings.syncLockState();
+    }
+
+    const nextMiniMapVisible =
+      showMiniMap && (resolvedWorld.isMiniMapVisible?.() ?? true);
+    if (nextMiniMapVisible !== miniMapVisible) {
+      miniMapVisible = nextMiniMapVisible;
+      cameraRig.setMiniMapVisible(miniMapVisible);
+      statusHud.setMiniMapVisible(miniMapVisible);
+    }
+  };
+
   loadCharacter(characterPath);
+  cameraRig.setMiniMapVisible(miniMapVisible);
+  statusHud.setMiniMapVisible(miniMapVisible);
   cameraRig.updateMiniViewport(mount.clientWidth, mount.clientHeight);
   emitUiState(performance.now());
 
   const update = (now: number, delta: number) => {
+    syncWorldPresentationState();
     frameUpdater.update(now, delta);
+    syncWorldPresentationState();
     updateBossHud();
   };
 

@@ -50,6 +50,12 @@ export interface PlayerWorldTickArgs {
   handleProjectileBlockHit?: ProjectileBlockHitHandler;
 }
 
+export interface PlayerLookOverride {
+  yaw?: number;
+  pitch?: number;
+  blend?: number;
+}
+
 export type PlayerDeathResolution = "handled" | "reset" | "ignore";
 
 export interface PlayerDeathArgs {
@@ -67,6 +73,9 @@ export interface PlayerWorld {
   groundY: number;
   playerSpawn?: THREE.Vector3;
   resetOnDeath?: boolean;
+  isInputLocked?: () => boolean;
+  isMiniMapVisible?: () => boolean;
+  getLookOverride?: (now: number) => PlayerLookOverride | null;
   isBlocked?: (x: number, z: number) => boolean;
   projectileColliders?: THREE.Object3D[];
   recoveryZones?: RecoveryZone[];

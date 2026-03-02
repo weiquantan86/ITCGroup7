@@ -15,6 +15,11 @@ import {
   MADA_TERMINAL_UNLOCK_EVENT,
   type MadaLabState,
 } from "./labConfig";
+import {
+  createMadaPresentationController,
+  resolveMadaPresentationState,
+} from "../../../asset/entity/monster/mada/presentation";
+import { createMadaAnimationController } from "../../../asset/entity/monster/mada/animation";
 
 type BoxCollider = {
   minX: number;
@@ -30,9 +35,123 @@ const ROOM_DEPTH = 70;
 const ROOM_HEIGHT = 18;
 const MADA_MAX_HEALTH = 2800;
 const UI_EMIT_INTERVAL_MS = 140;
+const BREACH_INTRO_SMOKE_DURATION_MS = 900;
+const BREACH_LOOK_LEFT_DURATION_MS = 700;
+const BREACH_LOOK_RIGHT_DURATION_MS = 950;
+const BREACH_LOOK_RETURN_DURATION_MS = 700;
+const BREACH_LOOK_AROUND_DURATION_MS =
+  BREACH_LOOK_LEFT_DURATION_MS +
+  BREACH_LOOK_RIGHT_DURATION_MS +
+  BREACH_LOOK_RETURN_DURATION_MS;
+const BREACH_BIG_SMOKE_EXPAND_DURATION_MS = 1100;
+const BREACH_BIG_SMOKE_HOLD_DURATION_MS = 1100;
+const BREACH_BIG_SMOKE_DISSIPATE_DURATION_MS = 1400;
+const BREACH_BIG_SMOKE_DURATION_MS =
+  BREACH_BIG_SMOKE_EXPAND_DURATION_MS +
+  BREACH_BIG_SMOKE_HOLD_DURATION_MS +
+  BREACH_BIG_SMOKE_DISSIPATE_DURATION_MS;
+const BREACH_BIG_SMOKE_START_MS =
+  BREACH_INTRO_SMOKE_DURATION_MS + BREACH_LOOK_AROUND_DURATION_MS;
+const BREACH_BIG_SMOKE_RELEASE_MS =
+  BREACH_BIG_SMOKE_START_MS + BREACH_BIG_SMOKE_DURATION_MS / 2;
+const BREACH_BIG_SMOKE_END_MS =
+  BREACH_BIG_SMOKE_START_MS + BREACH_BIG_SMOKE_DURATION_MS;
+const MADA_RISE_DURATION_MS = 2200;
+const MADA_STARE_DURATION_MS = 1000;
+const MADA_BLACKOUT_DURATION_MS = 800;
+const MADA_FADE_ALPHA_DURATION_MS = 1600;
+const MADA_FADE_DURATION_MS =
+  MADA_BLACKOUT_DURATION_MS + MADA_FADE_ALPHA_DURATION_MS;
+const BREACH_FADE_START_MS =
+  BREACH_BIG_SMOKE_END_MS + MADA_RISE_DURATION_MS + MADA_STARE_DURATION_MS;
+const BREACH_SEQUENCE_DURATION_MS = BREACH_FADE_START_MS + MADA_FADE_DURATION_MS;
+const AMBUSH_WALK_DURATION_MS = 4615;
+const AMBUSH_WALK_DISTANCE = 12.8;
+const AMBUSH_LOOK_LEFT_DURATION_MS = 620;
+const AMBUSH_LOOK_RIGHT_DURATION_MS = 840;
+const AMBUSH_LOOK_DURATION_MS =
+  AMBUSH_LOOK_LEFT_DURATION_MS + AMBUSH_LOOK_RIGHT_DURATION_MS;
+const AMBUSH_BEHIND_DISTANCE = 5.8;
+const AMBUSH_SIDE_OFFSET = 0.65;
+const AMBUSH_BEHIND_HEIGHT = -0.08;
+const AMBUSH_ATTACK_HEIGHT = 1.08;
+const AMBUSH_REAPPEAR_LIFT = 0.95;
+const AMBUSH_REVEAL_TURN_DURATION_MS = 180;
+const AMBUSH_DISCOVERY_DURATION_MS = 300;
+const AMBUSH_BACKSTEP_DURATION_MS = 360;
+const AMBUSH_BACKSTEP_DISTANCE = 2.1;
+const AMBUSH_GRAB_WINDUP_DURATION_MS = 360;
+const AMBUSH_GRAB_STRIKE_DURATION_MS = 220;
+const AMBUSH_GRAB_RECOVER_DURATION_MS = 460;
+const AMBUSH_GRAB_SLASH_EFFECT_DURATION_MS = 260;
+const AMBUSH_GRAB_DAMAGE = 24;
+const AMBUSH_GRAB_STRIKE_TIME_SCALE = 0.5;
+const MADA_SKILL1_WINDUP_DURATION_MS = 560;
+const MADA_SKILL1_STRIKE_DURATION_MS = 260;
+const MADA_SKILL1_RECOVER_DURATION_MS = 540;
+const MADA_SKILL1_DURATION_MS =
+  MADA_SKILL1_WINDUP_DURATION_MS +
+  MADA_SKILL1_STRIKE_DURATION_MS +
+  MADA_SKILL1_RECOVER_DURATION_MS;
+const MADA_SKILL1_COOLDOWN_MS = 3200;
+const MADA_SKILL1_TRIGGER_RANGE = 11.5;
+const MADA_SKILL1_DAMAGE_RANGE = 6.5;
+const MADA_SKILL1_DAMAGE = 22;
+const MADA_SLASH_COLOR = 0x3a005c;
+const AMBUSH_WALK_START_MS = BREACH_SEQUENCE_DURATION_MS;
+const AMBUSH_WALK_END_MS = AMBUSH_WALK_START_MS + AMBUSH_WALK_DURATION_MS;
+const AMBUSH_LOOK_START_MS = AMBUSH_WALK_END_MS;
+const AMBUSH_LOOK_END_MS = AMBUSH_LOOK_START_MS + AMBUSH_LOOK_DURATION_MS;
+const AMBUSH_REVEAL_TURN_END_MS =
+  AMBUSH_LOOK_END_MS + AMBUSH_REVEAL_TURN_DURATION_MS;
+const AMBUSH_DISCOVERY_END_MS =
+  AMBUSH_REVEAL_TURN_END_MS + AMBUSH_DISCOVERY_DURATION_MS;
+const AMBUSH_GRAB_WINDUP_END_MS =
+  AMBUSH_DISCOVERY_END_MS + AMBUSH_GRAB_WINDUP_DURATION_MS;
+const AMBUSH_GRAB_STRIKE_END_MS =
+  AMBUSH_GRAB_WINDUP_END_MS + AMBUSH_GRAB_STRIKE_DURATION_MS;
+const STORY_SEQUENCE_DURATION_MS =
+  AMBUSH_GRAB_STRIKE_END_MS + AMBUSH_GRAB_RECOVER_DURATION_MS;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
+
+const inverseLerp = (start: number, end: number, value: number) => {
+  if (Math.abs(end - start) < 0.0001) {
+    return value >= end ? 1 : 0;
+  }
+  return clamp((value - start) / (end - start), 0, 1);
+};
+
+const easeInOut = (value: number) => {
+  const t = clamp(value, 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+const easeOutCubic = (value: number) => {
+  const t = clamp(value, 0, 1);
+  return 1 - (1 - t) ** 3;
+};
+
+const lerpAngle = (start: number, end: number, value: number) => {
+  const t = clamp(value, 0, 1);
+  const delta =
+    THREE.MathUtils.euclideanModulo(end - start + Math.PI, Math.PI * 2) - Math.PI;
+  return start + delta * t;
+};
+
+const faceObjectTowardTargetOnYaw = (
+  object: THREE.Object3D,
+  target: THREE.Vector3
+) => {
+  const deltaX = target.x - object.position.x;
+  const deltaZ = target.z - object.position.z;
+  if (Math.abs(deltaX) < 0.0001 && Math.abs(deltaZ) < 0.0001) {
+    object.rotation.set(0, 0, 0);
+    return;
+  }
+  object.rotation.set(0, Math.atan2(deltaX, deltaZ), 0);
+};
 
 const resolveRenderableBounds = (object: THREE.Object3D) => {
   const bounds = new THREE.Box3();
@@ -80,8 +199,14 @@ export const createMadaLabScene = (
   scene: THREE.Scene,
   context?: SceneSetupContext
 ): SceneSetupResult => {
-  scene.background = new THREE.Color(0x031017);
-  scene.fog = new THREE.Fog(0x031017, 38, 128);
+  const sceneBaseColor = new THREE.Color(0x031017);
+  const sceneSmokeColor = new THREE.Color(0x020202);
+  const baseFogNear = 38;
+  const baseFogFar = 128;
+  const sceneBackgroundColor = sceneBaseColor.clone();
+  const sceneFog = new THREE.Fog(sceneBaseColor.getHex(), baseFogNear, baseFogFar);
+  scene.background = sceneBackgroundColor;
+  scene.fog = sceneFog;
 
   const resourceTracker = createSceneResourceTracker();
   const {
@@ -116,6 +241,8 @@ export const createMadaLabScene = (
   let breachSequenceStartedAt = 0;
   let breachPendingTunnelExit = false;
   let playerWasInsideTunnel = false;
+  let breachSequenceElapsedMs = 0;
+  let breachSequenceClockNow = 0;
   let terminalExplosionStartedAt = 0;
   let electricActivity = 82;
   let shieldPulse = 0;
@@ -123,6 +250,15 @@ export const createMadaLabScene = (
   let nextUiEmitAt = 0;
   let circuitBreakCount = 0;
   let fluidPatchCount = 0;
+  let breachAftermathSpawned = false;
+  let containmentReleased = false;
+  let storyModeActive = false;
+  let madaHasVanished = false;
+  let formalBattleStarted = false;
+  let madaGrabDamageApplied = false;
+  let madaSkill1StartedAt = -1;
+  let madaSkill1NextAvailableAt = 0;
+  let madaSkill1DamageApplied = false;
   const frontWallDepth = 1.4;
   const frontWallZ = bounds.maxZ + 0.8;
   const tunnelWidth = 8.8;
@@ -133,7 +269,6 @@ export const createMadaLabScene = (
   const tunnelEndZ = tunnelStartZ + tunnelDepth;
   const terminalInteractionRadius = 2.05;
   const tunnelExitThresholdZ = frontWallZ + 0.1;
-  const breachSequenceDurationMs = 3000;
   const terminalAnchor = new THREE.Vector3(
     0,
     GROUND_Y + 1.25,
@@ -146,12 +281,25 @@ export const createMadaLabScene = (
     maxZ: tunnelEndZ - 0.45,
   };
   const playerWorldPosition = new THREE.Vector3();
+  const breachIntroSmokeAnchor = new THREE.Vector3(0, GROUND_Y + 3.2, -12);
+  const breachBigSmokeAnchor = new THREE.Vector3(0, GROUND_Y + 2.7, -3.5);
+  const breachCutscenePlayerPosition = new THREE.Vector3();
+  const breachForwardDirection = new THREE.Vector3();
+  const breachRightDirection = new THREE.Vector3();
+  const breachWalkEndPosition = new THREE.Vector3();
+  const breachBackstepTargetPosition = new THREE.Vector3();
+  const breachAmbushPosition = new THREE.Vector3();
+  const breachStoryPlayerPosition = new THREE.Vector3();
+  const breachStoryMadaPosition = new THREE.Vector3();
+  const breachLookTarget = new THREE.Vector3();
+  let breachFocusYaw = Math.PI;
+  let breachFocusPitch = 0;
   const ambientBaseColor = new THREE.Color(0xe4fbff);
-  const ambientAlarmColor = new THREE.Color(0xff5f5f);
+  const ambientAlarmColor = new THREE.Color(0xff2f2f);
 
   const ambient = new THREE.AmbientLight(0xe4fbff, 2.1);
   scene.add(ambient);
-  const breachAlarmLight = new THREE.PointLight(0xff3b30, 0, 90, 2);
+  const breachAlarmLight = new THREE.PointLight(0xff2424, 0, 90, 2);
   breachAlarmLight.position.set(0, GROUND_Y + 8.6, -10);
   scene.add(breachAlarmLight);
 
@@ -173,6 +321,377 @@ export const createMadaLabScene = (
     return collider;
   };
 
+  const getBreachTimelineState = (now: number) => {
+    if (!breachSequenceStarted) {
+      return {
+        elapsedMs: 0,
+        introSmokeOpacity: 0,
+        bigSmokeOpacity: 0,
+        bigSmokeExpandProgress: 0,
+        bigSmokeDissipateProgress: 0,
+        riseProgress: 0,
+        fadeProgress: 0,
+        isBodyBlackout: false,
+        shouldReleaseContainment: false,
+        hasBigSmokeStarted: false,
+        hasBigSmokeEnded: false,
+        isLookingAround: false,
+        isLookingAtPlayer: false,
+        isSequenceComplete: false,
+      };
+    }
+
+    if (breachSequenceClockNow <= 0) {
+      breachSequenceClockNow = now;
+    } else if (now > breachSequenceClockNow && !formalBattleStarted) {
+      const timeScale =
+        breachSequenceElapsedMs >= AMBUSH_GRAB_WINDUP_END_MS &&
+        breachSequenceElapsedMs < AMBUSH_GRAB_STRIKE_END_MS
+          ? AMBUSH_GRAB_STRIKE_TIME_SCALE
+          : 1;
+      breachSequenceElapsedMs += (now - breachSequenceClockNow) * timeScale;
+      breachSequenceClockNow = now;
+    }
+
+    const elapsedMs = Math.max(0, breachSequenceElapsedMs);
+    const introSmokeProgress = clamp(
+      elapsedMs / BREACH_INTRO_SMOKE_DURATION_MS,
+      0,
+      1
+    );
+    const introSmokeOpacity =
+      elapsedMs < BREACH_INTRO_SMOKE_DURATION_MS
+        ? Math.sin(introSmokeProgress * Math.PI) * 0.92
+        : 0;
+    const bigSmokeElapsed = clamp(
+      elapsedMs - BREACH_BIG_SMOKE_START_MS,
+      0,
+      BREACH_BIG_SMOKE_DURATION_MS
+    );
+    const rawBigSmokeExpandProgress = clamp(
+      bigSmokeElapsed / BREACH_BIG_SMOKE_EXPAND_DURATION_MS,
+      0,
+      1
+    );
+    const rawBigSmokeHoldProgress = clamp(
+      (bigSmokeElapsed - BREACH_BIG_SMOKE_EXPAND_DURATION_MS) /
+        BREACH_BIG_SMOKE_HOLD_DURATION_MS,
+      0,
+      1
+    );
+    const rawBigSmokeDissipateProgress = clamp(
+      (bigSmokeElapsed -
+        BREACH_BIG_SMOKE_EXPAND_DURATION_MS -
+        BREACH_BIG_SMOKE_HOLD_DURATION_MS) /
+        BREACH_BIG_SMOKE_DISSIPATE_DURATION_MS,
+      0,
+      1
+    );
+    const bigSmokeExpandProgress = easeOutCubic(rawBigSmokeExpandProgress);
+    const bigSmokeDissipateProgress = easeInOut(rawBigSmokeDissipateProgress);
+    const bigSmokeOpacity =
+      elapsedMs < BREACH_BIG_SMOKE_START_MS
+        ? 0
+        : rawBigSmokeExpandProgress < 1
+        ? bigSmokeExpandProgress
+        : rawBigSmokeHoldProgress < 1
+        ? 1
+        : 1 - bigSmokeDissipateProgress;
+    const riseProgress = easeOutCubic(
+      clamp(
+        (elapsedMs - BREACH_BIG_SMOKE_END_MS) / MADA_RISE_DURATION_MS,
+        0,
+        1
+      )
+    );
+    const fadeElapsed = Math.max(0, elapsedMs - BREACH_FADE_START_MS);
+    const fadeProgress = easeInOut(
+      clamp(
+        (fadeElapsed - MADA_BLACKOUT_DURATION_MS) / MADA_FADE_ALPHA_DURATION_MS,
+        0,
+        1
+      )
+    );
+
+    return {
+      elapsedMs,
+      introSmokeOpacity,
+      bigSmokeOpacity,
+      bigSmokeExpandProgress,
+      bigSmokeDissipateProgress,
+      riseProgress,
+      fadeProgress,
+      isBodyBlackout:
+        elapsedMs >= BREACH_FADE_START_MS &&
+        elapsedMs < BREACH_FADE_START_MS + MADA_BLACKOUT_DURATION_MS,
+      shouldReleaseContainment: elapsedMs >= BREACH_BIG_SMOKE_RELEASE_MS,
+      hasBigSmokeStarted: elapsedMs >= BREACH_BIG_SMOKE_START_MS,
+      hasBigSmokeEnded: elapsedMs >= BREACH_BIG_SMOKE_END_MS,
+      isLookingAround:
+        elapsedMs >= BREACH_INTRO_SMOKE_DURATION_MS &&
+        elapsedMs < BREACH_BIG_SMOKE_START_MS,
+      isLookingAtPlayer:
+        elapsedMs >= BREACH_BIG_SMOKE_END_MS &&
+        elapsedMs < BREACH_SEQUENCE_DURATION_MS,
+      isSequenceComplete: elapsedMs >= BREACH_SEQUENCE_DURATION_MS,
+    };
+  };
+
+  const getStoryTimelineState = (now: number) => {
+    const breachTimeline = getBreachTimelineState(now);
+    const elapsedMs = breachTimeline.elapsedMs;
+    const walkProgress = easeInOut(
+      inverseLerp(AMBUSH_WALK_START_MS, AMBUSH_WALK_END_MS, elapsedMs)
+    );
+    const lookElapsed = clamp(
+      elapsedMs - AMBUSH_LOOK_START_MS,
+      0,
+      AMBUSH_LOOK_DURATION_MS
+    );
+    const lookLeftProgress = easeInOut(
+      inverseLerp(0, AMBUSH_LOOK_LEFT_DURATION_MS, lookElapsed)
+    );
+    const lookRightProgress = easeInOut(
+      inverseLerp(
+        AMBUSH_LOOK_LEFT_DURATION_MS,
+        AMBUSH_LOOK_DURATION_MS,
+        lookElapsed
+      )
+    );
+    const reappearProgress = easeInOut(
+      inverseLerp(AMBUSH_LOOK_START_MS, AMBUSH_LOOK_END_MS, elapsedMs)
+    );
+    const revealTurnProgress = easeInOut(
+      inverseLerp(AMBUSH_LOOK_END_MS, AMBUSH_REVEAL_TURN_END_MS, elapsedMs)
+    );
+    const discoveryProgress = inverseLerp(
+      AMBUSH_REVEAL_TURN_END_MS,
+      AMBUSH_DISCOVERY_END_MS,
+      elapsedMs
+    );
+    const backstepProgress = easeOutCubic(
+      inverseLerp(
+        AMBUSH_REVEAL_TURN_END_MS,
+        AMBUSH_REVEAL_TURN_END_MS + AMBUSH_BACKSTEP_DURATION_MS,
+        elapsedMs
+      )
+    );
+    const grabWindupProgress = easeInOut(
+      inverseLerp(
+        AMBUSH_DISCOVERY_END_MS,
+        AMBUSH_GRAB_WINDUP_END_MS,
+        elapsedMs
+      )
+    );
+    const grabStrikeProgress = easeInOut(
+      inverseLerp(
+        AMBUSH_GRAB_WINDUP_END_MS,
+        AMBUSH_GRAB_STRIKE_END_MS,
+        elapsedMs
+      )
+    );
+    const grabRecoverProgress = easeInOut(
+      inverseLerp(
+        AMBUSH_GRAB_STRIKE_END_MS,
+        STORY_SEQUENCE_DURATION_MS,
+        elapsedMs
+      )
+    );
+    const slashEffectProgress = inverseLerp(
+      AMBUSH_GRAB_WINDUP_END_MS + AMBUSH_GRAB_STRIKE_DURATION_MS * 0.08,
+      Math.min(
+        STORY_SEQUENCE_DURATION_MS,
+        AMBUSH_GRAB_WINDUP_END_MS + AMBUSH_GRAB_SLASH_EFFECT_DURATION_MS
+      ),
+      elapsedMs
+    );
+
+    return {
+      breachTimeline,
+      elapsedMs,
+      walkProgress,
+      lookLeftProgress,
+      lookRightProgress,
+      reappearProgress,
+      revealTurnProgress,
+      discoveryProgress,
+      backstepProgress,
+      grabWindupProgress,
+      grabStrikeProgress,
+      grabRecoverProgress,
+      slashEffectProgress,
+      isInitialBreachActive: elapsedMs < BREACH_SEQUENCE_DURATION_MS,
+      isWalkPhase:
+        elapsedMs >= AMBUSH_WALK_START_MS && elapsedMs < AMBUSH_WALK_END_MS,
+      isLookPhase:
+        elapsedMs >= AMBUSH_LOOK_START_MS && elapsedMs < AMBUSH_LOOK_END_MS,
+      isRevealTurnPhase:
+        elapsedMs >= AMBUSH_LOOK_END_MS && elapsedMs < AMBUSH_REVEAL_TURN_END_MS,
+      isDiscoveryPhase:
+        elapsedMs >= AMBUSH_REVEAL_TURN_END_MS && elapsedMs < AMBUSH_DISCOVERY_END_MS,
+      isGrabWindupPhase:
+        elapsedMs >= AMBUSH_DISCOVERY_END_MS && elapsedMs < AMBUSH_GRAB_WINDUP_END_MS,
+      isGrabStrikePhase:
+        elapsedMs >= AMBUSH_GRAB_WINDUP_END_MS && elapsedMs < AMBUSH_GRAB_STRIKE_END_MS,
+      isGrabRecoverPhase:
+        elapsedMs >= AMBUSH_GRAB_STRIKE_END_MS && elapsedMs < STORY_SEQUENCE_DURATION_MS,
+      hasAmbushStarted: elapsedMs >= AMBUSH_WALK_START_MS,
+      hasMadaReappeared: elapsedMs >= AMBUSH_LOOK_END_MS,
+      isSequenceComplete: elapsedMs >= STORY_SEQUENCE_DURATION_MS,
+    };
+  };
+
+  const getMadaSkill1State = (now: number) => {
+    if (madaSkill1StartedAt < 0) {
+      return {
+        active: false,
+        elapsedMs: 0,
+        windupProgress: 0,
+        strikeProgress: 0,
+        recoverProgress: 0,
+        slashProgress: 0,
+        isWindupPhase: false,
+        isStrikePhase: false,
+        isRecoverPhase: false,
+      };
+    }
+
+    const elapsedMs = Math.max(0, now - madaSkill1StartedAt);
+    if (elapsedMs >= MADA_SKILL1_DURATION_MS) {
+      return {
+        active: false,
+        elapsedMs,
+        windupProgress: 1,
+        strikeProgress: 1,
+        recoverProgress: 1,
+        slashProgress: 1,
+        isWindupPhase: false,
+        isStrikePhase: false,
+        isRecoverPhase: false,
+      };
+    }
+
+    return {
+      active: true,
+      elapsedMs,
+      windupProgress: easeInOut(
+        inverseLerp(0, MADA_SKILL1_WINDUP_DURATION_MS, elapsedMs)
+      ),
+      strikeProgress: easeInOut(
+        inverseLerp(
+          MADA_SKILL1_WINDUP_DURATION_MS,
+          MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS,
+          elapsedMs
+        )
+      ),
+      recoverProgress: easeInOut(
+        inverseLerp(
+          MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS,
+          MADA_SKILL1_DURATION_MS,
+          elapsedMs
+        )
+      ),
+      slashProgress: inverseLerp(
+        MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS * 0.05,
+        Math.min(
+          MADA_SKILL1_DURATION_MS,
+          MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS * 1.1
+        ),
+        elapsedMs
+      ),
+      isWindupPhase: elapsedMs < MADA_SKILL1_WINDUP_DURATION_MS,
+      isStrikePhase:
+        elapsedMs >= MADA_SKILL1_WINDUP_DURATION_MS &&
+        elapsedMs < MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS,
+      isRecoverPhase:
+        elapsedMs >= MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS,
+    };
+  };
+
+  const resolveStoryPlayerPosition = (now: number, target: THREE.Vector3) => {
+    if (!breachSequenceStarted) {
+      return target.copy(playerWorldPosition);
+    }
+
+    const timeline = getStoryTimelineState(now);
+    target.copy(breachCutscenePlayerPosition);
+
+    if (timeline.elapsedMs >= AMBUSH_WALK_START_MS) {
+      target.lerpVectors(
+        breachCutscenePlayerPosition,
+        breachWalkEndPosition,
+        timeline.walkProgress
+      );
+    }
+
+    if (timeline.elapsedMs >= AMBUSH_REVEAL_TURN_END_MS) {
+      target.lerpVectors(
+        breachWalkEndPosition,
+        breachBackstepTargetPosition,
+        timeline.backstepProgress
+      );
+    }
+
+    target.y = breachCutscenePlayerPosition.y;
+    return target;
+  };
+
+  const resolveStoryMadaPosition = (now: number, target: THREE.Vector3) => {
+    const timeline = getStoryTimelineState(now);
+    const baseMadaY = GROUND_Y + 2;
+
+    if (!timeline.hasAmbushStarted) {
+      const riseOffset = timeline.breachTimeline.hasBigSmokeEnded
+        ? timeline.breachTimeline.riseProgress * 1.9
+        : 0;
+      const hoverOffset = timeline.breachTimeline.hasBigSmokeEnded
+        ? Math.sin(now * 0.0015) * 0.12
+        : 0;
+      target.set(0, baseMadaY + riseOffset + hoverOffset + shieldPulse * 0.04, -12);
+      return target;
+    }
+
+    target.copy(breachAmbushPosition);
+    const ambushHeight = THREE.MathUtils.lerp(
+      AMBUSH_BEHIND_HEIGHT,
+      AMBUSH_ATTACK_HEIGHT,
+      easeInOut(
+        inverseLerp(
+          AMBUSH_LOOK_END_MS,
+          AMBUSH_DISCOVERY_END_MS,
+          timeline.elapsedMs
+        )
+      )
+    );
+    const hoverOffset = Math.sin(now * 0.0021) * 0.08;
+    const reformLift = (1 - timeline.reappearProgress) * AMBUSH_REAPPEAR_LIFT;
+    target.y = baseMadaY + ambushHeight + hoverOffset - reformLift;
+
+    if (
+      timeline.isGrabWindupPhase ||
+      timeline.isGrabStrikePhase ||
+      timeline.isGrabRecoverPhase
+    ) {
+      resolveStoryPlayerPosition(now, breachStoryPlayerPosition);
+      breachLookTarget
+        .copy(breachStoryPlayerPosition)
+        .sub(target)
+        .setY(0);
+      const distance = breachLookTarget.length();
+      if (distance > 0.001) {
+        breachLookTarget.normalize();
+        const lungeDistance = timeline.isGrabWindupPhase
+          ? 0.22 * timeline.grabWindupProgress
+          : timeline.isGrabStrikePhase
+          ? 0.22 + 1.15 * timeline.grabStrikeProgress
+          : THREE.MathUtils.lerp(1.37, 0.3, timeline.grabRecoverProgress);
+        target.addScaledVector(breachLookTarget, lungeDistance);
+      }
+    }
+
+    return target;
+  };
+
   const emitState = (force = false, now = performance.now()) => {
     if (!force && now < nextUiEmitAt) return;
     nextUiEmitAt = now + UI_EMIT_INTERVAL_MS;
@@ -190,6 +709,11 @@ export const createMadaLabScene = (
       circuitBreaks: circuitBreakCount,
       terminalInRange,
       statusLabel:
+        madaHasVanished
+          ? "Specimen vanished"
+          : storyModeActive
+          ? "Story sequence"
+          :
         madaHealth <= 0
           ? "Containment failure"
           : breachSequenceStarted
@@ -411,15 +935,22 @@ export const createMadaLabScene = (
   terminalScreen.rotation.set(-0.22, Math.PI, 0);
   terminalGroup.add(terminalScreen);
 
+  const terminalSideLightLeftMaterial = glowLime.clone();
   const terminalSideLightLeft = new THREE.Mesh(
     new THREE.BoxGeometry(0.08, 0.72, 0.08),
-    glowLime.clone()
+    terminalSideLightLeftMaterial
   );
   terminalSideLightLeft.position.set(-0.78, GROUND_Y + 2.18, terminalAnchor.z - 0.22);
   terminalGroup.add(terminalSideLightLeft);
 
-  const terminalSideLightRight = terminalSideLightLeft.clone();
+  const terminalSideLightRightMaterial = glowLime.clone();
+  const terminalSideLightRight = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.72, 0.08),
+    terminalSideLightRightMaterial
+  );
   terminalSideLightRight.position.x = 0.78;
+  terminalSideLightRight.position.y = GROUND_Y + 2.18;
+  terminalSideLightRight.position.z = terminalAnchor.z - 0.22;
   terminalGroup.add(terminalSideLightRight);
 
   const terminalExplosionGroup = new THREE.Group();
@@ -468,12 +999,28 @@ export const createMadaLabScene = (
 
   registerAnimator((now) => {
     const screenMaterial = terminalScreen.material as THREE.MeshBasicMaterial;
+    const terminalBlinkOn = Math.floor(now / 300) % 2 === 0;
     if (!terminalDestroyed) {
       const pulse = 0.58 + (0.5 + 0.5 * Math.sin(now * 0.0048)) * 0.24;
+      screenMaterial.color.setHex(0x7df7ff);
       screenMaterial.opacity = pulse;
       terminalScreen.scale.x = 0.98 + Math.sin(now * 0.0026) * 0.015;
+      terminalSideLightLeftMaterial.color.setHex(0xb7ff5c);
+      terminalSideLightRightMaterial.color.setHex(0xb7ff5c);
       terminalSideLightLeft.scale.y = 0.84 + Math.sin(now * 0.005 + 0.3) * 0.12;
       terminalSideLightRight.scale.y = 0.84 + Math.sin(now * 0.005 + 1.1) * 0.12;
+    } else {
+      screenMaterial.color.setHex(terminalBlinkOn ? 0xff4d4d : 0x2f0608);
+      screenMaterial.opacity = terminalBlinkOn ? 0.96 : 0.26;
+      terminalScreen.scale.x = terminalBlinkOn ? 1.02 : 0.99;
+      terminalSideLightLeftMaterial.color.setHex(
+        terminalBlinkOn ? 0xff6b6b : 0x3f1010
+      );
+      terminalSideLightRightMaterial.color.setHex(
+        terminalBlinkOn ? 0xff6b6b : 0x3f1010
+      );
+      terminalSideLightLeft.scale.y = terminalBlinkOn ? 1.06 : 0.64;
+      terminalSideLightRight.scale.y = terminalBlinkOn ? 1.06 : 0.64;
     }
 
     if (terminalExplosionStartedAt <= 0) {
@@ -927,6 +1474,32 @@ export const createMadaLabScene = (
     );
   });
 
+  const spawnBreachAftermathPuddles = () => {
+    [
+      [-9.4, -14.8, 3.8, 2.5, 0x7df7ff, 0.35],
+      [-6.2, -8.4, 2.8, 1.7, 0x4fffd6, 0.7],
+      [-2.5, -16.2, 3.1, 2.1, 0xb7ff5c, 1.1],
+      [0.3, -10.6, 4.2, 2.6, 0x7df7ff, 1.45],
+      [3.8, -17.6, 2.9, 1.9, 0x8dff75, 1.8],
+      [7.4, -12.2, 3.4, 2.2, 0x4fffd6, 2.15],
+      [-12.4, -20.6, 2.6, 1.7, 0xb7ff5c, 2.5],
+      [12.1, -21.8, 2.8, 1.8, 0x7df7ff, 2.85],
+      [-15.3, -6.8, 2.4, 1.5, 0x4fffd6, 3.2],
+      [15.4, -7.4, 2.5, 1.6, 0xb7ff5c, 3.55],
+      [-4.4, -23.8, 3.7, 2.1, 0x7df7ff, 3.9],
+      [5.6, -24.6, 3.5, 2, 0x8dff75, 4.25],
+    ].forEach(([x, z, rx, rz, color, phase]) => {
+      createPuddle(
+        x as number,
+        z as number,
+        rx as number,
+        rz as number,
+        color as number,
+        phase as number
+      );
+    });
+  };
+
   const chamber = new THREE.Group();
   chamber.position.set(0, 0, -12);
 
@@ -1008,12 +1581,85 @@ export const createMadaLabScene = (
   });
   containmentShellGroup.add(crackGroup);
 
+  const chamberProjectileBlockerMaterial = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  chamberProjectileBlockerMaterial.colorWrite = false;
+  const chamberProjectileBlocker = new THREE.Mesh(
+    new THREE.CylinderGeometry(4.45, 4.45, 9.2, 24),
+    chamberProjectileBlockerMaterial
+  );
+  chamberProjectileBlocker.position.y = GROUND_Y + 5.15;
+  chamberProjectileBlocker.visible = true;
+  let chamberProjectileBlockingEnabled = true;
+  const chamberProjectileBlockerRaycast =
+    chamberProjectileBlocker.raycast.bind(chamberProjectileBlocker);
+  chamberProjectileBlocker.raycast = (raycaster, intersects) => {
+    if (!chamberProjectileBlockingEnabled) return;
+    chamberProjectileBlockerRaycast(raycaster, intersects);
+  };
+  chamber.add(chamberProjectileBlocker);
+
+  type ContainmentMaterialState = {
+    material: THREE.Material;
+    baseOpacity: number;
+    baseTransparent: boolean;
+    baseDepthWrite: boolean;
+  };
+
+  const containmentMaterialStates: ContainmentMaterialState[] = [];
+  const containmentMaterialSet = new Set<THREE.Material>();
+  containmentShellGroup.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material];
+    for (let i = 0; i < materials.length; i += 1) {
+      const material = materials[i];
+      if (!material || containmentMaterialSet.has(material)) continue;
+      containmentMaterialSet.add(material);
+      containmentMaterialStates.push({
+        material,
+        baseOpacity: material.opacity,
+        baseTransparent: material.transparent,
+        baseDepthWrite: material.depthWrite,
+      });
+    }
+  });
+
+  const setContainmentShellAlpha = (alpha: number) => {
+    const resolvedAlpha = clamp(alpha, 0, 1);
+    containmentShellGroup.visible = resolvedAlpha > 0.001;
+    for (let i = 0; i < containmentMaterialStates.length; i += 1) {
+      const entry = containmentMaterialStates[i];
+      const nextOpacity = entry.baseOpacity * resolvedAlpha;
+      const nextTransparent =
+        entry.baseTransparent || resolvedAlpha < 0.999;
+      const nextDepthWrite = nextOpacity > 0.02 ? entry.baseDepthWrite : false;
+      const opacityChanged = Math.abs(entry.material.opacity - nextOpacity) > 0.001;
+      const transparentChanged =
+        entry.material.transparent !== nextTransparent;
+      const depthWriteChanged = entry.material.depthWrite !== nextDepthWrite;
+      entry.material.opacity = nextOpacity;
+      entry.material.transparent = nextTransparent;
+      entry.material.depthWrite = nextDepthWrite;
+      if (opacityChanged || transparentChanged || depthWriteChanged) {
+        entry.material.needsUpdate = true;
+      }
+    }
+  };
+
+  setContainmentShellAlpha(1);
+
   const breachSmokeGroup = new THREE.Group();
   breachSmokeGroup.visible = false;
   fxGroup.add(breachSmokeGroup);
   trackObject(breachSmokeGroup);
 
-  const breachSmokePuffs = Array.from({ length: 22 }, (_, index) => {
+  const breachSmokePuffs = Array.from({ length: 52 }, (_, index) => {
     const material = new THREE.MeshBasicMaterial({
       color: 0x050505,
       transparent: true,
@@ -1028,12 +1674,12 @@ export const createMadaLabScene = (
     return {
       mesh,
       material,
-      radius: 4 + (index % 6) * 1.8 + Math.random() * 0.8,
-      angle: (index / 22) * Math.PI * 2 + Math.random() * 0.4,
-      height: 1.1 + Math.random() * 5.2,
-      drift: (Math.random() - 0.5) * 1.8,
+      radius: 5 + (index % 8) * 2.8 + Math.random() * 1.4,
+      angle: (index / 52) * Math.PI * 2 + Math.random() * 0.65,
+      height: 1 + Math.random() * 8.2,
+      drift: (Math.random() - 0.5) * 3.8,
       phase: Math.random() * Math.PI * 2,
-      scale: 1.6 + Math.random() * 2.8,
+      scale: 4.2 + Math.random() * 6.4,
     };
   });
 
@@ -1044,22 +1690,83 @@ export const createMadaLabScene = (
     middleBand.rotation.z -= delta * 0.35;
     shell.scale.setScalar(1 + shieldPulse * 0.04);
 
-    const breachProgress = breachSequenceStarted
-      ? THREE.MathUtils.clamp(
-          (now - breachSequenceStartedAt) / breachSequenceDurationMs,
-          0,
-          1
-        )
-      : 0;
-    const breachPulse =
-      breachSequenceStarted && breachProgress < 1
-        ? 0.72 + (0.5 + 0.5 * Math.sin(now * 0.018)) * 0.28
-        : 0;
-    ambient.color.copy(ambientBaseColor).lerp(ambientAlarmColor, breachPulse * 0.5);
-    breachAlarmLight.intensity = breachPulse * 26;
-    breachAlarmLight.distance = 90 + breachPulse * 18;
+    const storyTimeline = getStoryTimelineState(now);
+    const breachTimeline = storyTimeline.breachTimeline;
+    if (breachTimeline.shouldReleaseContainment) {
+      releaseMadaContainment(now);
+    }
+    storyModeActive = breachSequenceStarted && !storyTimeline.isSequenceComplete;
+    madaHasVanished =
+      breachSequenceStarted &&
+      breachTimeline.isSequenceComplete &&
+      storyTimeline.reappearProgress <= 0.001 &&
+      !storyTimeline.isSequenceComplete;
 
-    breachSmokeGroup.visible = breachSequenceStarted && breachProgress < 1;
+    if (formalBattleStarted) {
+      madaPresentation.applyState({
+        mode: "active",
+        fadeAlpha: 1,
+        bodyBlackout: false,
+      });
+    } else if (storyTimeline.isInitialBreachActive) {
+      const madaFadeAlpha =
+        breachSequenceStarted && breachTimeline.elapsedMs >= BREACH_FADE_START_MS
+          ? 1 - breachTimeline.fadeProgress
+          : 1;
+      madaPresentation.applyState(
+        resolveMadaPresentationState({
+          activated: madaActivated,
+          breachSequenceStarted,
+          containmentReleased,
+          hasVanished: false,
+          fadeAlpha: madaFadeAlpha,
+          bodyBlackout: breachTimeline.isBodyBlackout,
+        })
+      );
+    } else if (storyTimeline.isSequenceComplete) {
+      madaPresentation.applyState({
+        mode: "active",
+        fadeAlpha: 1,
+        bodyBlackout: false,
+      });
+    } else if (storyTimeline.reappearProgress > 0.001) {
+      madaPresentation.applyState({
+        mode: storyTimeline.reappearProgress >= 0.999 ? "active" : "vanishing",
+        fadeAlpha: storyTimeline.reappearProgress,
+        bodyBlackout: false,
+      });
+    } else {
+      madaPresentation.applyState({
+        mode: "vanished",
+        fadeAlpha: 0,
+        bodyBlackout: false,
+      });
+    }
+
+    const introSmokeOpacity = breachTimeline.introSmokeOpacity;
+    const bigSmokeOpacity = breachTimeline.bigSmokeOpacity;
+    const smokeOcclusion = Math.max(
+      introSmokeOpacity * 0.18,
+      bigSmokeOpacity * 0.42
+    );
+    const breachPulse = breachSequenceStarted
+      ? 0.68 +
+        (0.5 + 0.5 * Math.sin(now * 0.00864)) * 0.22 +
+        bigSmokeOpacity * 0.24
+      : 0;
+    ambient.color.copy(ambientBaseColor).lerp(ambientAlarmColor, breachPulse * 0.54);
+    breachAlarmLight.intensity = breachPulse * 28;
+    breachAlarmLight.distance = 88 + breachPulse * 18;
+    sceneBackgroundColor
+      .copy(sceneBaseColor)
+      .lerp(sceneSmokeColor, smokeOcclusion * 0.72);
+    sceneFog.color.copy(sceneBaseColor).lerp(sceneSmokeColor, smokeOcclusion * 0.72);
+    sceneFog.near = THREE.MathUtils.lerp(baseFogNear, 18, smokeOcclusion);
+    sceneFog.far = THREE.MathUtils.lerp(baseFogFar, 62, smokeOcclusion);
+
+    const activeSmokeOpacity = Math.max(introSmokeOpacity, bigSmokeOpacity);
+    const isBigSmokeActive = bigSmokeOpacity >= introSmokeOpacity;
+    breachSmokeGroup.visible = breachSequenceStarted && activeSmokeOpacity > 0.01;
     for (let i = 0; i < breachSmokePuffs.length; i += 1) {
       const puff = breachSmokePuffs[i];
       if (!breachSmokeGroup.visible) {
@@ -1067,23 +1774,87 @@ export const createMadaLabScene = (
         continue;
       }
 
-      const swirl = now * 0.00055 + puff.phase;
-      const radius = puff.radius + breachProgress * 7.5;
-      puff.mesh.position.set(
-        Math.cos(puff.angle + swirl * 0.8) * radius + puff.drift * breachProgress,
-        GROUND_Y + 1.8 + puff.height + breachProgress * 5.4,
-        -12 + Math.sin(puff.angle + swirl) * radius * 0.72
-      );
-      puff.mesh.scale.setScalar(puff.scale + breachProgress * 4.2);
-      puff.material.opacity = THREE.MathUtils.clamp(
-        0.34 * (1 - breachProgress * 0.6),
-        0,
-        0.34
-      );
+      const swirl = now * (isBigSmokeActive ? 0.00074 : 0.00105) + puff.phase;
+      if (isBigSmokeActive) {
+        const spikeWave =
+          breachTimeline.bigSmokeDissipateProgress > 0
+            ? 0.22 +
+              0.78 *
+                Math.pow(
+                  0.5 +
+                    0.5 *
+                      Math.sin(
+                        puff.angle * 6 +
+                          puff.phase * 1.7 +
+                          now * 0.0034 +
+                          breachTimeline.bigSmokeDissipateProgress * 15
+                      ),
+                  5
+                )
+            : 1;
+        const radius =
+          1.5 +
+          puff.radius *
+            (0.26 + breachTimeline.bigSmokeExpandProgress * 0.95) +
+          breachTimeline.bigSmokeDissipateProgress * (5 + spikeWave * 9);
+        puff.mesh.position.set(
+          breachBigSmokeAnchor.x +
+            Math.cos(puff.angle + swirl * 0.86) * radius +
+            puff.drift *
+              (0.24 +
+                breachTimeline.bigSmokeExpandProgress * 1.9 +
+                breachTimeline.bigSmokeDissipateProgress * 0.7),
+          breachBigSmokeAnchor.y +
+            puff.height * (0.2 + breachTimeline.bigSmokeExpandProgress * 0.58) +
+            breachTimeline.bigSmokeDissipateProgress * (1.4 + spikeWave * 2.4),
+          breachBigSmokeAnchor.z +
+            Math.sin(puff.angle + swirl) * radius * (0.9 + spikeWave * 0.12)
+        );
+        puff.mesh.scale.setScalar(
+          (1.2 +
+            puff.scale * 0.34 +
+            bigSmokeOpacity * 6.6 +
+            breachTimeline.bigSmokeExpandProgress * 8.4) *
+            (breachTimeline.bigSmokeDissipateProgress > 0
+              ? 0.56 + spikeWave * 0.82
+              : 1)
+        );
+        puff.material.opacity = THREE.MathUtils.clamp(
+          0.88 *
+            bigSmokeOpacity *
+            (breachTimeline.bigSmokeDissipateProgress > 0
+              ? 0.26 + spikeWave * 0.74
+              : 1),
+          0,
+          0.88
+        );
+      } else {
+        const introWave = 0.68 + (0.5 + 0.5 * Math.sin(now * 0.004 + puff.phase)) * 0.32;
+        const radius = 0.9 + puff.radius * 0.18 + introSmokeOpacity * 2.1;
+        puff.mesh.position.set(
+          breachIntroSmokeAnchor.x +
+            Math.cos(puff.angle + swirl * 0.72) * radius +
+            puff.drift * 0.2,
+          breachIntroSmokeAnchor.y -
+            1 +
+            puff.height * 0.18 +
+            introSmokeOpacity * 1.9,
+          breachIntroSmokeAnchor.z +
+            Math.sin(puff.angle + swirl) * radius * 0.8
+        );
+        puff.mesh.scale.setScalar(
+          0.8 + puff.scale * 0.16 + introSmokeOpacity * 2.5
+        );
+        puff.material.opacity = THREE.MathUtils.clamp(
+          0.58 * introSmokeOpacity * introWave,
+          0,
+          0.58
+        );
+      }
     }
   });
 
-  solidGroup.add(chamber);
+  labGroup.add(chamber);
   trackObject(chamber);
   const chamberCollider = addCollider(0, -12, 11.2, 11.2, 0.85);
 
@@ -1106,33 +1877,246 @@ export const createMadaLabScene = (
   fallbackBody.position.y = 1.7;
   madaModelRoot.add(fallbackBody);
   trackMesh(fallbackBody);
-
-  let madaEyeNodes: THREE.Object3D[] = [];
-  const applyMadaActivationState = () => {
-    for (let i = 0; i < madaEyeNodes.length; i += 1) {
-      madaEyeNodes[i].visible = madaActivated;
-    }
-  };
-  const bindMadaActivationNodes = (model: THREE.Object3D | null) => {
-    madaEyeNodes = [];
-    if (!model) return;
-
-    const eyeGroup = model.getObjectByName("eyeGroup");
-    if (eyeGroup) {
-      madaEyeNodes.push(eyeGroup);
-    } else {
-      const eyeLeft = model.getObjectByName("eyeLeft");
-      const eyeRight = model.getObjectByName("eyeRight");
-      if (eyeLeft) madaEyeNodes.push(eyeLeft);
-      if (eyeRight) madaEyeNodes.push(eyeRight);
-    }
-
-    applyMadaActivationState();
-  };
+  const madaPresentation = createMadaPresentationController({
+    rig: madaRig,
+    modelRoot: madaModelRoot,
+  });
+  const madaAnimation = createMadaAnimationController({
+    rig: madaRig,
+  });
+  const madaSlashTrails = [
+    { lateralOffset: -0.82, progressOffset: 0, verticalOffset: 0.12 },
+    { lateralOffset: 0, progressOffset: 0.08, verticalOffset: 0 },
+    { lateralOffset: 0.82, progressOffset: 0.16, verticalOffset: -0.12 },
+  ].map((entry) => {
+    const material = new THREE.MeshBasicMaterial({
+      color: MADA_SLASH_COLOR,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 0.68), material);
+    mesh.visible = false;
+    fxGroup.add(mesh);
+    trackMesh(mesh);
+    return {
+      ...entry,
+      mesh,
+      material,
+    };
+  });
   const setMadaActivated = (active: boolean) => {
     if (madaActivated === active) return;
     madaActivated = active;
-    applyMadaActivationState();
+  };
+
+  const configureBreachCutscene = (playerPosition: THREE.Vector3) => {
+    breachCutscenePlayerPosition.copy(playerPosition);
+    breachStoryPlayerPosition.copy(playerPosition);
+    const toMadaX = madaRig.position.x - playerPosition.x;
+    const toMadaZ = madaRig.position.z - playerPosition.z;
+    const horizontalDistance = Math.max(0.001, Math.hypot(toMadaX, toMadaZ));
+    breachFocusYaw = Math.atan2(toMadaX, toMadaZ);
+    breachFocusPitch = clamp(
+      Math.atan2(GROUND_Y + 3.25 - (playerPosition.y + 1.6), horizontalDistance),
+      -0.2,
+      0.18
+    );
+    breachForwardDirection.set(
+      Math.sin(breachFocusYaw),
+      0,
+      Math.cos(breachFocusYaw)
+    );
+    breachRightDirection.set(
+      Math.cos(breachFocusYaw),
+      0,
+      -Math.sin(breachFocusYaw)
+    );
+    breachWalkEndPosition
+      .copy(playerPosition)
+      .addScaledVector(breachForwardDirection, AMBUSH_WALK_DISTANCE);
+    breachWalkEndPosition.y = playerPosition.y;
+    breachBackstepTargetPosition
+      .copy(breachWalkEndPosition)
+      .addScaledVector(breachForwardDirection, AMBUSH_BACKSTEP_DISTANCE);
+    breachBackstepTargetPosition.y = playerPosition.y;
+    breachAmbushPosition
+      .copy(breachWalkEndPosition)
+      .addScaledVector(breachForwardDirection, -AMBUSH_BEHIND_DISTANCE)
+      .addScaledVector(breachRightDirection, AMBUSH_SIDE_OFFSET);
+    breachAmbushPosition.y = GROUND_Y + 2 + AMBUSH_BEHIND_HEIGHT;
+    breachIntroSmokeAnchor.set(madaRig.position.x, GROUND_Y + 3.2, madaRig.position.z);
+    breachBigSmokeAnchor.copy(playerPosition);
+    const forwardDistance = Math.min(15.5, horizontalDistance * 0.5);
+    breachBigSmokeAnchor.x += Math.sin(breachFocusYaw) * forwardDistance;
+    breachBigSmokeAnchor.y = GROUND_Y + 2.85;
+    breachBigSmokeAnchor.z += Math.cos(breachFocusYaw) * forwardDistance;
+  };
+
+  const releaseMadaContainment = (now: number) => {
+    if (containmentReleased) return;
+    containmentReleased = true;
+    chamber.visible = false;
+    chamberProjectileBlockingEnabled = false;
+    setContainmentShellAlpha(0);
+    chamberCollider.enabled = false;
+    setMadaActivated(true);
+    shieldPulse = Math.max(shieldPulse, 1.25);
+    if (!breachAftermathSpawned) {
+      breachAftermathSpawned = true;
+      spawnBreachAftermathPuddles();
+    }
+    emitState(true, now);
+  };
+
+  const resolveBreachLookOverride = (now: number) => {
+    if (!breachSequenceStarted || formalBattleStarted) return null;
+    const storyTimeline = getStoryTimelineState(now);
+    if (storyTimeline.isSequenceComplete) return null;
+
+    const timeline = storyTimeline.breachTimeline;
+    const leftLookOffset = 0.48;
+    let yaw = breachFocusYaw;
+    let pitch = breachFocusPitch;
+
+    resolveStoryPlayerPosition(now, breachStoryPlayerPosition);
+
+    if (storyTimeline.isInitialBreachActive && timeline.elapsedMs < BREACH_INTRO_SMOKE_DURATION_MS) {
+      return { yaw, pitch, blend: 0.11 };
+    }
+
+    if (storyTimeline.isInitialBreachActive && timeline.isLookingAround) {
+      const lookElapsed = timeline.elapsedMs - BREACH_INTRO_SMOKE_DURATION_MS;
+      if (lookElapsed < BREACH_LOOK_LEFT_DURATION_MS) {
+        yaw = THREE.MathUtils.lerp(
+          breachFocusYaw,
+          breachFocusYaw - leftLookOffset,
+          easeInOut(lookElapsed / BREACH_LOOK_LEFT_DURATION_MS)
+        );
+        pitch = breachFocusPitch + 0.015;
+      } else if (
+        lookElapsed <
+        BREACH_LOOK_LEFT_DURATION_MS + BREACH_LOOK_RIGHT_DURATION_MS
+      ) {
+        const segmentElapsed = lookElapsed - BREACH_LOOK_LEFT_DURATION_MS;
+        yaw = THREE.MathUtils.lerp(
+          breachFocusYaw - leftLookOffset,
+          breachFocusYaw + leftLookOffset,
+          easeInOut(segmentElapsed / BREACH_LOOK_RIGHT_DURATION_MS)
+        );
+        pitch = breachFocusPitch + 0.02;
+      } else {
+        const segmentElapsed =
+          lookElapsed -
+          BREACH_LOOK_LEFT_DURATION_MS -
+          BREACH_LOOK_RIGHT_DURATION_MS;
+        yaw = THREE.MathUtils.lerp(
+          breachFocusYaw + leftLookOffset,
+          breachFocusYaw,
+          easeInOut(segmentElapsed / BREACH_LOOK_RETURN_DURATION_MS)
+        );
+        pitch = breachFocusPitch + 0.01;
+      }
+      return { yaw, pitch, blend: 0.12 };
+    }
+
+    if (storyTimeline.isInitialBreachActive && !timeline.hasBigSmokeEnded) {
+      return { yaw, pitch, blend: 0.1 };
+    }
+
+    if (storyTimeline.isInitialBreachActive) {
+      resolveStoryMadaPosition(now, breachStoryMadaPosition);
+      breachLookTarget.set(
+        breachStoryMadaPosition.x,
+        breachStoryMadaPosition.y + 1.7,
+        breachStoryMadaPosition.z
+      );
+      const toTargetX = breachLookTarget.x - breachCutscenePlayerPosition.x;
+      const toTargetZ = breachLookTarget.z - breachCutscenePlayerPosition.z;
+      const horizontalDistance = Math.max(0.001, Math.hypot(toTargetX, toTargetZ));
+      yaw = Math.atan2(toTargetX, toTargetZ);
+      pitch = clamp(
+        Math.atan2(
+          breachLookTarget.y - (breachCutscenePlayerPosition.y + 1.6),
+          horizontalDistance
+        ),
+        -0.22,
+        0.24
+      );
+      return { yaw, pitch, blend: 0.09 };
+    }
+
+    if (storyTimeline.isWalkPhase) {
+      return {
+        yaw: breachFocusYaw,
+        pitch: clamp(breachFocusPitch * 0.45, -0.08, 0.08),
+        blend: 0.12,
+      };
+    }
+
+    if (storyTimeline.isLookPhase) {
+      if (storyTimeline.lookLeftProgress < 1) {
+        yaw = lerpAngle(
+          breachFocusYaw,
+          breachFocusYaw - 0.42,
+          storyTimeline.lookLeftProgress
+        );
+        pitch = 0.04;
+      } else {
+        yaw = lerpAngle(
+          breachFocusYaw - 0.42,
+          breachFocusYaw + 0.5,
+          storyTimeline.lookRightProgress
+        );
+        pitch = 0.05;
+      }
+      return { yaw, pitch, blend: 0.12 };
+    }
+
+    resolveStoryMadaPosition(now, breachStoryMadaPosition);
+    breachLookTarget.set(
+      breachStoryMadaPosition.x,
+      breachStoryMadaPosition.y + 1.6,
+      breachStoryMadaPosition.z
+    );
+    const toTargetX = breachLookTarget.x - breachStoryPlayerPosition.x;
+    const toTargetZ = breachLookTarget.z - breachStoryPlayerPosition.z;
+    const horizontalDistance = Math.max(0.001, Math.hypot(toTargetX, toTargetZ));
+    const targetYaw = Math.atan2(toTargetX, toTargetZ);
+    const targetPitch = clamp(
+      Math.atan2(
+        breachLookTarget.y - (breachStoryPlayerPosition.y + 1.6),
+        horizontalDistance
+      ),
+      -0.22,
+      0.24
+    );
+
+    if (storyTimeline.isRevealTurnPhase) {
+      return {
+        yaw: lerpAngle(
+          breachFocusYaw + 0.5,
+          targetYaw,
+          storyTimeline.revealTurnProgress
+        ),
+        pitch: THREE.MathUtils.lerp(0.05, targetPitch, storyTimeline.revealTurnProgress),
+        blend: 0.3,
+      };
+    }
+
+    return {
+      yaw: targetYaw,
+      pitch: targetPitch,
+      blend:
+        storyTimeline.isDiscoveryPhase ||
+        storyTimeline.isGrabWindupPhase ||
+        storyTimeline.isGrabStrikePhase ||
+        storyTimeline.isGrabRecoverPhase
+          ? 0.42
+          : 0.28,
+    };
   };
 
   const destroyTerminal = (now: number) => {
@@ -1140,21 +2124,44 @@ export const createMadaLabScene = (
     terminalDestroyed = true;
     breachPendingTunnelExit = true;
     terminalInRange = false;
-    terminalExplosionStartedAt = now;
-    terminalGroup.visible = false;
+    terminalExplosionStartedAt = 0;
     terminalCollider.enabled = false;
     emitState(true, now);
   };
 
-  const startContainmentBreach = (now: number) => {
+  const startContainmentBreach = (now: number, playerPosition: THREE.Vector3) => {
     if (breachSequenceStarted) return;
     breachSequenceStarted = true;
     breachSequenceStartedAt = now;
+    breachSequenceElapsedMs = 0;
+    breachSequenceClockNow = now;
     breachPendingTunnelExit = false;
-    containmentShellGroup.visible = false;
-    chamberCollider.enabled = false;
-    setMadaActivated(true);
-    shieldPulse = Math.max(shieldPulse, 1);
+    breachAftermathSpawned = false;
+    containmentReleased = false;
+    storyModeActive = true;
+    madaHasVanished = false;
+    formalBattleStarted = false;
+    madaGrabDamageApplied = false;
+    madaSkill1StartedAt = -1;
+    madaSkill1NextAvailableAt = 0;
+    madaSkill1DamageApplied = false;
+    hideMadaSlashTrails();
+    chamber.visible = true;
+    chamberProjectileBlockingEnabled = true;
+    setContainmentShellAlpha(1);
+    chamberCollider.enabled = true;
+    setMadaActivated(false);
+    shieldPulse = Math.max(shieldPulse, 0.9);
+    configureBreachCutscene(playerPosition);
+    madaAnimation.resetPose();
+    madaPresentation.applyState(
+      resolveMadaPresentationState({
+        activated: false,
+        breachSequenceStarted: true,
+        containmentReleased: false,
+        hasVanished: false,
+      })
+    );
     emitState(true, now);
   };
 
@@ -1201,7 +2208,8 @@ export const createMadaLabScene = (
         madaModelRoot.remove(madaModelRoot.children[0]);
       }
       madaModelRoot.add(model);
-      bindMadaActivationNodes(model);
+      madaPresentation.bindModel(model);
+      madaAnimation.bindModel(model);
       trackObject(model);
     },
     undefined,
@@ -1209,17 +2217,99 @@ export const createMadaLabScene = (
   );
 
   const specimenFocus = new THREE.Vector3();
+  const madaHeadLookTarget = new THREE.Vector3();
+  const madaGrabOrigin = new THREE.Vector3();
+  const madaGrabTarget = new THREE.Vector3();
+  const madaGrabDirection = new THREE.Vector3();
+  const madaSlashForward = new THREE.Vector3();
+  const madaSlashSide = new THREE.Vector3();
+  const madaSlashPosition = new THREE.Vector3();
+  const madaSlashCenter = new THREE.Vector3();
+  const madaSkill1Direction = new THREE.Vector3();
+  const hideMadaSlashTrails = () => {
+    for (let i = 0; i < madaSlashTrails.length; i += 1) {
+      madaSlashTrails[i].mesh.visible = false;
+      madaSlashTrails[i].material.opacity = 0;
+    }
+  };
+  const renderMadaSlashTrails = ({
+    origin,
+    target,
+    progress,
+    opacityScale = 1,
+  }: {
+    origin: THREE.Vector3;
+    target: THREE.Vector3;
+    progress: number;
+    opacityScale?: number;
+  }) => {
+    madaSlashForward.copy(target).sub(origin).setY(0);
+    const slashDistance = Math.max(0.001, madaSlashForward.length());
+    if (slashDistance <= 0.001) {
+      hideMadaSlashTrails();
+      return;
+    }
+    madaSlashForward.normalize();
+    madaSlashSide.set(madaSlashForward.z, 0, -madaSlashForward.x);
+    const yaw = Math.atan2(madaSlashForward.x, madaSlashForward.z) + Math.PI / 2;
+
+    for (let i = 0; i < madaSlashTrails.length; i += 1) {
+      const trail = madaSlashTrails[i];
+      const localProgress = clamp(
+        (progress - trail.progressOffset) / Math.max(0.2, 1 - trail.progressOffset),
+        0,
+        1
+      );
+      const pulse = Math.sin(localProgress * Math.PI) ** 0.9;
+      if (pulse <= 0.001) {
+        trail.mesh.visible = false;
+        trail.material.opacity = 0;
+        continue;
+      }
+
+      madaSlashCenter.copy(origin).lerp(target, 0.42 + localProgress * 0.18);
+      madaSlashPosition
+        .copy(madaSlashCenter)
+        .addScaledVector(madaSlashSide, trail.lateralOffset * (0.85 + pulse * 0.18))
+        .addScaledVector(madaSlashForward, -0.56 + localProgress * 0.82);
+      madaSlashPosition.y += THREE.MathUtils.lerp(
+        1.45 + trail.verticalOffset,
+        -1.45 + trail.verticalOffset,
+        localProgress
+      );
+      trail.mesh.position.copy(madaSlashPosition);
+      trail.mesh.rotation.set(
+        THREE.MathUtils.lerp(-0.52, -0.22, localProgress),
+        yaw,
+        THREE.MathUtils.lerp(Math.PI / 4, -Math.PI / 4, localProgress)
+      );
+      trail.mesh.scale.set(
+        0.94 + pulse * Math.min(2.6, slashDistance / 2.1),
+        0.52 + pulse * 0.38,
+        1
+      );
+      trail.material.opacity =
+        (0.14 + pulse * 0.86) *
+        opacityScale *
+        (0.94 - trail.progressOffset * 0.2);
+      trail.mesh.visible = true;
+    }
+  };
   const madaAttackTarget: PlayerAttackTarget = {
     id: "madaSubject",
     object: madaRig,
     category: "boss",
     label: "Mada Subject",
-    isActive: () => madaActivated && madaHealth > 0,
+    isActive: () =>
+      madaActivated && madaHealth > 0 && !storyModeActive && !madaHasVanished,
     getHealth: () => madaHealth,
     getMaxHealth: () => MADA_MAX_HEALTH,
     onHit: (hit) => {
-      if (!madaActivated || madaHealth <= 0) return;
+      if (!madaActivated || madaHealth <= 0 || storyModeActive || madaHasVanished) {
+        return;
+      }
       setMadaActivated(true);
+      madaPresentation.triggerHitFlash(hit.now);
       madaHealth = Math.max(0, madaHealth - Math.max(1, Math.floor(hit.damage)));
       shieldPulse = Math.min(1.4, shieldPulse + 0.55);
       emitState(true, hit.now);
@@ -1227,7 +2317,12 @@ export const createMadaLabScene = (
   };
   attackTargets.push(madaAttackTarget);
 
-  const worldTick = ({ now, delta, player }: PlayerWorldTickArgs) => {
+  const worldTick = ({
+    now,
+    delta,
+    player,
+    applyDamage,
+  }: PlayerWorldTickArgs) => {
     shieldPulse = Math.max(0, shieldPulse - delta * 1.5);
 
     for (let i = 0; i < animators.length; i += 1) {
@@ -1245,13 +2340,14 @@ export const createMadaLabScene = (
       playerWasInsideTunnel &&
       !playerInsideTunnel
     ) {
-      startContainmentBreach(now);
+      startContainmentBreach(now, playerWorldPosition);
     }
     playerWasInsideTunnel = playerInsideTunnel;
 
+    const storyTimeline = getStoryTimelineState(now);
+    const breachTimeline = storyTimeline.breachTimeline;
     const breachActive =
-      breachSequenceStarted &&
-      now - breachSequenceStartedAt <= breachSequenceDurationMs;
+      breachSequenceStarted && (!madaHasVanished || storyTimeline.hasMadaReappeared);
 
     electricActivity = breachActive
       ? 94 + (0.5 + 0.5 * Math.sin(now * 0.011)) * 6 + shieldPulse * 12
@@ -1260,22 +2356,174 @@ export const createMadaLabScene = (
         shieldPulse * 20 +
         (madaHealth <= MADA_MAX_HEALTH * 0.35 ? 8 : 0);
 
-    madaRig.position.y = madaActivated
-      ? GROUND_Y + 2 + Math.sin(now * 0.0018) * 0.16 + shieldPulse * 0.06
-      : GROUND_Y + 2;
-    if (madaHealth > 0) {
-      if (madaActivated) {
+    if (storyModeActive) {
+      resolveStoryPlayerPosition(now, breachStoryPlayerPosition);
+      player.position.copy(breachStoryPlayerPosition);
+    } else {
+      breachStoryPlayerPosition.copy(playerWorldPosition);
+    }
+
+    const baseMadaY = GROUND_Y + 2;
+    if (breachSequenceStarted && !formalBattleStarted) {
+      resolveStoryMadaPosition(now, breachStoryMadaPosition);
+      madaRig.position.copy(breachStoryMadaPosition);
+    } else {
+      madaRig.position.y = madaActivated
+        ? baseMadaY + Math.sin(now * 0.0018) * 0.16 + shieldPulse * 0.06
+        : baseMadaY;
+    }
+
+    let madaSkill1State = getMadaSkill1State(now);
+    if (
+      formalBattleStarted &&
+      madaActivated &&
+      madaHealth > 0 &&
+      !storyModeActive &&
+      !madaSkill1State.active &&
+      now >= madaSkill1NextAvailableAt
+    ) {
+      player.getWorldPosition(specimenFocus);
+      madaSkill1Direction
+        .copy(specimenFocus)
+        .sub(madaRig.position)
+        .setY(0);
+      if (madaSkill1Direction.length() <= MADA_SKILL1_TRIGGER_RANGE) {
+        madaSkill1StartedAt = now;
+        madaSkill1NextAvailableAt = now + MADA_SKILL1_COOLDOWN_MS;
+        madaSkill1DamageApplied = false;
+        madaSkill1State = getMadaSkill1State(now);
+      }
+    }
+
+    if (storyModeActive && storyTimeline.hasMadaReappeared) {
+      madaAnimation.applyGrabAnimation({
+        revealProgress: storyTimeline.reappearProgress,
+        windupProgress: storyTimeline.grabWindupProgress,
+        strikeProgress: storyTimeline.grabStrikeProgress,
+        recoverProgress: storyTimeline.grabRecoverProgress,
+      });
+    } else if (madaSkill1State.active) {
+      madaAnimation.applyGrabAnimation({
+        revealProgress: 1,
+        windupProgress: madaSkill1State.windupProgress,
+        strikeProgress: madaSkill1State.strikeProgress,
+        recoverProgress: madaSkill1State.recoverProgress,
+      });
+    } else {
+      madaAnimation.resetPose();
+    }
+
+    if (madaHealth > 0 && (!madaHasVanished || storyTimeline.hasMadaReappeared)) {
+      if (breachSequenceStarted && !formalBattleStarted) {
+        if (containmentReleased && !storyTimeline.isSequenceComplete) {
+          faceObjectTowardTargetOnYaw(madaRig, breachStoryPlayerPosition);
+          madaHeadLookTarget.copy(breachStoryPlayerPosition);
+          madaHeadLookTarget.y += 1.45;
+        } else {
+          madaRig.rotation.y = 0;
+          madaHeadLookTarget.set(0, 0, 0);
+        }
+      } else if (madaActivated) {
         player.getWorldPosition(specimenFocus);
-        specimenFocus.y = madaRig.position.y + 1.4;
-        madaRig.lookAt(specimenFocus);
-        madaRig.rotation.y += Math.PI;
+        faceObjectTowardTargetOnYaw(madaRig, specimenFocus);
+        madaHeadLookTarget.copy(specimenFocus);
+        madaHeadLookTarget.y += 1.45;
       } else {
         madaRig.rotation.y = 0;
+        madaHeadLookTarget.set(0, 0, 0);
       }
-      madaRig.rotation.x = 0;
-      madaRig.rotation.z = 0;
-    } else {
+      madaAnimation.applyHeadLook(
+        madaHeadLookTarget.lengthSq() > 0.0001 ? madaHeadLookTarget : null
+      );
+    } else if (!madaHasVanished) {
       madaRig.rotation.y += delta * 0.35;
+      madaAnimation.applyHeadLook(null);
+    } else {
+      madaAnimation.applyHeadLook(null);
+    }
+
+    hideMadaSlashTrails();
+    if (
+      storyModeActive &&
+      storyTimeline.hasMadaReappeared &&
+      storyTimeline.elapsedMs >= AMBUSH_GRAB_WINDUP_END_MS &&
+      storyTimeline.elapsedMs <
+        AMBUSH_GRAB_WINDUP_END_MS + AMBUSH_GRAB_SLASH_EFFECT_DURATION_MS
+    ) {
+      madaRig.updateMatrixWorld(true);
+      madaAnimation.getRightClawWorldPosition(madaGrabOrigin);
+      madaGrabTarget.copy(breachStoryPlayerPosition);
+      madaGrabTarget.y += 1.25;
+      renderMadaSlashTrails({
+        origin: madaGrabOrigin,
+        target: madaGrabTarget,
+        progress: storyTimeline.slashEffectProgress,
+      });
+    } else if (madaSkill1State.active) {
+      madaRig.updateMatrixWorld(true);
+      madaAnimation.getRightClawWorldPosition(madaGrabOrigin);
+      player.getWorldPosition(madaGrabTarget);
+      madaGrabTarget.y += 1.25;
+      renderMadaSlashTrails({
+        origin: madaGrabOrigin,
+        target: madaGrabTarget,
+        progress: madaSkill1State.slashProgress,
+        opacityScale: 0.96,
+      });
+    }
+
+    if (
+      storyModeActive &&
+      !madaGrabDamageApplied &&
+      storyTimeline.elapsedMs >= AMBUSH_GRAB_WINDUP_END_MS
+    ) {
+      applyDamage(AMBUSH_GRAB_DAMAGE);
+      madaGrabDamageApplied = true;
+    }
+
+    if (
+      formalBattleStarted &&
+      madaSkill1State.active &&
+      !madaSkill1DamageApplied &&
+      madaSkill1State.elapsedMs >= MADA_SKILL1_WINDUP_DURATION_MS
+    ) {
+      player.getWorldPosition(madaGrabTarget);
+      madaGrabDirection.copy(madaGrabTarget).sub(madaRig.position).setY(0);
+      const horizontalDistance = madaGrabDirection.length();
+      if (horizontalDistance > 0.001) {
+        madaGrabDirection.normalize();
+        madaSkill1Direction
+          .set(Math.sin(madaRig.rotation.y), 0, Math.cos(madaRig.rotation.y))
+          .normalize();
+        if (
+          horizontalDistance <= MADA_SKILL1_DAMAGE_RANGE &&
+          madaSkill1Direction.dot(madaGrabDirection) >= 0.15
+        ) {
+          applyDamage(MADA_SKILL1_DAMAGE);
+        }
+      }
+      madaSkill1DamageApplied = true;
+    }
+
+    if (!madaSkill1State.active && madaSkill1StartedAt >= 0) {
+      madaSkill1StartedAt = -1;
+      madaSkill1DamageApplied = false;
+    }
+
+    if (
+      breachSequenceStarted &&
+      !formalBattleStarted &&
+      storyTimeline.isSequenceComplete
+    ) {
+      formalBattleStarted = true;
+      storyModeActive = false;
+      madaHasVanished = false;
+      madaSkill1StartedAt = -1;
+      madaSkill1NextAvailableAt = now + 700;
+      madaSkill1DamageApplied = false;
+      hideMadaSlashTrails();
+      setMadaActivated(true);
+      emitState(true, now);
     }
 
     emitState(false, now);
@@ -1286,8 +2534,11 @@ export const createMadaLabScene = (
     groundY: GROUND_Y,
     playerSpawn: new THREE.Vector3(0, GROUND_Y, 28),
     bounds: playableBounds,
-    projectileColliders: [solidGroup],
+    projectileColliders: [solidGroup, chamberProjectileBlocker],
     attackTargets,
+    isInputLocked: () => storyModeActive,
+    isMiniMapVisible: () => !storyModeActive,
+    getLookOverride: (now) => resolveBreachLookOverride(now),
     isBlocked: (x, z) => {
       if (
         x < playableBounds.minX ||

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { unstable_noStore as noStore } from "next/cache";
 import pool from "../../../database/client";
-import { regenerateCharacterGlbs } from "../../asset/entity/character/regenerateCharacterGlbs";
+import { regenerateCharacterGlbs } from "../../asset/entity/character/general/regenerateCharacterGlbs";
 import CharacterManagementShell from "./CharacterManagementShell";
 
 function ErrorState({ message }: { message: string }) {

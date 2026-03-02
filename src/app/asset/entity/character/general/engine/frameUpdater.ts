@@ -4,7 +4,7 @@ import { filterWorldOnlyProjectileBlockers } from "../../../../object/projectile
 import type { PlayerLookState } from "./input";
 import type { CharacterRuntime, CharacterStats } from "../types";
 import type { CharacterVisualState } from "./characterLoader";
-import type { PlayerWorldTickArgs } from "./types";
+import type { PlayerLookOverride, PlayerWorldTickArgs } from "./types";
 import type { createPlayerStatsState } from "../player/statsState";
 import type { createPlayerCameraRig } from "./cameraRig";
 import type { createProjectileSystem } from "../combat/projectileSystem";
@@ -35,6 +35,8 @@ type CreatePlayerFrameUpdaterArgs = {
   cameraRig: PlayerCameraRig;
   projectileSystem: PlayerProjectileSystem;
   getRuntime: () => CharacterRuntime | null;
+  isWorldInputLocked: () => boolean;
+  getWorldLookOverride: (now: number) => PlayerLookOverride | null;
   getVisualState: () => CharacterVisualState;
   getSurvivalState: () => PlayerSurvivalState | null;
   getStatusEffectState: () => PlayerStatusEffectState | null;
@@ -57,6 +59,8 @@ export const createPlayerFrameUpdater = ({
   cameraRig,
   projectileSystem,
   getRuntime,
+  isWorldInputLocked,
+  getWorldLookOverride,
   getVisualState,
   getSurvivalState,
   getStatusEffectState,
@@ -95,6 +99,33 @@ export const createPlayerFrameUpdater = ({
   };
   const projectileSystemBlockers: THREE.Object3D[] = [];
   const cameraAimOriginWorld = new THREE.Vector3();
+  const applyLookOverride = (
+    override: PlayerLookOverride | null,
+    delta: number
+  ) => {
+    if (!override) return;
+    const blend = THREE.MathUtils.clamp(
+      override.blend ?? Math.max(0.08, Math.min(1, delta * 7)),
+      0,
+      1
+    );
+    if (typeof override.yaw === "number" && Number.isFinite(override.yaw)) {
+      const yawDelta =
+        THREE.MathUtils.euclideanModulo(
+          override.yaw - lookState.yaw + Math.PI,
+          Math.PI * 2
+        ) - Math.PI;
+      lookState.yaw += yawDelta * blend;
+    }
+    if (typeof override.pitch === "number" && Number.isFinite(override.pitch)) {
+      const targetPitch = THREE.MathUtils.clamp(
+        override.pitch,
+        lookState.minPitch,
+        lookState.maxPitch
+      );
+      lookState.pitch = THREE.MathUtils.lerp(lookState.pitch, targetPitch, blend);
+    }
+  };
 
   const getMovementSpeedMultiplier = (runtime: CharacterRuntime | null) => {
     const multiplier = runtime?.getMovementSpeedMultiplier?.();
@@ -114,7 +145,9 @@ export const createPlayerFrameUpdater = ({
     const survivalState = getSurvivalState();
     const statusEffectState = getStatusEffectState();
     statusEffectState?.update(now, delta);
-    const movementLocked = Boolean(runtime?.isMovementLocked?.());
+    applyLookOverride(getWorldLookOverride(now), delta);
+    const movementLocked =
+      isWorldInputLocked() || Boolean(runtime?.isMovementLocked?.());
     const hasMoveInput = movementLocked
       ? false
       : resolveInputDirection({

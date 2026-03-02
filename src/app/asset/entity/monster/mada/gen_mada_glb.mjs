@@ -165,10 +165,10 @@ const eyeLeft = new THREE.Mesh(createEyeGeometry(false), eyeMat);
 const eyeRight = new THREE.Mesh(createEyeGeometry(true), eyeMat);
 eyeLeft.name = "eyeLeft";
 eyeRight.name = "eyeRight";
-eyeLeft.position.set(-0.18, 0.09, 0.38);
-eyeRight.position.set(0.18, 0.09, 0.38);
-eyeLeft.rotation.set(0, -0.3, 0.1);
-eyeRight.rotation.set(0, 0.3, -0.1);
+eyeLeft.position.set(-0.175, 0.09, 0.38);
+eyeRight.position.set(0.175, 0.09, 0.38);
+eyeLeft.rotation.set(0, -0.3, 0.2);
+eyeRight.rotation.set(0, 0.3, -0.2);
 eyeGroup.add(eyeLeft, eyeRight);
 
 const armGeo = new THREE.CapsuleGeometry(0.14, 0.8, 6, 12);

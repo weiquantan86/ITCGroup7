@@ -6,6 +6,7 @@ export type StatusHud = {
     cooldowns: Record<SkillKey, number>,
     durations: Record<SkillKey, number>
   ) => void;
+  setMiniMapVisible: (visible: boolean) => void;
   setBossInfo: (
     info: {
       name: string;
@@ -21,10 +22,12 @@ export const createStatusHud = (
   mount?: HTMLElement,
   options?: { showMiniMap?: boolean }
 ): StatusHud => {
+  let miniMapVisible = options?.showMiniMap !== false;
   if (!mount) {
     return {
       setStats: () => {},
       setSkillCooldowns: () => {},
+      setMiniMapVisible: () => {},
       setBossInfo: () => {},
       triggerDamageFlash: () => {},
       dispose: () => {},
@@ -119,7 +122,7 @@ export const createStatusHud = (
   const miniMapMargin = 14;
   const cooldownGapBelowMini = 16;
   const updateCooldownPanelPosition = () => {
-    if (options?.showMiniMap === false) {
+    if (options?.showMiniMap === false || !miniMapVisible) {
       cooldownPanel.style.top = "16px";
       return;
     }
@@ -249,6 +252,10 @@ export const createStatusHud = (
       setCooldownCard("q", cooldowns.q, durations.q);
       setCooldownCard("e", cooldowns.e, durations.e);
       setCooldownCard("r", cooldowns.r, durations.r);
+    },
+    setMiniMapVisible: (visible) => {
+      miniMapVisible = options?.showMiniMap === false ? false : visible;
+      updateCooldownPanelPosition();
     },
     setBossInfo: (info) => {
       if (!info) {
