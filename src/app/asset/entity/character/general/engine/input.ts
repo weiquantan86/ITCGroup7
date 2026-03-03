@@ -4,6 +4,8 @@ import type { SkillKey } from "../types";
 export interface PlayerLookState {
   yaw: number;
   pitch: number;
+  pendingYawDelta: number;
+  pendingPitchDelta: number;
   minPitch: number;
   maxPitch: number;
   sensitivity: number;
@@ -101,6 +103,8 @@ export const bindPlayerInput = ({
     if (!isLocked) {
       isPointerLockRequested = false;
       ignoreMouseMoveCount = 0;
+      lookState.pendingYawDelta = 0;
+      lookState.pendingPitchDelta = 0;
       onPrimaryCancel();
     } else {
       // Ignore the first mouse delta after lock to avoid occasional jump spikes.
@@ -124,12 +128,8 @@ export const bindPlayerInput = ({
     const maxMovementY = maxPitchStepPerEvent / safeSensitivity;
     const movementX = THREE.MathUtils.clamp(event.movementX, -maxMovementX, maxMovementX);
     const movementY = THREE.MathUtils.clamp(event.movementY, -maxMovementY, maxMovementY);
-    lookState.yaw -= movementX * lookState.sensitivity;
-    lookState.pitch = THREE.MathUtils.clamp(
-      lookState.pitch - movementY * lookState.sensitivity,
-      lookState.minPitch,
-      lookState.maxPitch
-    );
+    lookState.pendingYawDelta -= movementX * lookState.sensitivity;
+    lookState.pendingPitchDelta -= movementY * lookState.sensitivity;
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -163,6 +163,8 @@ export const bindPlayerInput = ({
 
   const handleBlur = () => {
     pressedKeys.clear();
+    lookState.pendingYawDelta = 0;
+    lookState.pendingPitchDelta = 0;
     onPrimaryCancel();
   };
 

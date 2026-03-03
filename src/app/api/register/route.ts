@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import pool from '../../../database/client';
+import {
+  assignStarterCharacters,
+  ensureCharacterCatalog,
+} from '../../../database/characterCatalog';
 
 export async function POST(request) {
   const client = await pool.connect();
@@ -53,6 +57,9 @@ export async function POST(request) {
       `,
       [userId]
     );
+
+    await ensureCharacterCatalog(client);
+    await assignStarterCharacters(client, userId);
 
     await client.query('COMMIT');
 

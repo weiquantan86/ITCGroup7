@@ -1,21 +1,11 @@
 ﻿import bcrypt from 'bcrypt';
 import pool from './client.ts';
+import {
+  assignStarterCharacters,
+  ensureCharacterCatalog,
+} from './characterCatalog.ts';
 
-const DEFAULT_CHARACTER_NAME = 'Adam';
 const DEFAULT_SEED_RESOURCE_AMOUNT = 5;
-
-async function assignDefaultCharacter(userId: number) {
-  await pool.query(
-    `
-      INSERT INTO user_characters (user_id, character_id)
-      SELECT $1, c.id
-      FROM characters c
-      WHERE c.name = $2
-      ON CONFLICT DO NOTHING;
-    `,
-    [userId, DEFAULT_CHARACTER_NAME]
-  );
-}
 
 async function assignUserResources(userId: number, amount: number) {
   await pool.query(
@@ -65,14 +55,7 @@ async function initDB() {
     `);
     console.log('Characters table created or already exists');
 
-    await pool.query(
-      `
-        INSERT INTO characters (name)
-        VALUES ($1), ($2), ($3), ($4), ($5)
-        ON CONFLICT DO NOTHING;
-      `,
-      ['Adam', 'Baron', 'Carrot', 'Dakota', 'Harper']
-    );
+    await ensureCharacterCatalog(pool);
     console.log('Seed characters inserted or already exist');
 
     await pool.query(`
@@ -210,10 +193,10 @@ async function initDB() {
         [userId]
       );
       
-      // Only insert Adam as the default character
-      await assignDefaultCharacter(userId);
+      await ensureCharacterCatalog(pool);
+      await assignStarterCharacters(pool, userId);
       await assignUserResources(userId, DEFAULT_SEED_RESOURCE_AMOUNT);
-      console.log("Seed user_characters reset: Sarcus only owns Adam");
+      console.log("Seed user_characters reset: Sarcus owns the starter characters");
     }
   } catch (err) {
     console.error('Error creating table:', err);

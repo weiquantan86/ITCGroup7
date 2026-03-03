@@ -4,39 +4,36 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import CharacterManagementClient from "./CharacterManagementClient";
-import { characterProfiles } from "../../asset/entity/character/general/player/registry";
+import type { CharacterManagementCharacter } from "./characterManagementTypes";
 
 type CharacterManagementShellProps = {
   ownedIds: string[];
+  characters: CharacterManagementCharacter[];
 };
 
 export default function CharacterManagementShell({
   ownedIds,
+  characters,
 }: CharacterManagementShellProps) {
   const router = useRouter();
   const ownedSet = useMemo(() => new Set(ownedIds), [ownedIds]);
   const fallbackSelectedId = useMemo(() => {
     return (
-      characterProfiles.find((profile) => ownedSet.has(profile.id))?.id ??
-      characterProfiles[0]?.id ??
+      characters.find((character) => ownedSet.has(character.id))?.id ??
+      characters[0]?.id ??
       ""
     );
-  }, [ownedSet]);
+  }, [characters, ownedSet]);
   const [selectedId, setSelectedId] = useState(fallbackSelectedId);
   const [activeSkill, setActiveSkill] = useState<"q" | "e" | "r">("q");
 
   const selectedProfile = useMemo(() => {
-    if (!selectedId) return characterProfiles[0];
-    return (
-      characterProfiles.find((profile) => profile.id === selectedId) ||
-      characterProfiles[0]
-    );
-  }, [selectedId]);
+    if (!selectedId) return characters[0];
+    return characters.find((character) => character.id === selectedId) || characters[0];
+  }, [characters, selectedId]);
   const [isTryingCharacter, setIsTryingCharacter] = useState(false);
 
-  const skillDescription =
-    selectedProfile?.kit?.skills?.[activeSkill]?.description ??
-    "No description yet.";
+  const skillDescription = selectedProfile?.skills?.[activeSkill] ?? "No description yet.";
   const handleTryCharacter = async () => {
     if (isTryingCharacter) return;
     setIsTryingCharacter(true);
@@ -118,6 +115,7 @@ export default function CharacterManagementShell({
               </aside>
 
               <CharacterManagementClient
+                characters={characters}
                 onSelectCharacter={setSelectedId}
                 ownedIds={ownedIds}
               />

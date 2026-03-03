@@ -1,10 +1,18 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+export const characterGltfAnimationClipsKey = "__characterGltfAnimationClips";
+
 const isHeadRelated = (obj: THREE.Object3D | null) => {
   let current = obj;
   while (current) {
-    if (/head|eye|face|hair/i.test(current.name)) return true;
+    if (
+      /head|eye|face|hair|hat|cap|hood|helmet|visor|mask|headset|cover/i.test(
+        current.name
+      )
+    ) {
+      return true;
+    }
     current = current.parent;
   }
   return false;
@@ -93,6 +101,7 @@ export const createCharacterLoader = ({
         }
 
         const avatarModel = gltf.scene;
+        avatarModel.userData[characterGltfAnimationClipsKey] = gltf.animations;
         avatarModel.scale.setScalar(1.15);
         avatarModel.position.set(0, 0, 0);
 
@@ -191,4 +200,3 @@ export const createCharacterLoader = ({
     loadCharacterVisual,
   };
 };
-

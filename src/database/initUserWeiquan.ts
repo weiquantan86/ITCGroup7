@@ -1,21 +1,11 @@
 import bcrypt from 'bcrypt';
 import pool from './client.ts';
+import {
+  assignStarterCharacters,
+  ensureCharacterCatalog,
+} from './characterCatalog.ts';
 
-const DEFAULT_CHARACTER_NAME = 'Adam';
 const DEFAULT_SEED_RESOURCE_AMOUNT = 5;
-
-async function assignDefaultCharacter(userId: number) {
-  await pool.query(
-    `
-      INSERT INTO user_characters (user_id, character_id)
-      SELECT $1, c.id
-      FROM characters c
-      WHERE c.name = $2
-      ON CONFLICT DO NOTHING;
-    `,
-    [userId, DEFAULT_CHARACTER_NAME]
-  );
-}
 
 async function assignUserResources(userId: number, amount: number) {
   await pool.query(
@@ -111,11 +101,12 @@ async function initUserWeiquan() {
     );
 
     const userId = createdUserResult.rows[0].id;
-    await assignDefaultCharacter(userId);
+    await ensureCharacterCatalog(pool);
+    await assignStarterCharacters(pool, userId);
     await assignUserResources(userId, DEFAULT_SEED_RESOURCE_AMOUNT);
 
     await pool.query('COMMIT');
-    console.log('initUserWeiquan completed: user reset with Adam and seed resources');
+    console.log('initUserWeiquan completed: user reset with starter characters and seed resources');
   } catch (err) {
     await pool.query('ROLLBACK');
     console.error('Error initUserWeiquan:', err);

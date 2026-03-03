@@ -93,6 +93,8 @@ export const createPlayer = ({
   const lookState = {
     yaw: 0,
     pitch: 0,
+    pendingYawDelta: 0,
+    pendingPitchDelta: 0,
     minPitch: -1.2,
     maxPitch: 1.1,
     sensitivity: 0.002,
@@ -588,6 +590,8 @@ export const createPlayer = ({
     frameUpdater.resetKinematics();
     lookState.yaw = 0;
     lookState.pitch = 0;
+    lookState.pendingYawDelta = 0;
+    lookState.pendingPitchDelta = 0;
     statsState.resetSkillCooldowns();
     survivalState?.clearRecoveryZoneCooldowns();
     statusEffectState.clear();

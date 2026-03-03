@@ -9,20 +9,11 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import CharacterScene from "./characterScene/CharacterScene";
-import { characterProfiles } from "../../asset/entity/character/general/player/registry";
+import type { CharacterManagementCharacter } from "./characterManagementTypes";
 
-type CharacterCard = {
-  id: string;
-  name: string;
-  path?: string;
+type CharacterCard = CharacterManagementCharacter & {
   locked?: boolean;
 };
-
-const characterCards: CharacterCard[] = characterProfiles.map((profile) => ({
-  id: profile.id,
-  name: profile.label,
-  path: `/assets/characters${profile.pathToken}${profile.id}.glb`,
-}));
 
 function LockIcon() {
   return (
@@ -56,20 +47,22 @@ function LockIcon() {
 type CharacterManagementClientProps = {
   onSelectCharacter?: (id: string) => void;
   ownedIds: string[];
+  characters: CharacterManagementCharacter[];
 };
 
 export default function CharacterManagementClient({
   onSelectCharacter,
   ownedIds,
+  characters,
 }: CharacterManagementClientProps) {
   const ownedSet = useMemo(() => new Set(ownedIds), [ownedIds]);
   const cards = useMemo(
     () =>
-      characterCards.map((card) => ({
+      characters.map((card) => ({
         ...card,
         locked: !ownedSet.has(card.id),
       })),
-    [ownedSet]
+    [characters, ownedSet]
   );
   const selectable = useMemo(() => cards.filter((card) => !card.locked), [cards]);
   const [selectedId, setSelectedId] = useState(selectable[0]?.id ?? "");

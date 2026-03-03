@@ -77,6 +77,8 @@ export const createPlayerFrameUpdater = ({
   const miniOrbitPitchMaxOffset = 0.85;
   const miniOrbitDistanceMinOffset = -2;
   const miniOrbitDistanceMaxOffset = 6;
+  const maxLookYawSpeed = Math.PI * 6.5;
+  const maxLookPitchSpeed = Math.PI * 5;
   let velocityY = 0;
   let isGrounded = true;
   let miniOrbitYawOffset = 0;
@@ -139,12 +141,45 @@ export const createPlayerFrameUpdater = ({
     return THREE.MathUtils.clamp(multiplier, 0.2, 6);
   };
 
+  const applyPendingLookDelta = (delta: number) => {
+    if (delta <= 0) return;
+
+    const maxYawStep = maxLookYawSpeed * delta;
+    const yawStep = THREE.MathUtils.clamp(
+      lookState.pendingYawDelta,
+      -maxYawStep,
+      maxYawStep
+    );
+    lookState.yaw += yawStep;
+    lookState.pendingYawDelta -= yawStep;
+    if (Math.abs(lookState.pendingYawDelta) < 0.0001) {
+      lookState.pendingYawDelta = 0;
+    }
+
+    const maxPitchStep = maxLookPitchSpeed * delta;
+    const pitchStep = THREE.MathUtils.clamp(
+      lookState.pendingPitchDelta,
+      -maxPitchStep,
+      maxPitchStep
+    );
+    lookState.pitch = THREE.MathUtils.clamp(
+      lookState.pitch + pitchStep,
+      lookState.minPitch,
+      lookState.maxPitch
+    );
+    lookState.pendingPitchDelta -= pitchStep;
+    if (Math.abs(lookState.pendingPitchDelta) < 0.0001) {
+      lookState.pendingPitchDelta = 0;
+    }
+  };
+
   const update = (now: number, delta: number) => {
     const runtime = getRuntime();
     const visualState = getVisualState();
     const survivalState = getSurvivalState();
     const statusEffectState = getStatusEffectState();
     statusEffectState?.update(now, delta);
+    applyPendingLookDelta(delta);
     applyLookOverride(getWorldLookOverride(now), delta);
     const movementLocked =
       isWorldInputLocked() || Boolean(runtime?.isMovementLocked?.());

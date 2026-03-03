@@ -6,6 +6,8 @@ import { profile as carrotProfile } from "../../carrot/profile";
 import { createRuntime as createCarrotRuntime } from "../../carrot/runtime";
 import { profile as dakotaProfile } from "../../dakota/profile";
 import { createRuntime as createDakotaRuntime } from "../../dakota/runtime";
+import { profile as flareProfile } from "../../flare/profile";
+import { createRuntime as createFlareRuntime } from "../../flare/runtime";
 import { profile as harperProfile } from "../../harper/profile";
 import { createRuntime as createHarperRuntime } from "../../harper/runtime";
 import type { CharacterEntry, CharacterProfile, CharacterStats } from "../types";
@@ -15,6 +17,7 @@ const entries: CharacterEntry[] = [
   { profile: baronProfile, createRuntime: createBaronRuntime },
   { profile: carrotProfile, createRuntime: createCarrotRuntime },
   { profile: dakotaProfile, createRuntime: createDakotaRuntime },
+  { profile: flareProfile, createRuntime: createFlareRuntime },
   { profile: harperProfile, createRuntime: createHarperRuntime },
 ];
 const defaultStats: CharacterStats = {

@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import pool from '../../../database/client';
+import {
+  assignStarterCharacters,
+  ensureCharacterCatalog,
+} from '../../../database/characterCatalog';
 
 export async function POST(request) {
   try {
@@ -22,6 +26,9 @@ export async function POST(request) {
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
+
+    await ensureCharacterCatalog(pool);
+    await assignStarterCharacters(pool, user.id);
 
     const response = NextResponse.json({
       success: true,

@@ -3,7 +3,9 @@ import { cookies } from "next/headers";
 import { unstable_noStore as noStore } from "next/cache";
 import pool from "../../../database/client";
 import { regenerateCharacterGlbs } from "../../asset/entity/character/general/regenerateCharacterGlbs";
+import { characterProfiles } from "../../asset/entity/character/general/player/registry";
 import CharacterManagementShell from "./CharacterManagementShell";
+import type { CharacterManagementCharacter } from "./characterManagementTypes";
 
 function ErrorState({ message }: { message: string }) {
   return (
@@ -30,6 +32,19 @@ function ErrorState({ message }: { message: string }) {
 
 export default async function CharacterManagementPage() {
   noStore();
+
+  const characters: CharacterManagementCharacter[] = characterProfiles.map(
+    (profile) => ({
+      id: profile.id,
+      name: profile.label,
+      path: `/assets/characters${profile.pathToken}${profile.id}.glb`,
+      skills: {
+        q: profile.kit?.skills?.q?.description ?? "No description yet.",
+        e: profile.kit?.skills?.e?.description ?? "No description yet.",
+        r: profile.kit?.skills?.r?.description ?? "No description yet.",
+      },
+    })
+  );
 
   const cookieStore = await cookies();
   const userIdValue = cookieStore.get("user_id")?.value;
@@ -62,7 +77,7 @@ export default async function CharacterManagementPage() {
       [userId]
     );
     const ownedIds = rows.map((row) => row.id);
-    return <CharacterManagementShell ownedIds={ownedIds} />;
+    return <CharacterManagementShell ownedIds={ownedIds} characters={characters} />;
   } catch (error) {
     console.error(error);
     return (
