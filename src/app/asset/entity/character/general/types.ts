@@ -224,6 +224,16 @@ export interface FireProjectileArgs {
   lifecycle?: ProjectileLifecycleHooks;
 }
 
+export interface MeleeHitTargetResolvedArgs {
+  now: number;
+  targetId: string;
+  targetObject: THREE.Object3D;
+  isTargetActive: () => boolean;
+  dealDamageToTarget: (damage: number, now?: number) => void;
+  point: THREE.Vector3;
+  direction: THREE.Vector3;
+}
+
 export interface MeleeAttackArgs {
   damage: number;
   maxDistance: number;
@@ -231,6 +241,7 @@ export interface MeleeAttackArgs {
   maxHits?: number;
   excludeTargetIds?: ReadonlySet<string>;
   onHitTarget?: (targetId: string) => void;
+  onHitTargetResolved?: (args: MeleeHitTargetResolvedArgs) => void;
   origin?: THREE.Vector3;
   direction?: THREE.Vector3;
   contactCenter?: THREE.Vector3;
@@ -321,8 +332,10 @@ export interface CharacterRuntimeFactory {
     performMeleeAttack?: (args: MeleeAttackArgs) => number;
     applyHealth?: (amount: number) => number;
     applyEnergy?: (amount: number) => number;
+    spendStamina?: (amount: number) => number;
     spendEnergy?: (amount: number) => number;
     applyMana?: (amount: number) => number;
+    spendMana?: (amount: number) => number;
     clearSkillCooldown?: (key: SkillKey) => void;
     getCurrentStats?: () => CharacterStats;
   }): CharacterRuntime;

@@ -398,7 +398,7 @@ export const createTrainingScene = (
   trackMesh(testerFallback);
 
   const testerHitbox = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.75, 1.4, 6, 12),
+    new THREE.CapsuleGeometry(0.48, 1.6, 6, 12),
     new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -406,7 +406,7 @@ export const createTrainingScene = (
       depthWrite: false,
     })
   );
-  testerHitbox.position.set(0, 1.45, 0);
+  testerHitbox.position.set(0, 1.28, 0);
   testerAnchor.add(testerHitbox);
   trackMesh(testerHitbox);
 

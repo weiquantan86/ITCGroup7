@@ -7,6 +7,16 @@ export type AttackTargetHit = {
   distance: number;
 };
 
+type HitTargetResolvedArgs = {
+  now: number;
+  targetId: string;
+  targetObject: THREE.Object3D;
+  isTargetActive: () => boolean;
+  dealDamageToTarget: (damage: number, now?: number) => void;
+  point: THREE.Vector3;
+  direction: THREE.Vector3;
+};
+
 type PerformMeleeAttackArgs = {
   now: number;
   source: PlayerAttackSource;
@@ -18,6 +28,7 @@ type PerformMeleeAttackArgs = {
   maxHits?: number;
   excludeTargetIds?: ReadonlySet<string>;
   onHitTarget?: (targetId: string) => void;
+  onHitTargetResolved?: (args: HitTargetResolvedArgs) => void;
 };
 
 type PerformMeleeContactAttackArgs = {
@@ -30,6 +41,7 @@ type PerformMeleeContactAttackArgs = {
   maxHits?: number;
   excludeTargetIds?: ReadonlySet<string>;
   onHitTarget?: (targetId: string) => void;
+  onHitTargetResolved?: (args: HitTargetResolvedArgs) => void;
 };
 
 type ApplyExplosionDamageArgs = {
@@ -47,10 +59,18 @@ export class AttackTargetResolver {
   private readonly raycaster = new THREE.Raycaster();
   private readonly activeRoots: THREE.Object3D[] = [];
   private readonly attackTargetBounds = new THREE.Box3();
-  private readonly attackTargetSphere = new THREE.Sphere();
-  private readonly attackTargetCenterOffset = new THREE.Vector3();
+  private readonly attackTargetRay = new THREE.Ray();
   private readonly attackTargetClosestPoint = new THREE.Vector3();
   private readonly attackTargetPoint = new THREE.Vector3();
+  private readonly attackTargetSegmentEnd = new THREE.Vector3();
+  private readonly attackTargetCapsuleStart = new THREE.Vector3();
+  private readonly attackTargetCapsuleEnd = new THREE.Vector3();
+  private readonly attackTargetSegmentClosestPoint = new THREE.Vector3();
+  private readonly attackTargetCapsuleClosestPoint = new THREE.Vector3();
+  private readonly attackTargetWorldScale = new THREE.Vector3();
+  private readonly attackTargetSegmentDelta = new THREE.Vector3();
+  private readonly attackTargetCapsuleDelta = new THREE.Vector3();
+  private readonly attackTargetSegmentOffset = new THREE.Vector3();
 
   constructor(attackTargets: PlayerAttackTarget[]) {
     this.attackTargets = attackTargets;
@@ -74,6 +94,219 @@ export class AttackTargetResolver {
       }
     }
     return null;
+  }
+
+  private isMeshObject(
+    object: THREE.Object3D
+  ): object is THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]> {
+    return Boolean((object as THREE.Mesh).isMesh);
+  }
+
+  private getCapsuleParameters(targetObject: THREE.Object3D) {
+    if (!this.isMeshObject(targetObject)) return null;
+    const parameters = (
+      targetObject.geometry as THREE.BufferGeometry & {
+        parameters?: { radius?: number; length?: number };
+      }
+    ).parameters;
+    if (!parameters) return null;
+    if (!Number.isFinite(parameters.radius) || !Number.isFinite(parameters.length)) {
+      return null;
+    }
+    if (targetObject.geometry.type !== "CapsuleGeometry") {
+      return null;
+    }
+    return {
+      radius: Math.max(0, parameters.radius ?? 0),
+      length: Math.max(0, parameters.length ?? 0),
+    };
+  }
+
+  private getClosestDistanceToTarget(
+    target: PlayerAttackTarget,
+    point: THREE.Vector3
+  ): AttackTargetHit | null {
+    target.object.updateMatrixWorld(true);
+    const capsule = this.getCapsuleParameters(target.object);
+    if (capsule) {
+      const halfSegment = capsule.length * 0.5;
+      this.attackTargetCapsuleStart.set(0, -halfSegment, 0);
+      this.attackTargetCapsuleEnd.set(0, halfSegment, 0);
+      target.object.localToWorld(this.attackTargetCapsuleStart);
+      target.object.localToWorld(this.attackTargetCapsuleEnd);
+      target.object.getWorldScale(this.attackTargetWorldScale);
+      const worldRadius =
+        capsule.radius *
+        Math.max(
+          Math.abs(this.attackTargetWorldScale.x),
+          Math.abs(this.attackTargetWorldScale.y),
+          Math.abs(this.attackTargetWorldScale.z)
+        );
+      const capsuleAxis = new THREE.Line3(
+        this.attackTargetCapsuleStart,
+        this.attackTargetCapsuleEnd
+      );
+      capsuleAxis.closestPointToPoint(point, true, this.attackTargetCapsuleClosestPoint);
+      const centerDistance = this.attackTargetCapsuleClosestPoint.distanceTo(point);
+      return {
+        target,
+        point: this.attackTargetCapsuleClosestPoint.clone(),
+        distance: Math.max(0, centerDistance - worldRadius),
+      };
+    }
+
+    this.attackTargetBounds.setFromObject(target.object);
+    if (this.attackTargetBounds.isEmpty()) {
+      return null;
+    }
+    this.attackTargetBounds.clampPoint(point, this.attackTargetClosestPoint);
+    return {
+      target,
+      point: this.attackTargetClosestPoint.clone(),
+      distance: this.attackTargetClosestPoint.distanceTo(point),
+    };
+  }
+
+  private closestSegmentDistanceSq(
+    segmentStartA: THREE.Vector3,
+    segmentEndA: THREE.Vector3,
+    segmentStartB: THREE.Vector3,
+    segmentEndB: THREE.Vector3
+  ) {
+    const epsilon = 0.000001;
+    this.attackTargetSegmentDelta.copy(segmentEndA).sub(segmentStartA);
+    this.attackTargetCapsuleDelta.copy(segmentEndB).sub(segmentStartB);
+    this.attackTargetSegmentOffset.copy(segmentStartA).sub(segmentStartB);
+
+    const a = this.attackTargetSegmentDelta.lengthSq();
+    const e = this.attackTargetCapsuleDelta.lengthSq();
+    const f = this.attackTargetCapsuleDelta.dot(this.attackTargetSegmentOffset);
+
+    let s = 0;
+    let t = 0;
+
+    if (a <= epsilon && e <= epsilon) {
+      this.attackTargetSegmentClosestPoint.copy(segmentStartA);
+      this.attackTargetCapsuleClosestPoint.copy(segmentStartB);
+      return this.attackTargetSegmentClosestPoint.distanceToSquared(
+        this.attackTargetCapsuleClosestPoint
+      );
+    }
+
+    if (a <= epsilon) {
+      s = 0;
+      t = THREE.MathUtils.clamp(f / e, 0, 1);
+    } else {
+      const c = this.attackTargetSegmentDelta.dot(this.attackTargetSegmentOffset);
+      if (e <= epsilon) {
+        t = 0;
+        s = THREE.MathUtils.clamp(-c / a, 0, 1);
+      } else {
+        const b = this.attackTargetSegmentDelta.dot(this.attackTargetCapsuleDelta);
+        const denominator = a * e - b * b;
+        if (Math.abs(denominator) > epsilon) {
+          s = THREE.MathUtils.clamp((b * f - c * e) / denominator, 0, 1);
+        } else {
+          s = 0;
+        }
+
+        t = (b * s + f) / e;
+        if (t < 0) {
+          t = 0;
+          s = THREE.MathUtils.clamp(-c / a, 0, 1);
+        } else if (t > 1) {
+          t = 1;
+          s = THREE.MathUtils.clamp((b - c) / a, 0, 1);
+        }
+      }
+    }
+
+    this.attackTargetSegmentClosestPoint
+      .copy(this.attackTargetSegmentDelta)
+      .multiplyScalar(s)
+      .add(segmentStartA);
+    this.attackTargetCapsuleClosestPoint
+      .copy(this.attackTargetCapsuleDelta)
+      .multiplyScalar(t)
+      .add(segmentStartB);
+    return this.attackTargetSegmentClosestPoint.distanceToSquared(
+      this.attackTargetCapsuleClosestPoint
+    );
+  }
+
+  private getSweepHitAgainstTarget(
+    target: PlayerAttackTarget,
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    far: number,
+    hitRadius: number
+  ): AttackTargetHit | null {
+    target.object.updateMatrixWorld(true);
+    const capsule = this.getCapsuleParameters(target.object);
+
+    if (capsule) {
+      const halfSegment = capsule.length * 0.5;
+      this.attackTargetCapsuleStart.set(0, -halfSegment, 0);
+      this.attackTargetCapsuleEnd.set(0, halfSegment, 0);
+      target.object.localToWorld(this.attackTargetCapsuleStart);
+      target.object.localToWorld(this.attackTargetCapsuleEnd);
+      target.object.getWorldScale(this.attackTargetWorldScale);
+      const worldRadius =
+        capsule.radius *
+        Math.max(
+          Math.abs(this.attackTargetWorldScale.x),
+          Math.abs(this.attackTargetWorldScale.y),
+          Math.abs(this.attackTargetWorldScale.z)
+        );
+      this.attackTargetSegmentEnd.copy(origin).addScaledVector(direction, far);
+      const distanceSq = this.closestSegmentDistanceSq(
+        origin,
+        this.attackTargetSegmentEnd,
+        this.attackTargetCapsuleStart,
+        this.attackTargetCapsuleEnd
+      );
+      const combinedRadius = worldRadius + hitRadius;
+      if (distanceSq > combinedRadius * combinedRadius) {
+        return null;
+      }
+      return {
+        target,
+        point: this.attackTargetSegmentClosestPoint.clone(),
+        distance: origin.distanceTo(this.attackTargetSegmentClosestPoint),
+      };
+    }
+
+    this.attackTargetBounds.setFromObject(target.object);
+    if (this.attackTargetBounds.isEmpty()) {
+      return null;
+    }
+    if (hitRadius > 0) {
+      this.attackTargetBounds.expandByScalar(hitRadius);
+    }
+    this.attackTargetRay.set(origin, direction);
+    if (this.attackTargetBounds.containsPoint(origin)) {
+      return {
+        target,
+        point: origin.clone(),
+        distance: 0,
+      };
+    }
+    const hitPoint = this.attackTargetRay.intersectBox(
+      this.attackTargetBounds,
+      this.attackTargetPoint
+    );
+    if (!hitPoint) {
+      return null;
+    }
+    const distance = origin.distanceTo(hitPoint);
+    if (distance > far) {
+      return null;
+    }
+    return {
+      target,
+      point: hitPoint.clone(),
+      distance,
+    };
   }
 
   intersectByRay(
@@ -118,40 +351,16 @@ export class AttackTargetResolver {
     for (let i = 0; i < this.attackTargets.length; i += 1) {
       const target = this.attackTargets[i];
       if (target.isActive && !target.isActive()) continue;
-
-      target.object.updateMatrixWorld(true);
-      this.attackTargetBounds.setFromObject(target.object);
-      if (this.attackTargetBounds.isEmpty()) continue;
-      this.attackTargetBounds.getBoundingSphere(this.attackTargetSphere);
-
-      this.attackTargetCenterOffset
-        .copy(this.attackTargetSphere.center)
-        .sub(origin);
-      const projectedDistance = THREE.MathUtils.clamp(
-        this.attackTargetCenterOffset.dot(direction),
-        0,
-        far
+      const hit = this.getSweepHitAgainstTarget(
+        target,
+        origin,
+        direction,
+        far,
+        hitRadius
       );
-      this.attackTargetClosestPoint
-        .copy(origin)
-        .addScaledVector(direction, projectedDistance);
-
-      const combinedRadius = this.attackTargetSphere.radius + hitRadius;
-      if (
-        this.attackTargetClosestPoint.distanceToSquared(
-          this.attackTargetSphere.center
-        ) >
-        combinedRadius * combinedRadius
-      ) {
-        continue;
-      }
-
-      if (!nearest || projectedDistance < nearest.distance) {
-        nearest = {
-          target,
-          point: this.attackTargetClosestPoint.clone(),
-          distance: projectedDistance,
-        };
+      if (!hit) continue;
+      if (!nearest || hit.distance < nearest.distance) {
+        nearest = hit;
       }
     }
 
@@ -181,28 +390,15 @@ export class AttackTargetResolver {
   ): AttackTargetHit | null {
     if (!this.attackTargets.length) return null;
     if (radius <= 0) return null;
-    const radiusSq = radius * radius;
     let nearest: AttackTargetHit | null = null;
 
     for (let i = 0; i < this.attackTargets.length; i += 1) {
       const target = this.attackTargets[i];
       if (target.isActive && !target.isActive()) continue;
-
-      target.object.updateMatrixWorld(true);
-      this.attackTargetBounds.setFromObject(target.object);
-      if (this.attackTargetBounds.isEmpty()) continue;
-      this.attackTargetBounds.getBoundingSphere(this.attackTargetSphere);
-
-      const distSq = center.distanceToSquared(this.attackTargetSphere.center);
-      const combined = radius + this.attackTargetSphere.radius;
-      if (distSq > combined * combined) continue;
-      const dist = Math.sqrt(distSq);
-      if (!nearest || dist < nearest.distance) {
-        nearest = {
-          target,
-          point: this.attackTargetSphere.center.clone(),
-          distance: dist,
-        };
+      const hit = this.getClosestDistanceToTarget(target, center);
+      if (!hit || hit.distance > radius) continue;
+      if (!nearest || hit.distance < nearest.distance) {
+        nearest = hit;
       }
     }
 
@@ -220,6 +416,7 @@ export class AttackTargetResolver {
     maxHits = 1,
     excludeTargetIds,
     onHitTarget,
+    onHitTargetResolved,
   }: PerformMeleeAttackArgs) {
     if (!this.attackTargets.length) return 0;
     if (damage <= 0 || maxDistance <= 0) return 0;
@@ -234,39 +431,15 @@ export class AttackTargetResolver {
       const target = this.attackTargets[i];
       if (target.isActive && !target.isActive()) continue;
       if (excludeTargetIds?.has(target.id)) continue;
-
-      target.object.updateMatrixWorld(true);
-      this.attackTargetBounds.setFromObject(target.object);
-      if (this.attackTargetBounds.isEmpty()) continue;
-      this.attackTargetBounds.getBoundingSphere(this.attackTargetSphere);
-
-      this.attackTargetCenterOffset
-        .copy(this.attackTargetSphere.center)
-        .sub(origin);
-      const projectedDistance =
-        this.attackTargetCenterOffset.dot(direction);
-      if (projectedDistance < 0 || projectedDistance > resolvedMaxDistance) {
-        continue;
-      }
-
-      this.attackTargetClosestPoint
-        .copy(origin)
-        .addScaledVector(direction, projectedDistance);
-      const combinedRadius = this.attackTargetSphere.radius + resolvedHitRadius;
-      if (
-        this.attackTargetClosestPoint.distanceToSquared(
-          this.attackTargetSphere.center
-        ) >
-        combinedRadius * combinedRadius
-      ) {
-        continue;
-      }
-
-      hits.push({
+      const hit = this.getSweepHitAgainstTarget(
         target,
-        point: this.attackTargetClosestPoint.clone(),
-        distance: projectedDistance,
-      });
+        origin,
+        direction,
+        resolvedMaxDistance,
+        resolvedHitRadius
+      );
+      if (!hit) continue;
+      hits.push(hit);
     }
 
     if (!hits.length) return 0;
@@ -275,6 +448,16 @@ export class AttackTargetResolver {
     let hitCount = 0;
     for (let i = 0; i < hits.length && hitCount < resolvedMaxHits; i += 1) {
       const hit = hits[i];
+      const dealDamageToTarget = (damage: number, damageNow = now) => {
+        const resolvedExtraDamage = Math.max(1, Math.round(damage));
+        hit.target.onHit({
+          now: damageNow,
+          source,
+          damage: resolvedExtraDamage,
+          point: hit.point.clone(),
+          direction: direction.clone(),
+        });
+      };
       hit.target.onHit({
         now,
         source,
@@ -283,6 +466,15 @@ export class AttackTargetResolver {
         direction: direction.clone(),
       });
       onHitTarget?.(hit.target.id);
+      onHitTargetResolved?.({
+        now,
+        targetId: hit.target.id,
+        targetObject: hit.target.object,
+        isTargetActive: () => (hit.target.isActive ? hit.target.isActive() : true),
+        dealDamageToTarget,
+        point: hit.point.clone(),
+        direction: direction.clone(),
+      });
       hitCount += 1;
     }
     return hitCount;
@@ -298,6 +490,7 @@ export class AttackTargetResolver {
     maxHits = 1,
     excludeTargetIds,
     onHitTarget,
+    onHitTargetResolved,
   }: PerformMeleeContactAttackArgs) {
     if (!this.attackTargets.length) return 0;
     if (damage <= 0 || radius <= 0) return 0;
@@ -315,21 +508,9 @@ export class AttackTargetResolver {
       const target = this.attackTargets[i];
       if (target.isActive && !target.isActive()) continue;
       if (excludeTargetIds?.has(target.id)) continue;
-
-      target.object.updateMatrixWorld(true);
-      this.attackTargetBounds.setFromObject(target.object);
-      if (this.attackTargetBounds.isEmpty()) continue;
-      this.attackTargetBounds.getBoundingSphere(this.attackTargetSphere);
-
-      const combinedRadius = resolvedRadius + this.attackTargetSphere.radius;
-      const distSq = center.distanceToSquared(this.attackTargetSphere.center);
-      if (distSq > combinedRadius * combinedRadius) continue;
-
-      hits.push({
-        target,
-        point: this.attackTargetSphere.center.clone(),
-        distance: Math.sqrt(distSq),
-      });
+      const hit = this.getClosestDistanceToTarget(target, center);
+      if (!hit || hit.distance > resolvedRadius) continue;
+      hits.push(hit);
     }
 
     if (!hits.length) return 0;
@@ -338,6 +519,16 @@ export class AttackTargetResolver {
     let hitCount = 0;
     for (let i = 0; i < hits.length && hitCount < resolvedMaxHits; i += 1) {
       const hit = hits[i];
+      const dealDamageToTarget = (damage: number, damageNow = now) => {
+        const resolvedExtraDamage = Math.max(1, Math.round(damage));
+        hit.target.onHit({
+          now: damageNow,
+          source,
+          damage: resolvedExtraDamage,
+          point: hit.point.clone(),
+          direction: resolvedDirection.clone(),
+        });
+      };
       hit.target.onHit({
         now,
         source,
@@ -346,6 +537,15 @@ export class AttackTargetResolver {
         direction: resolvedDirection.clone(),
       });
       onHitTarget?.(hit.target.id);
+      onHitTargetResolved?.({
+        now,
+        targetId: hit.target.id,
+        targetObject: hit.target.object,
+        isTargetActive: () => (hit.target.isActive ? hit.target.isActive() : true),
+        dealDamageToTarget,
+        point: hit.point.clone(),
+        direction: resolvedDirection.clone(),
+      });
       hitCount += 1;
     }
     return hitCount;
@@ -393,4 +593,3 @@ export class AttackTargetResolver {
     }
   }
 }
-

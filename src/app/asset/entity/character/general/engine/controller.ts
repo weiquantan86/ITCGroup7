@@ -495,6 +495,7 @@ export const createPlayer = ({
     maxHits = 1,
     excludeTargetIds,
     onHitTarget,
+    onHitTargetResolved,
     origin,
     direction,
     contactCenter,
@@ -519,6 +520,7 @@ export const createPlayer = ({
         maxHits,
         excludeTargetIds,
         onHitTarget,
+        onHitTargetResolved,
       });
     }
     if (maxDistance <= 0) return 0;
@@ -533,6 +535,7 @@ export const createPlayer = ({
       maxHits,
       excludeTargetIds,
       onHitTarget,
+      onHitTargetResolved,
     });
   };
 
@@ -654,8 +657,10 @@ export const createPlayer = ({
       performMeleeAttack,
       applyHealth,
       applyEnergy: statsState.applyEnergy,
+      spendStamina: statsState.spendStamina,
       spendEnergy: statsState.spendEnergy,
       applyMana: statsState.applyMana,
+      spendMana: statsState.spendMana,
       clearSkillCooldown: statsState.clearSkillCooldown,
       getCurrentStats: () => statsState.currentStats,
       noCooldown: infiniteFire,

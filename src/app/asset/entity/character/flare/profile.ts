@@ -5,20 +5,32 @@ export const profile: CharacterProfile = {
   label: "Flare",
   pathToken: "/flare/",
   energy: {
-    passivePerSecond: 1,
+    passivePerSecond: 0,
     hitGain: 5,
-    movingPerSecond: 1,
+    movingPerSecond: 0,
   },
   mana: {
-    passivePerSecond: 1,
+    passivePerSecond: 0.5,
   },
   movement: {
     baseSpeed: 5,
     sprintMultiplier: 1.6,
   },
   camera: {
-    miniBehindDistance: 5.5,
-    miniUpDistance: 3.2,
+    miniBehindDistance: 6.9,
+    miniUpDistance: 4.2,
+  },
+  animateArms: ({ arms, isMoving, now, THREE }) => {
+    const basePose = isMoving ? 0.62 : 0.52;
+    const sway = isMoving ? Math.sin(now * 0.01) * 0.08 : Math.sin(now * 0.004) * 0.02;
+    for (let i = 0; i < arms.length; i += 1) {
+      const arm = arms[i];
+      arm.rotation.x = THREE.MathUtils.lerp(
+        arm.rotation.x,
+        basePose + sway,
+        0.18
+      );
+    }
   },
   kit: {
     basicAttack: {
@@ -31,18 +43,26 @@ export const profile: CharacterProfile = {
       q: {
         id: "q",
         label: "Q",
-        description: "Flare skill data is not wired yet.",
+        cost: 0,
+        cooldownMs: 15000,
+        description:
+          "Play skillQ and enter Burning Mode for 20s. While active, a flame effect burns above Flare's head.",
       },
       e: {
         id: "e",
         label: "E",
+        cost: 30,
+        cooldownMs: 5000,
         description:
-          "Play skillE. When the weapon lands, ignite the weapon tip and enter Secondary Burn.",
+          "Play skillE. When the weapon lands, ignite the weapon tip and enter Secondary Burn for 10s.",
       },
       r: {
         id: "r",
         label: "R",
-        description: "Play skillR and thrust forward with the staff.",
+        cost: 70,
+        cooldownMs: 10000,
+        description:
+          "Play skillR and thrust forward with the staff. In Super Burn, switch to skillQ_E_R and spray flames in a forward fan.",
       },
     },
   },

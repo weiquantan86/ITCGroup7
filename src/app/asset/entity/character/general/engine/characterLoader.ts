@@ -27,6 +27,14 @@ const isArmRelated = (obj: THREE.Object3D | null) => {
   return false;
 };
 
+const isArmControlNodeName = (name: string) => {
+  const normalized = name.trim().toLowerCase();
+  return (
+    normalized.startsWith("arm") ||
+    (normalized.startsWith("hand") && normalized.endsWith("root"))
+  );
+};
+
 export type CharacterVisualState = {
   avatarModel: THREE.Object3D | null;
   arms: THREE.Object3D[];
@@ -125,7 +133,9 @@ export const createCharacterLoader = ({
               skinnedMeshes.push(mesh as THREE.SkinnedMesh);
             }
           }
-          if (child.name && child.name.startsWith("arm")) arms.push(child);
+          if (child.name && !mesh.isMesh && isArmControlNodeName(child.name)) {
+            arms.push(child);
+          }
           if (child.name === "legLeft") legLeft = child;
           if (child.name === "legRight") legRight = child;
           if (!headBone && /head/i.test(child.name)) {
@@ -143,6 +153,19 @@ export const createCharacterLoader = ({
             headBone = bone;
             headBoneRest = bone.quaternion.clone();
             break;
+          }
+        }
+
+        if (!arms.length) {
+          const seenArmIds = new Set<number>();
+          for (let i = 0; i < skinnedMeshes.length; i += 1) {
+            const bones = skinnedMeshes[i].skeleton?.bones ?? [];
+            for (let boneIndex = 0; boneIndex < bones.length; boneIndex += 1) {
+              const bone = bones[boneIndex];
+              if (!isArmControlNodeName(bone.name) || seenArmIds.has(bone.id)) continue;
+              seenArmIds.add(bone.id);
+              arms.push(bone);
+            }
           }
         }
 
