@@ -86,12 +86,6 @@ export default async function UserProfilePage() {
                     Profile Console
                   </h1>
                 </div>
-                <a
-                  href="/userSystem/user"
-                  className="rounded-full border border-slate-200/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-100 transition hover:border-slate-100/50 hover:bg-white/10"
-                >
-                  Back
-                </a>
               </div>
 
               <UserProfileClient

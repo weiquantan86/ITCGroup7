@@ -15,12 +15,6 @@ export default function CommunityPage() {
               </p>
               <div className="mt-2 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Link
-                  href="/userSystem/user"
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200/30 px-6 text-sm font-semibold text-slate-100 transition hover:border-slate-100/50 hover:bg-white/10"
-                >
-                  Back to User Home
-                </Link>
-                <Link
                   href="/storage"
                   className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200/30 px-6 text-sm font-semibold text-slate-100 transition hover:border-slate-100/50 hover:bg-white/10"
                 >

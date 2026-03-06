@@ -40,6 +40,12 @@ export default async function AdminPage() {
           >
             View Monster
           </Link>
+          <Link
+            href="/admin/gachaManager"
+            className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 transition-colors hover:bg-slate-700"
+          >
+            Gacha Manager
+          </Link>
         </section>
       </main>
     </div>

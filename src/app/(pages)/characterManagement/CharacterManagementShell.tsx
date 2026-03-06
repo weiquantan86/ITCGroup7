@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import CharacterManagementClient from "./CharacterManagementClient";
@@ -64,13 +63,6 @@ export default function CharacterManagementShell({
               className="grid h-full min-h-0 gap-6 xl:grid-cols-[260px_1fr]"
             >
               <aside className="flex h-full min-h-0 flex-col gap-6">
-                <Link
-                  href="/userSystem/user"
-                  className="inline-flex items-center justify-center rounded-[14px] border border-slate-200/25 bg-[#101722]/80 px-5 py-3 text-lg font-semibold text-slate-100 shadow-[0_0_16px_rgba(90,140,220,0.14)] transition hover:border-slate-100/40 hover:shadow-[0_0_22px_rgba(120,180,255,0.2)]"
-                >
-                  &larr; Back
-                </Link>
-
                 <div className="flex items-center justify-center gap-5">
                   {(["q", "e", "r"] as const).map((key) => {
                     const isActive = activeSkill === key;

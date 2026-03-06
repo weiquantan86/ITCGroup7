@@ -7,6 +7,7 @@ type ResourceRow = {
   dream_fruit_dust: number;
   core_crunch_seed: number;
   star_gel_essence: number;
+  star_coin: number;
   point: number;
 };
 
@@ -50,6 +51,14 @@ const resourceCards: ResourceCard[] = [
     chipClass:
       "bg-gradient-to-r from-teal-300/25 to-cyan-500/25 text-teal-100 border-teal-300/30",
     glowClass: "shadow-[0_0_26px_rgba(45,212,191,0.2)]",
+  },
+  {
+    key: "star_coin",
+    name: "Star Coin",
+    imagePath: "/snack/star-coin.svg",
+    chipClass:
+      "bg-gradient-to-r from-amber-200/25 to-yellow-300/25 text-amber-100 border-amber-200/30",
+    glowClass: "shadow-[0_0_26px_rgba(251,191,36,0.24)]",
   },
   {
     key: "point",
@@ -101,10 +110,20 @@ export default async function StoragePage() {
     dream_fruit_dust: 0,
     core_crunch_seed: 0,
     star_gel_essence: 0,
+    star_coin: 0,
     point: 0,
   };
 
   try {
+    await pool.query(`
+      ALTER TABLE user_resources
+      ADD COLUMN IF NOT EXISTS star_coin INTEGER NOT NULL DEFAULT 0
+    `);
+    await pool.query(`
+      ALTER TABLE user_resources
+      ADD COLUMN IF NOT EXISTS point INTEGER NOT NULL DEFAULT 0
+    `);
+
     const result = await pool.query(
       `
         SELECT
@@ -112,6 +131,7 @@ export default async function StoragePage() {
           COALESCE(dream_fruit_dust, 0) AS dream_fruit_dust,
           COALESCE(core_crunch_seed, 0) AS core_crunch_seed,
           COALESCE(star_gel_essence, 0) AS star_gel_essence,
+          COALESCE(star_coin, 0) AS star_coin,
           COALESCE(point, 0) AS point
         FROM user_resources
         WHERE user_id = $1
@@ -141,12 +161,6 @@ export default async function StoragePage() {
           </h1>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <Link
-              href="/userSystem/user"
-              className="inline-flex h-14 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-9 text-lg font-semibold text-white shadow-[0_10px_38px_rgba(236,72,153,0.38)] transition hover:scale-[1.02] hover:brightness-105"
-            >
-              Back to User Home
-            </Link>
-            <Link
               href="/gacha"
               className="inline-flex h-14 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 to-cyan-400 px-9 text-lg font-semibold text-white shadow-[0_10px_38px_rgba(14,165,233,0.36)] transition hover:scale-[1.02] hover:brightness-105"
             >
@@ -156,12 +170,10 @@ export default async function StoragePage() {
         </section>
 
         <section className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-12">
-          {resourceCards.map((card, index) => (
+          {resourceCards.map((card) => (
             <article
               key={card.key}
-              className={`group relative overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 lg:col-span-4 ${
-                index === 3 ? "lg:col-start-3" : ""
-              } ${index === 4 ? "lg:col-start-7" : ""} ${card.glowClass}`}
+              className={`group relative overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 lg:col-span-4 ${card.glowClass}`}
             >
               <div className="absolute inset-[6px] rounded-[18px] border border-white/10" />
               <div className="relative z-10 flex flex-col items-center text-center">

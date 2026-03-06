@@ -491,17 +491,6 @@ export default function MochiGeneralBattleClient({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.4),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.62)_48%,rgba(2,6,23,0.86)_68%,rgba(2,6,23,0.95)_100%)]" />
 
-      {!(hasStarted && surgeState.gameEnded) ? (
-        <div className="absolute left-6 top-6 z-20">
-          <Link
-            href="/userSystem/user"
-            className="inline-flex h-11 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-6 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105"
-          >
-            Back to User Home
-          </Link>
-        </div>
-      ) : null}
-
       <div className="relative mx-auto flex min-h-screen w-full max-w-[1800px] flex-col justify-start px-6 pb-6 pt-20">
         <section className="w-full rounded-[32px] border border-white/10 bg-white/[0.04] p-8 text-center shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
           <h1 className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-4xl font-bold text-transparent md:text-5xl">

@@ -1,0 +1,125 @@
+{
+  "baseConfig": {
+    "snacksPerReward": 5,
+    "dropChance": 1,
+    "rewardCount": 1,
+    "weights": {
+      "energy_sugar": 1,
+      "dream_fruit_dust": 1,
+      "core_crunch_seed": 1,
+      "star_gel_essence": 1
+    },
+    "updatedAt": null
+  },
+  "specialRates": [
+    {
+      "id": "special-1772791701747",
+      "name": "Fire Fire Fire!",
+      "requirements": {
+        "energy_sugar": 10,
+        "dream_fruit_dust": 3,
+        "core_crunch_seed": 0,
+        "star_gel_essence": 0
+      },
+      "chance": 0.003,
+      "reward": {
+        "type": "character",
+        "characterId": "flare",
+        "name": "Flare",
+        "count": 1,
+        "icon": "CHAR"
+      }
+    },
+    {
+      "id": "special-aa906e23-d0f1-48a0-9749-dfc7b4ea4e45",
+      "name": "Ninja is collecting seeds!?",
+      "requirements": {
+        "energy_sugar": 0,
+        "dream_fruit_dust": 0,
+        "core_crunch_seed": 5,
+        "star_gel_essence": 0
+      },
+      "chance": 0.002,
+      "reward": {
+        "type": "character",
+        "characterId": "baron",
+        "name": "Baron",
+        "count": 1,
+        "icon": "CHAR"
+      }
+    },
+    {
+      "id": "special-085edeb8-7eda-4515-a854-8c01818b3c09",
+      "name": "I am shadow!",
+      "requirements": {
+        "energy_sugar": 0,
+        "dream_fruit_dust": 10,
+        "core_crunch_seed": 0,
+        "star_gel_essence": 0
+      },
+      "chance": 0.005,
+      "reward": {
+        "type": "character",
+        "characterId": "carrot",
+        "name": "Carrot",
+        "count": 1,
+        "icon": "CHAR"
+      }
+    },
+    {
+      "id": "special-39fc59bf-f15f-4369-b97a-c83a8d38b5fa",
+      "name": "Ban Ban Ban !!",
+      "requirements": {
+        "energy_sugar": 3,
+        "dream_fruit_dust": 3,
+        "core_crunch_seed": 0,
+        "star_gel_essence": 3
+      },
+      "chance": 0.003,
+      "reward": {
+        "type": "resource",
+        "resourceKey": "star_coin",
+        "name": "Star Coin",
+        "count": 1,
+        "icon": "STAR"
+      }
+    },
+    {
+      "id": "special-0bbd49ca-9951-463a-85ba-7ca75070c300",
+      "name": "I did a lot of exercise and I have low blood sugar...",
+      "requirements": {
+        "energy_sugar": 12,
+        "dream_fruit_dust": 0,
+        "core_crunch_seed": 0,
+        "star_gel_essence": 0
+      },
+      "chance": 0.01,
+      "reward": {
+        "type": "character",
+        "characterId": "baron",
+        "name": "Baron",
+        "count": 1,
+        "icon": "CHAR"
+      }
+    },
+    {
+      "id": "special-752b8988-7a68-4b8a-a225-de32f0bc4951",
+      "name": "Test",
+      "requirements": {
+        "energy_sugar": 1,
+        "dream_fruit_dust": 0,
+        "core_crunch_seed": 0,
+        "star_gel_essence": 0
+      },
+      "chance": 0.9990000000000001,
+      "reward": {
+        "type": "character",
+        "characterId": "baron",
+        "name": "Baron",
+        "count": 1,
+        "icon": "CHAR"
+      }
+    }
+  ],
+  "updatedAt": "2026-03-06T13:32:36.019Z"
+}
