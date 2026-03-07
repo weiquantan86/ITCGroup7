@@ -1,8 +1,30 @@
 import { Pool } from "pg";
 
-export const connectionString =
-  "postgresql://neondb_owner:npg_PH8moJRf9uxO@ep-raspy-breeze-a4cktifa-pooler.us-east-1.aws.neon.tech/ITCGroup7?sslmode=require&channel_binding=require";
+const DEFAULT_DB_CONNECTION_TIMEOUT_MS = 10_000;
 
-const pool = new Pool({ connectionString });
+const connectionTimeoutMsFromEnv = Number(process.env.DB_CONNECTION_TIMEOUT_MS);
+const connectionTimeoutMillis =
+  Number.isFinite(connectionTimeoutMsFromEnv) && connectionTimeoutMsFromEnv > 0
+    ? connectionTimeoutMsFromEnv
+    : DEFAULT_DB_CONNECTION_TIMEOUT_MS;
+
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error(
+    "[database] Missing DATABASE_URL. Add DATABASE_URL=... to .env.local."
+  );
+}
+
+export const connectionString = databaseUrl;
+
+const pool = new Pool({
+  connectionString,
+  connectionTimeoutMillis,
+});
+
+pool.on("error", (error) => {
+  console.error("[database] Unexpected idle client error:", error);
+});
 
 export default pool;

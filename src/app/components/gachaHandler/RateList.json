@@ -103,23 +103,41 @@
       }
     },
     {
-      "id": "special-752b8988-7a68-4b8a-a225-de32f0bc4951",
-      "name": "Test",
+      "id": "special-496fbc2d-00d7-4ef5-8fca-98edd4c96664",
+      "name": "Preparing for star festival",
+      "requirements": {
+        "energy_sugar": 20,
+        "dream_fruit_dust": 20,
+        "core_crunch_seed": 20,
+        "star_gel_essence": 20
+      },
+      "chance": 0.05,
+      "reward": {
+        "type": "character",
+        "characterId": "flare",
+        "name": "Flare",
+        "count": 1,
+        "icon": "CHAR"
+      }
+    },
+    {
+      "id": "special-4e06ab4d-7371-4bc1-98b6-a1326e72d186",
+      "name": "Test1",
       "requirements": {
         "energy_sugar": 1,
         "dream_fruit_dust": 0,
         "core_crunch_seed": 0,
         "star_gel_essence": 0
       },
-      "chance": 0.9990000000000001,
+      "chance": 1,
       "reward": {
         "type": "character",
-        "characterId": "baron",
-        "name": "Baron",
+        "characterId": "adam",
+        "name": "Adam",
         "count": 1,
         "icon": "CHAR"
       }
     }
   ],
-  "updatedAt": "2026-03-06T13:32:36.019Z"
+  "updatedAt": "2026-03-07T03:16:14.937Z"
 }

@@ -114,9 +114,11 @@ export async function POST(request: Request) {
   }
 
   const totalSelected = sumInventory(selected);
-  if (totalSelected <= 0) {
+  if (totalSelected < DEFAULT_SNACK_RATE_CONFIG.snacksPerReward) {
     return NextResponse.json(
-      { error: "Please select at least one snack." },
+      {
+        error: `Please select at least ${DEFAULT_SNACK_RATE_CONFIG.snacksPerReward} snacks.`,
+      },
       { status: 400 }
     );
   }

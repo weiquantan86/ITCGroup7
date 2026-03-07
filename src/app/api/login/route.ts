@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import pool from '../../../database/client';
+import { getDatabaseErrorDetails } from '../../../database/error';
 import {
   assignStarterCharacters,
   ensureCharacterCatalog,
@@ -45,7 +46,26 @@ export async function POST(request) {
     });
     return response;
   } catch (error) {
-    console.error(error);
+    const dbError = getDatabaseErrorDetails(error);
+
+    if (dbError.isConnectionError) {
+      console.error(
+        `[api/login] Database connection failed (timeout=${dbError.isTimeout}, codes=${
+          dbError.codes.join(',') || 'none'
+        }): ${dbError.message}`,
+        error
+      );
+      return NextResponse.json(
+        {
+          error: dbError.isTimeout
+            ? 'Database connection timed out. Please try again shortly.'
+            : 'Database is temporarily unavailable. Please try again shortly.',
+        },
+        { status: 503 }
+      );
+    }
+
+    console.error('[api/login] Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

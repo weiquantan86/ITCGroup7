@@ -267,13 +267,29 @@ function Plate({ selected }: { selected: Selected }) {
   const plateMeshes = buildPlateMeshes(selected);
   return (
     <div
-      className="relative flex h-[420px] w-[420px] flex-col items-center overflow-hidden rounded-full border border-white/45 shadow-[inset_0_0_72px_rgba(255,255,255,0.5),0_0_40px_rgba(148,163,184,0.45)]"
+      className="relative flex h-[420px] w-[420px] flex-col items-center overflow-hidden rounded-full border border-slate-200/70 shadow-[inset_0_2px_14px_rgba(255,255,255,0.88),inset_0_-20px_70px_rgba(30,41,59,0.42),0_0_46px_rgba(148,163,184,0.5)]"
       style={{
         background:
-          "radial-gradient(circle at 35% 28%, #ffffff, #f8fafc 34%, #e2e8f0 58%, #cbd5e1 86%)",
+          "radial-gradient(circle at 30% 18%, #ffffff 0%, #f4f7fb 19%, #d5dce5 45%, #a4afbd 69%, #79879a 100%)",
       }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_24%,rgba(255,255,255,0.9),rgba(255,255,255,0)_58%)]" />
+      <div className="pointer-events-none absolute inset-[12px] rounded-full border border-white/35 shadow-[inset_0_18px_40px_rgba(255,255,255,0.35),inset_0_-26px_38px_rgba(15,23,42,0.28)]" />
+      <div
+        className="pointer-events-none absolute inset-0 rounded-full opacity-45"
+        style={{
+          background:
+            "conic-gradient(from 210deg at 52% 48%, rgba(255,255,255,0.38) 0deg, rgba(255,255,255,0.06) 60deg, rgba(71,85,105,0.35) 130deg, rgba(255,255,255,0.22) 220deg, rgba(100,116,139,0.42) 310deg, rgba(255,255,255,0.38) 360deg)",
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 rounded-full opacity-30"
+        style={{
+          background:
+            "repeating-linear-gradient(112deg, rgba(255,255,255,0.24) 0px, rgba(255,255,255,0.24) 2px, rgba(148,163,184,0.12) 2px, rgba(148,163,184,0.12) 7px)",
+        }}
+      />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.95),rgba(255,255,255,0)_58%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_78%,rgba(15,23,42,0.28),rgba(15,23,42,0)_52%)]" />
 
       <div className="relative mt-20 h-[190px] w-[320px]">
         {plateMeshes.map((mesh) => (
@@ -434,15 +450,7 @@ export default function SnackMixer({
 
   const snacksPerReward = DEFAULT_SNACK_RATE_CONFIG.snacksPerReward;
   const total = Object.values(selected).reduce((sum, count) => sum + count, 0);
-  const hasSpecialMatch = rateList.specialRates.some((rule) => {
-    const requiredTotal = SNACK_KEYS.reduce(
-      (sum, key) => sum + rule.requirements[key],
-      0
-    );
-    if (requiredTotal <= 0) return false;
-    return SNACK_KEYS.every((key) => selected[key] >= rule.requirements[key]);
-  });
-  const canMake = total >= snacksPerReward || hasSpecialMatch;
+  const canMake = total >= snacksPerReward;
   const isSealing =
     bagsClosed ||
     bagsGlowing ||
@@ -986,6 +994,7 @@ export default function SnackMixer({
 
       {activeCharacterReveal ? (
         <GachaCharacterRevealModal
+          key={activeRevealIndex}
           reveal={activeCharacterReveal}
           index={activeRevealIndex}
           total={characterReveals.length}

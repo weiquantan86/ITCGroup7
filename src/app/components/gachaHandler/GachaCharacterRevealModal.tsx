@@ -37,7 +37,7 @@ export default function GachaCharacterRevealModal({
     setReady(false);
     const timer = window.setTimeout(() => setReady(true), FLICKER_MS);
     return () => window.clearTimeout(timer);
-  }, [reveal.characterId, reveal.characterName, reveal.modelPath, reveal.isDuplicate]);
+  }, [index, reveal.characterId, reveal.characterName, reveal.modelPath, reveal.isDuplicate]);
 
   return (
     <div className="fixed inset-0 z-[340] flex items-center justify-center px-4 py-6">
@@ -60,21 +60,14 @@ export default function GachaCharacterRevealModal({
           </div>
         ) : (
           <div className="relative px-6 pb-6 pt-7">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm font-bold tracking-[0.18em] text-cyan-200">
-                CHARACTER RECRUIT
-              </p>
-              <p className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1 text-xs font-black text-cyan-100">
-                {index + 1} / {total}
-              </p>
-            </div>
-
             <h3 className="text-center text-3xl font-black text-white">
               Congratulations! You got: {reveal.characterName}
             </h3>
 
-            <div className="mt-5 h-[320px] w-full overflow-hidden rounded-2xl border border-cyan-300/30 bg-[#070b12]">
+            <div className="relative mt-5 h-[320px] w-full overflow-hidden rounded-2xl border border-cyan-300/30 bg-[#070b12]">
               <CharacterScene characterPath={reveal.modelPath} />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(251,146,60,0.26),transparent_42%),radial-gradient(circle_at_82%_18%,rgba(96,165,250,0.26),transparent_40%),radial-gradient(circle_at_15%_82%,rgba(236,72,153,0.2),transparent_45%),radial-gradient(circle_at_84%_80%,rgba(52,211,153,0.2),transparent_44%)] opacity-65 mix-blend-screen" />
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0)_35%,rgba(255,255,255,0.08)_100%)]" />
             </div>
 
             {reveal.isDuplicate ? (

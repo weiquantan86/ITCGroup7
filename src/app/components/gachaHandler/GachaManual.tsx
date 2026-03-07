@@ -32,7 +32,7 @@ export default function GachaManual({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-[420] flex items-center justify-center"
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
@@ -71,6 +71,10 @@ export default function GachaManual({
 
         <div className="mb-6 h-px w-full bg-gradient-to-r from-transparent via-white/15 to-transparent" />
 
+        <p className="mb-3 text-xl font-black leading-relaxed tracking-wide text-cyan-100 drop-shadow-[0_0_16px_rgba(34,211,238,0.7)]">
+          Please keep an eye on our events. Different combinations can update at
+          any time, bringing new characters closer and closer to you!
+        </p>
         <p className="text-base font-black tracking-wide text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.6)]">
           Note: You need at least {snacksPerReward} snacks to make a snack pack!
         </p>

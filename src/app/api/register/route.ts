@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import pool from '../../../database/client';
+import { getDatabaseErrorDetails } from '../../../database/error';
 import {
   assignStarterCharacters,
   ensureCharacterCatalog,
 } from '../../../database/characterCatalog';
 
 export async function POST(request) {
-  const client = await pool.connect();
+  let client;
+  let transactionStarted = false;
   try {
+    client = await pool.connect();
     const { email, phone, username, password } = await request.json();
 
     // Check for existing email
@@ -33,6 +36,7 @@ export async function POST(request) {
     const passwordHash = await bcrypt.hash(password, 10);
 
     await client.query('BEGIN');
+    transactionStarted = true;
 
     // Insert user
     const userInsertResult = await client.query(
@@ -62,17 +66,42 @@ export async function POST(request) {
     await assignStarterCharacters(client, userId);
 
     await client.query('COMMIT');
+    transactionStarted = false;
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackError) {
-      console.error(rollbackError);
+    if (client && transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('[api/register] Failed to rollback transaction:', rollbackError);
+      }
     }
-    console.error(error);
+
+    const dbError = getDatabaseErrorDetails(error);
+
+    if (dbError.isConnectionError) {
+      console.error(
+        `[api/register] Database connection failed (timeout=${dbError.isTimeout}, codes=${
+          dbError.codes.join(',') || 'none'
+        }): ${dbError.message}`,
+        error
+      );
+      return NextResponse.json(
+        {
+          error: dbError.isTimeout
+            ? 'Database connection timed out. Please try again shortly.'
+            : 'Database is temporarily unavailable. Please try again shortly.',
+        },
+        { status: 503 }
+      );
+    }
+
+    console.error('[api/register] Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }

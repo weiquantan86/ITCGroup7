@@ -29,8 +29,7 @@ const primaryHoldTickIntervalMs = 1000;
 const primaryHoldStaminaCostPerSecond = 20;
 const skillQMinManaToCast = 100;
 const basicAttackHitManaGain = 4.5;
-const burnDamageManaGain = 5;
-const burnDamageManaGainBonusDuringQ = 0.5;
+const burnDamageEnergyGain = 5;
 const primaryHoldBaseDamagePerTick = 20;
 const primaryHoldSecondaryBurnDamagePerTick = 35;
 const primaryHoldSuperBurnDamagePerTick = 60;
@@ -933,6 +932,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
   fireProjectile,
   performMeleeAttack,
+  applyEnergy,
   applyMana,
   spendStamina,
   spendMana,
@@ -3045,9 +3045,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     spendMana(mana);
   };
 
-  const grantManaFromBurnDamage = () => {
-    const qBonus = burningModeState.active ? burnDamageManaGainBonusDuringQ : 0;
-    applyMana?.(burnDamageManaGain + qBonus);
+  const grantEnergyFromBurnDamage = () => {
+    applyEnergy?.(burnDamageEnergyGain);
   };
 
   const getAttackBindingsByVariant = (variant: "normal" | "super") =>
@@ -4887,7 +4886,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
             : secondaryBurnSkillRBurnLayer1TickDamage,
           entry.nextTickAt
         );
-        grantManaFromBurnDamage();
+        grantEnergyFromBurnDamage();
         entry.nextTickAt += secondaryBurnSkillRBurnTickIntervalMs;
       }
 
