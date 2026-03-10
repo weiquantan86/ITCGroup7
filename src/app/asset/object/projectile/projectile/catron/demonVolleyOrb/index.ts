@@ -99,8 +99,8 @@ const standardHooks = createStandardProjectileHooks({
   defaultMeshEmissiveIntensity: fallbackEmissiveIntensity,
 });
 
-export const carrotDemonVolleyOrbProjectileType: ProjectileTypeDefinition = {
-  id: "carrotDemonVolleyOrb",
+export const catronDemonVolleyOrbProjectileType: ProjectileTypeDefinition = {
+  id: "catronDemonVolleyOrb",
   defaults: {
     speed: 19.5,
     lifetime: 1.7,

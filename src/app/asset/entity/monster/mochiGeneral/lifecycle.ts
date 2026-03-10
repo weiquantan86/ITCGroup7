@@ -3,6 +3,10 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 import type { PlayerAttackTarget } from "../../character/general/player";
 import type { StatusEffectApplication } from "../../character/general/types";
 import type { ProjectileBlockHitHandler } from "../../../object/projectile/blocking";
+import {
+  applyDamageToSlimluThreatOrPlayer,
+  resolveSlimluThreatTargetForEnemy,
+} from "../../character/slimlu/threatRegistry";
 import { Monster } from "../general";
 import type { MochiGeneralCombatEntry } from "./combatBehavior";
 import {
@@ -512,19 +516,32 @@ export const createMochiGeneralBossLifecycle = ({
       projectileBlockers,
       handleProjectileBlockHit,
     }) => {
+      let updateTarget: THREE.Object3D | null = null;
       for (let i = entries.length - 1; i >= 0; i -= 1) {
         const entry = entries[i];
         if (!entry.monster.isAlive) {
           removeBossEntry(entry, true);
           continue;
         }
+        const resolvedTarget = resolveSlimluThreatTargetForEnemy({
+          fallbackTarget: player,
+          enemyObject: entry.anchor,
+        });
+        if (!updateTarget) {
+          updateTarget = resolvedTarget;
+        }
         combatRuntime.tickBoss({
           entry,
           delta,
-          player,
+          player: resolvedTarget,
           gameEnded: isGameEnded(),
           isBlocked,
-          applyDamage,
+          applyDamage: (amount) =>
+            applyDamageToSlimluThreatOrPlayer({
+              target: resolvedTarget,
+              amount,
+              applyPlayerDamage: applyDamage,
+            }),
           summonSkill3Soldier: ({ position }) => {
             onSummonSoldier(position);
           },
@@ -532,11 +549,17 @@ export const createMochiGeneralBossLifecycle = ({
         if (isGameEnded()) break;
       }
 
+      const resolvedUpdateTarget = updateTarget ?? player;
       combatRuntime.update({
         now,
         delta,
-        player,
-        applyDamage,
+        player: resolvedUpdateTarget,
+        applyDamage: (amount) =>
+          applyDamageToSlimluThreatOrPlayer({
+            target: resolvedUpdateTarget,
+            amount,
+            applyPlayerDamage: applyDamage,
+          }),
         applyStatusEffect,
         gameEnded: isGameEnded(),
         projectileBlockers,

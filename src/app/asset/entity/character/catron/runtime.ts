@@ -7,7 +7,7 @@ import type {
   CharacterRuntimeTickArgs,
   SkillKey,
 } from "../general/types";
-import { createCarrotPhantomModifier } from "./phantomModifier";
+import { createCatronPhantomModifier } from "./phantomModifier";
 import { profile } from "./profile";
 
 type PunchPhase =
@@ -107,7 +107,7 @@ const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
 const easeInOutCubic = (value: number) =>
   value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
 
-const createCarrotChargeHud = (mount?: HTMLElement): ChargeHud => {
+const createCatronChargeHud = (mount?: HTMLElement): ChargeHud => {
   if (!mount) {
     return {
       setVisible: () => {},
@@ -354,7 +354,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   mount,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
-  const chargeHud = createCarrotChargeHud(mount);
+  const chargeHud = createCatronChargeHud(mount);
   const demonFaceFlickerFx = createDemonFaceFlickerFx(avatar);
 
   const punchConfig = {
@@ -638,7 +638,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     });
   }
   const demonTransitionFxRoot = new THREE.Group();
-  demonTransitionFxRoot.userData.carrotPhantomExclude = true;
+  demonTransitionFxRoot.userData.catronPhantomExclude = true;
   demonTransitionFxRoot.visible = false;
   avatar.add(demonTransitionFxRoot);
   const demonTransitionParticleGeometry = new THREE.IcosahedronGeometry(0.1, 0);
@@ -655,7 +655,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       demonTransitionParticleGeometry,
       particleMaterial
     );
-    particleMesh.userData.carrotPhantomExclude = true;
+    particleMesh.userData.catronPhantomExclude = true;
     particleMesh.visible = false;
     demonTransitionFxRoot.add(particleMesh);
     demonTransitionParticles.push({
@@ -678,7 +678,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     lastUpdatedAt: 0,
     cursor: 0,
   };
-  const phantomModifier = createCarrotPhantomModifier({
+  const phantomModifier = createCatronPhantomModifier({
     avatar,
     fireProjectile,
     applyHealth,
@@ -738,12 +738,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
     avatar.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
-      if (object.userData?.carrotPhantomExclude) return;
+      if (object.userData?.catronPhantomExclude) return;
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (let i = 0; i < materials.length; i += 1) {
         const material = materials[i];
         if (!material) continue;
-        if (material.userData?.carrotPhantomExclude) continue;
+        if (material.userData?.catronPhantomExclude) continue;
         const snapshot = getDemonMaterialSnapshot(material);
         callback(material, snapshot);
       }
@@ -1273,7 +1273,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       demonProjectileSpawnOrigin.y += demonFormConfig.projectileVerticalSpawnOffset;
     }
     fireProjectile({
-      projectileType: "carrotDemonVolleyOrb",
+      projectileType: "catronDemonVolleyOrb",
       origin: demonProjectileSpawnOrigin.clone(),
       direction: direction.clone(),
       speed: demonFormConfig.projectileSpeed,
@@ -2014,7 +2014,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (demonFormState.transitionPhase !== "none") return false;
     if (demonFormState.active) {
       return phantomModifier.triggerDeepVolley(now, {
-        projectileType: "carrotDemonVolleyOrb",
+        projectileType: "catronDemonVolleyOrb",
         summonScaleMultiplier: demonFormConfig.demonESummonScaleMultiplier,
         projectileScale: demonFormConfig.demonEProjectileScale,
       });

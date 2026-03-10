@@ -508,6 +508,9 @@ export const createTrainingScene = (
   let testerRespawnAt = 0;
 
   const spawnTesterFromAir = () => {
+    if (testerHitbox.parent !== testerAnchor) {
+      testerAnchor.add(testerHitbox);
+    }
     testerAnchor.position.copy(testerSpawn);
     testerAnchor.position.y += testerDropHeight;
     testerVerticalVelocity = 0;
@@ -714,6 +717,8 @@ export const createTrainingScene = (
       id: "training-tester",
       object: testerHitbox,
       isActive: () => testerMonster.isAlive,
+      getHealth: () => testerMonster.health,
+      getMaxHealth: () => testerMonster.maxHealth,
       onHit: (hit) => {
         const dealt = testerMonster.takeDamage(Math.max(1, Math.round(hit.damage)));
         if (dealt <= 0) return;

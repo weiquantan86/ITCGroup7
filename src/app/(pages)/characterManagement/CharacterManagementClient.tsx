@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import CharacterScene from "./characterScene/CharacterScene";
@@ -13,6 +14,42 @@ import type { CharacterManagementCharacter } from "./characterManagementTypes";
 
 type CharacterCard = CharacterManagementCharacter & {
   locked?: boolean;
+};
+
+const characterCardBackgrounds = [
+  "linear-gradient(135deg, rgba(14,116,144,0.9) 0%, rgba(37,99,235,0.84) 52%, rgba(16,185,129,0.78) 100%)",
+  "linear-gradient(135deg, rgba(124,58,237,0.9) 0%, rgba(79,70,229,0.84) 52%, rgba(56,189,248,0.78) 100%)",
+  "linear-gradient(135deg, rgba(190,24,93,0.9) 0%, rgba(234,88,12,0.84) 52%, rgba(245,158,11,0.78) 100%)",
+  "linear-gradient(135deg, rgba(22,163,74,0.9) 0%, rgba(5,150,105,0.84) 52%, rgba(20,184,166,0.78) 100%)",
+  "linear-gradient(135deg, rgba(225,29,72,0.9) 0%, rgba(236,72,153,0.84) 52%, rgba(168,85,247,0.78) 100%)",
+  "linear-gradient(135deg, rgba(217,119,6,0.9) 0%, rgba(251,146,60,0.84) 52%, rgba(250,204,21,0.78) 100%)",
+];
+
+const resolveCharacterCardStyle = ({
+  index,
+  isLocked,
+  isSelected,
+}: {
+  index: number;
+  isLocked: boolean;
+  isSelected: boolean;
+}): CSSProperties => {
+  if (isLocked) {
+    return {
+      backgroundImage:
+        "linear-gradient(135deg, rgba(30,41,59,0.86) 0%, rgba(15,23,42,0.92) 100%)",
+      borderColor: "rgba(148,163,184,0.18)",
+      boxShadow: "0 0 12px rgba(2,6,23,0.42)",
+    };
+  }
+
+  return {
+    backgroundImage: characterCardBackgrounds[index % characterCardBackgrounds.length],
+    borderColor: isSelected ? "rgba(186,230,253,0.95)" : "rgba(226,232,240,0.32)",
+    boxShadow: isSelected
+      ? "0 0 24px rgba(56,189,248,0.35), inset 0 0 18px rgba(15,23,42,0.24)"
+      : "0 0 16px rgba(79,70,229,0.2), inset 0 0 14px rgba(15,23,42,0.2)",
+  };
 };
 
 function LockIcon() {
@@ -265,9 +302,14 @@ export default function CharacterManagementClient({
           onScroll={updateScrollbar}
           className="scrollbar-hidden mt-4 flex max-w-full gap-4 overflow-x-auto pb-2"
         >
-          {cards.map((card) => {
+          {cards.map((card, index) => {
             const isSelected = card.id === selectedId;
             const isLocked = Boolean(card.locked);
+            const cardStyle = resolveCharacterCardStyle({
+              index,
+              isLocked,
+              isSelected,
+            });
             return (
               <button
                 key={card.id}
@@ -276,11 +318,12 @@ export default function CharacterManagementClient({
                   if (isLocked) return;
                   setSelectedId(card.id);
                 }}
-                className={`flex min-w-[280px] flex-col items-center justify-center rounded-[16px] border bg-[#0b1119]/90 px-7 py-7 text-xl font-semibold text-slate-100 shadow-[0_0_14px_rgba(90,140,220,0.12)] transition ${
+                style={cardStyle}
+                className={`flex min-w-[280px] flex-col items-center justify-center rounded-[16px] border px-7 py-7 text-xl font-semibold text-slate-100 transition ${
                   isLocked
                     ? "cursor-not-allowed border-slate-200/10 text-slate-400"
                     : "border-slate-200/25 hover:border-slate-100/45"
-                } ${isSelected ? "border-sky-400/70 shadow-[0_0_18px_rgba(56,189,248,0.25)]" : ""}`}
+                } ${isSelected ? "border-sky-400/70" : ""}`}
               >
                 {isLocked ? <LockIcon /> : <span>{card.name}</span>}
               </button>

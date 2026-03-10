@@ -1,4 +1,4 @@
-import type { CharacterStats, SkillKey } from "../types";
+import type { CharacterStats, SkillHudIndicators, SkillKey } from "../types";
 
 export type StatusHud = {
   setStats: (current: CharacterStats, max: CharacterStats) => void;
@@ -6,6 +6,7 @@ export type StatusHud = {
     cooldowns: Record<SkillKey, number>,
     durations: Record<SkillKey, number>
   ) => void;
+  setSkillIndicators: (indicators: SkillHudIndicators | null) => void;
   setMiniMapVisible: (visible: boolean) => void;
   setBossInfo: (
     info: {
@@ -27,6 +28,7 @@ export const createStatusHud = (
     return {
       setStats: () => {},
       setSkillCooldowns: () => {},
+      setSkillIndicators: () => {},
       setMiniMapVisible: () => {},
       setBossInfo: () => {},
       triggerDamageFlash: () => {},
@@ -89,12 +91,23 @@ export const createStatusHud = (
     const shell = document.createElement("div");
     shell.style.cssText =
       "position:relative;width:52px;height:52px;border-radius:14px;overflow:hidden;" +
-      "border:1px solid rgba(148,163,184,0.28);background:rgba(15,23,42,0.75);";
+      "border:1px solid rgba(148,163,184,0.28);background:rgba(15,23,42,0.75);" +
+      "box-shadow:0 0 0 rgba(0,0,0,0);";
 
     const fan = document.createElement("div");
     fan.style.cssText =
       "position:absolute;inset:0;opacity:0;border-radius:14px;" +
       "background:conic-gradient(from -90deg, rgba(2,6,23,0.86) 360deg, rgba(2,6,23,0.05) 360deg);";
+
+    const crack = document.createElement("div");
+    crack.style.cssText =
+      "position:absolute;inset:0;opacity:0;pointer-events:none;" +
+      "transition:opacity 120ms ease;border-radius:14px;" +
+      "background:" +
+      "linear-gradient(128deg, transparent 0 36%, rgba(74,222,128,0.95) 37% 39%, transparent 40% 100%)," +
+      "linear-gradient(42deg, transparent 0 43%, rgba(34,197,94,0.9) 44% 46%, transparent 47% 100%)," +
+      "linear-gradient(158deg, transparent 0 56%, rgba(74,222,128,0.9) 57% 59%, transparent 60% 100%)," +
+      "linear-gradient(72deg, transparent 0 63%, rgba(34,197,94,0.9) 64% 66%, transparent 67% 100%);";
 
     const keyLabel = document.createElement("span");
     keyLabel.textContent = label.toUpperCase();
@@ -108,9 +121,9 @@ export const createStatusHud = (
       "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);" +
       "z-index:2;font-size:15px;font-variant-numeric:tabular-nums;font-weight:700;color:#f8fafc;";
 
-    shell.append(fan, time, keyLabel);
+    shell.append(fan, crack, time, keyLabel);
     cooldownPanel.appendChild(shell);
-    return { shell, fan, keyLabel, time };
+    return { shell, fan, crack, keyLabel, time };
   };
 
   const cooldownCards = {
@@ -118,6 +131,10 @@ export const createStatusHud = (
     e: createCooldownCard("e"),
     r: createCooldownCard("r"),
   };
+
+  let skillHudIndicators: SkillHudIndicators | null = null;
+  let lastSkillCooldowns: Record<SkillKey, number> = { q: 0, e: 0, r: 0 };
+  let lastSkillCooldownDurations: Record<SkillKey, number> = { q: 0, e: 0, r: 0 };
 
   const miniMapMargin = 14;
   const cooldownGapBelowMini = 16;
@@ -220,17 +237,30 @@ export const createStatusHud = (
       card.time.textContent = "";
       card.keyLabel.style.opacity = "1";
       card.shell.style.borderColor = "rgba(74,222,128,0.45)";
+    } else {
+      const sweep = Math.max(1, Math.round(ratio * 360));
+      card.fan.style.opacity = "1";
+      card.fan.style.background =
+        `conic-gradient(from -90deg, rgba(2,6,23,0.86) 0deg ${sweep}deg, ` +
+        `rgba(2,6,23,0.08) ${sweep}deg 360deg)`;
+      card.keyLabel.style.opacity = "0.42";
+      card.time.textContent = formatCooldownText(resolvedRemaining);
+      card.shell.style.borderColor = `rgba(251,146,60,${0.32 + ratio * 0.45})`;
+    }
+
+    const indicator = skillHudIndicators?.[key];
+    if (indicator === "detonation-ready") {
+      card.crack.style.opacity = ratio <= 0.001 ? "1" : "0.65";
+      card.shell.style.borderColor = "rgba(34,197,94,0.92)";
+      card.shell.style.boxShadow =
+        "0 0 14px rgba(34,197,94,0.55), inset 0 0 10px rgba(16,185,129,0.38)";
+      card.keyLabel.style.color = "rgba(220,252,231,0.98)";
       return;
     }
 
-    const sweep = Math.max(1, Math.round(ratio * 360));
-    card.fan.style.opacity = "1";
-    card.fan.style.background =
-      `conic-gradient(from -90deg, rgba(2,6,23,0.86) 0deg ${sweep}deg, ` +
-      `rgba(2,6,23,0.08) ${sweep}deg 360deg)`;
-    card.keyLabel.style.opacity = "0.42";
-    card.time.textContent = formatCooldownText(resolvedRemaining);
-    card.shell.style.borderColor = `rgba(251,146,60,${0.32 + ratio * 0.45})`;
+    card.crack.style.opacity = "0";
+    card.shell.style.boxShadow = "0 0 0 rgba(0,0,0,0)";
+    card.keyLabel.style.color = "rgba(191,219,254,0.95)";
   };
 
   const triggerDamageFlash = () => {
@@ -249,9 +279,17 @@ export const createStatusHud = (
       updateFill(energyBar.fillBar, energyBar.value, current.energy, max.energy);
     },
     setSkillCooldowns: (cooldowns, durations) => {
+      lastSkillCooldowns = { ...cooldowns };
+      lastSkillCooldownDurations = { ...durations };
       setCooldownCard("q", cooldowns.q, durations.q);
       setCooldownCard("e", cooldowns.e, durations.e);
       setCooldownCard("r", cooldowns.r, durations.r);
+    },
+    setSkillIndicators: (indicators) => {
+      skillHudIndicators = indicators;
+      setCooldownCard("q", lastSkillCooldowns.q, lastSkillCooldownDurations.q);
+      setCooldownCard("e", lastSkillCooldowns.e, lastSkillCooldownDurations.e);
+      setCooldownCard("r", lastSkillCooldowns.r, lastSkillCooldownDurations.r);
     },
     setMiniMapVisible: (visible) => {
       miniMapVisible = options?.showMiniMap === false ? false : visible;

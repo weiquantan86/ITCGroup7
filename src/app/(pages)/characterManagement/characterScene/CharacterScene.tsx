@@ -10,6 +10,41 @@ type CharacterSceneProps = {
   className?: string;
 };
 
+const createColorfulBackgroundTexture = () => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 1024;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  const gradient = context.createLinearGradient(0, 0, 1024, 1024);
+  gradient.addColorStop(0, "#0a2f8f");
+  gradient.addColorStop(0.45, "#4b1d9e");
+  gradient.addColorStop(1, "#9f2b55");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 1024, 1024);
+
+  const glowA = context.createRadialGradient(240, 180, 20, 240, 180, 420);
+  glowA.addColorStop(0, "rgba(56,189,248,0.28)");
+  glowA.addColorStop(1, "rgba(56,189,248,0)");
+  context.fillStyle = glowA;
+  context.fillRect(0, 0, 1024, 1024);
+
+  const glowB = context.createRadialGradient(820, 760, 30, 820, 760, 460);
+  glowB.addColorStop(0, "rgba(251,191,36,0.2)");
+  glowB.addColorStop(1, "rgba(251,191,36,0)");
+  context.fillStyle = glowB;
+  context.fillRect(0, 0, 1024, 1024);
+
+  context.fillStyle = "rgba(2,6,23,0.24)";
+  context.fillRect(0, 0, 1024, 1024);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+};
+
 const withDevCacheBust = (path: string) => {
   if (process.env.NODE_ENV !== "development") return path;
   const separator = path.includes("?") ? "&" : "?";
@@ -34,7 +69,8 @@ export default function CharacterScene({
     if (!mount) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0b1119);
+    const backgroundTexture = createColorfulBackgroundTexture();
+    scene.background = backgroundTexture ?? new THREE.Color(0x0b1119);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(
@@ -78,9 +114,9 @@ export default function CharacterScene({
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(3.8, 64),
       new THREE.MeshStandardMaterial({
-        color: 0x0f172a,
-        roughness: 0.95,
-        metalness: 0.1,
+        color: 0x2a1b52,
+        roughness: 0.9,
+        metalness: 0.08,
       })
     );
     floor.rotation.x = -Math.PI / 2;
@@ -117,6 +153,7 @@ export default function CharacterScene({
       if (renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
+      backgroundTexture?.dispose();
       scene.clear();
     };
   }, []);

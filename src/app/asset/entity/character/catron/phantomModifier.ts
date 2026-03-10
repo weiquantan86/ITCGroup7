@@ -5,7 +5,7 @@ import type {
   SkillKey,
 } from "../general/types";
 
-type CreateCarrotPhantomModifierArgs = {
+type CreateCatronPhantomModifierArgs = {
   avatar: THREE.Object3D;
   fireProjectile?: (args?: FireProjectileArgs) => void;
   applyHealth?: (amount: number) => number;
@@ -74,13 +74,13 @@ type DeepVolleyTriggerOptions = {
   projectileScale?: number;
 };
 
-export const createCarrotPhantomModifier = ({
+export const createCatronPhantomModifier = ({
   avatar,
   fireProjectile,
   applyHealth,
   applyEnergy,
   applyMana,
-}: CreateCarrotPhantomModifierArgs) => {
+}: CreateCatronPhantomModifierArgs) => {
   const phantomConfig = {
     shallowDurationMs: 200,
     deepDurationMs: 3000,
@@ -142,7 +142,7 @@ export const createCarrotPhantomModifier = ({
     spawnedCount: 0,
     launchedCount: 0,
     exitedDeepAt: 0,
-    projectileType: "carrotDeepPhantomOrb",
+    projectileType: "catronDeepPhantomOrb",
     summonScaleMultiplier: 1,
     projectileScale: null as number | null,
     activeOrbs: deepPhantomVolleyOrbs as DeepVolleyOrb[],
@@ -159,27 +159,27 @@ export const createCarrotPhantomModifier = ({
   };
 
   const fxRoot = new THREE.Group();
-  fxRoot.userData.carrotPhantomExclude = true;
+  fxRoot.userData.catronPhantomExclude = true;
   fxRoot.visible = false;
   avatar.add(fxRoot);
 
   const deepFxGroup = new THREE.Group();
-  deepFxGroup.userData.carrotPhantomExclude = true;
+  deepFxGroup.userData.catronPhantomExclude = true;
   deepFxGroup.visible = false;
   fxRoot.add(deepFxGroup);
 
   const shallowBurstFxGroup = new THREE.Group();
-  shallowBurstFxGroup.userData.carrotPhantomExclude = true;
+  shallowBurstFxGroup.userData.catronPhantomExclude = true;
   shallowBurstFxGroup.visible = false;
   fxRoot.add(shallowBurstFxGroup);
 
   const deepBurstFxGroup = new THREE.Group();
-  deepBurstFxGroup.userData.carrotPhantomExclude = true;
+  deepBurstFxGroup.userData.catronPhantomExclude = true;
   deepBurstFxGroup.visible = false;
   fxRoot.add(deepBurstFxGroup);
 
   const deepVolleyFxGroup = new THREE.Group();
-  deepVolleyFxGroup.userData.carrotPhantomExclude = true;
+  deepVolleyFxGroup.userData.catronPhantomExclude = true;
   deepVolleyFxGroup.visible = false;
   fxRoot.add(deepVolleyFxGroup);
 
@@ -194,7 +194,7 @@ export const createCarrotPhantomModifier = ({
         depthWrite: false,
       })
     );
-    mesh.userData.carrotPhantomExclude = true;
+    mesh.userData.catronPhantomExclude = true;
     mesh.position.set(0, 0.98, 0);
     shallowBurstFxGroup.add(mesh);
     shallowBurstParticles.push({
@@ -222,7 +222,7 @@ export const createCarrotPhantomModifier = ({
       new THREE.SphereGeometry(0.72, 12, 12),
       deepPhantomMaterial
     );
-    deepPhantomMesh.userData.carrotPhantomExclude = true;
+    deepPhantomMesh.userData.catronPhantomExclude = true;
     deepPhantomMesh.visible = false;
     deepPhantomMesh.position.set(
       phantomConfig.deepVolleyOrbLocalXOffsets[i] ?? 0,
@@ -248,7 +248,7 @@ export const createCarrotPhantomModifier = ({
       depthWrite: false,
     });
     const demonMesh = new THREE.Mesh(new THREE.SphereGeometry(0.72, 24, 24), demonMaterial);
-    demonMesh.userData.carrotPhantomExclude = true;
+    demonMesh.userData.catronPhantomExclude = true;
     demonMesh.visible = false;
     demonMesh.position.set(
       phantomConfig.deepVolleyOrbLocalXOffsets[i] ?? 0,
@@ -268,7 +268,7 @@ export const createCarrotPhantomModifier = ({
         new THREE.IcosahedronGeometry(0.045 + Math.random() * 0.035, 0),
         particleMaterial
       );
-      particleMesh.userData.carrotPhantomExclude = true;
+      particleMesh.userData.catronPhantomExclude = true;
       demonMesh.add(particleMesh);
       demonParticles.push({
         mesh: particleMesh,
@@ -301,7 +301,7 @@ export const createCarrotPhantomModifier = ({
       depthWrite: false,
     })
   );
-  deepRing.userData.carrotPhantomExclude = true;
+  deepRing.userData.catronPhantomExclude = true;
   deepRing.rotation.x = Math.PI / 2;
   deepRing.position.set(0, 0.12, 0);
   deepFxGroup.add(deepRing);
@@ -319,7 +319,7 @@ export const createCarrotPhantomModifier = ({
       depthWrite: false,
     })
   );
-  deepShell.userData.carrotPhantomExclude = true;
+  deepShell.userData.catronPhantomExclude = true;
   deepShell.position.set(0, 0.95, 0);
   deepFxGroup.add(deepShell);
 
@@ -337,7 +337,7 @@ export const createCarrotPhantomModifier = ({
         depthWrite: false,
       })
     );
-    mesh.userData.carrotPhantomExclude = true;
+    mesh.userData.catronPhantomExclude = true;
     mesh.position.set(0, 0.98, 0);
     deepBurstFxGroup.add(mesh);
     deepBurstParticles.push({
@@ -364,7 +364,7 @@ export const createCarrotPhantomModifier = ({
         depthWrite: false,
       })
     );
-    mesh.userData.carrotPhantomExclude = true;
+    mesh.userData.catronPhantomExclude = true;
     deepFxGroup.add(mesh);
     deepWispStates.push({
       mesh,
@@ -385,7 +385,7 @@ export const createCarrotPhantomModifier = ({
   };
 
   const resolveVolleyOrbSet = (projectileType: string) =>
-    projectileType === "carrotDemonVolleyOrb" ? demonVolleyOrbs : deepPhantomVolleyOrbs;
+    projectileType === "catronDemonVolleyOrb" ? demonVolleyOrbs : deepPhantomVolleyOrbs;
 
   const hideAllFx = () => {
     fxRoot.visible = false;
@@ -398,7 +398,7 @@ export const createCarrotPhantomModifier = ({
     deepVolleyState.spawnedCount = 0;
     deepVolleyState.launchedCount = 0;
     deepVolleyState.exitedDeepAt = 0;
-    deepVolleyState.projectileType = "carrotDeepPhantomOrb";
+    deepVolleyState.projectileType = "catronDeepPhantomOrb";
     deepVolleyState.summonScaleMultiplier = 1;
     deepVolleyState.projectileScale = null;
     deepVolleyState.activeOrbs = deepPhantomVolleyOrbs;
@@ -463,12 +463,12 @@ export const createCarrotPhantomModifier = ({
     avatar.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
-      if (object.userData?.carrotPhantomExclude) return;
+      if (object.userData?.catronPhantomExclude) return;
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (let i = 0; i < materials.length; i += 1) {
         const material = materials[i];
         if (!material) continue;
-        if (material.userData?.carrotPhantomExclude) continue;
+        if (material.userData?.catronPhantomExclude) continue;
         if (material.userData?.__playerHitFlashActive) continue;
         if (material.blending !== THREE.NormalBlending) continue;
         const snapshot = getMaterialSnapshot(material);
@@ -825,7 +825,7 @@ export const createCarrotPhantomModifier = ({
     deepVolleyState.launchedCount = 0;
     deepVolleyState.exitedDeepAt = 0;
     deepVolleyState.projectileType =
-      options?.projectileType ?? "carrotDeepPhantomOrb";
+      options?.projectileType ?? "catronDeepPhantomOrb";
     deepVolleyState.summonScaleMultiplier = THREE.MathUtils.clamp(
       options?.summonScaleMultiplier ?? 1,
       0.2,
@@ -874,7 +874,7 @@ export const createCarrotPhantomModifier = ({
       metalness: 0.1,
     });
     const mesh = new THREE.Mesh(projectileGeometry, projectileMaterial);
-    mesh.userData.carrotPhantomExclude = true;
+    mesh.userData.catronPhantomExclude = true;
 
     const auraGeometry = new THREE.SphereGeometry(0.18, 14, 14);
     const auraMaterial = new THREE.MeshBasicMaterial({
@@ -885,7 +885,7 @@ export const createCarrotPhantomModifier = ({
       depthWrite: false,
     });
     const auraMesh = new THREE.Mesh(auraGeometry, auraMaterial);
-    auraMesh.userData.carrotPhantomExclude = true;
+    auraMesh.userData.catronPhantomExclude = true;
     mesh.add(auraMesh);
 
     const particleGeometry = new THREE.IcosahedronGeometry(0.085, 0);
@@ -900,7 +900,7 @@ export const createCarrotPhantomModifier = ({
         depthWrite: false,
       });
       const particleMesh = new THREE.Mesh(particleGeometry, particleMaterial);
-      particleMesh.userData.carrotPhantomExclude = true;
+      particleMesh.userData.catronPhantomExclude = true;
       mesh.add(particleMesh);
       particles.push({
         mesh: particleMesh,
@@ -997,7 +997,7 @@ export const createCarrotPhantomModifier = ({
     const homingDesiredDirection = new THREE.Vector3();
     const homingCurrentDirection = new THREE.Vector3();
     const shotFx =
-      deepVolleyState.projectileType === "carrotDemonVolleyOrb"
+      deepVolleyState.projectileType === "catronDemonVolleyOrb"
         ? createDeepVolleyShotFx()
         : null;
     let hasRuntimeTarget = false;

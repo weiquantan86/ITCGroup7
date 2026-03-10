@@ -16,10 +16,12 @@ type CharacterRuntimeObjectInit = {
   handleProjectileBlockHit?: CharacterRuntime["handleProjectileBlockHit"];
   getMovementSpeedMultiplier?: CharacterRuntime["getMovementSpeedMultiplier"];
   getCameraScaleMultiplier?: CharacterRuntime["getCameraScaleMultiplier"];
+  getCameraFollowTarget?: CharacterRuntime["getCameraFollowTarget"];
   isBasicAttackLocked?: CharacterRuntime["isBasicAttackLocked"];
   isMovementLocked?: CharacterRuntime["isMovementLocked"];
   getSkillCooldownRemainingMs?: CharacterRuntime["getSkillCooldownRemainingMs"];
   getSkillCooldownDurationMs?: CharacterRuntime["getSkillCooldownDurationMs"];
+  getSkillHudIndicators?: CharacterRuntime["getSkillHudIndicators"];
   beforeSkillUse?: CharacterRuntime["beforeSkillUse"];
   beforeDamage?: CharacterRuntime["beforeDamage"];
   beforeStatusApply?: CharacterRuntime["beforeStatusApply"];
@@ -44,10 +46,12 @@ export class CharacterRuntimeObject implements CharacterRuntime {
   readonly handleProjectileBlockHit?: CharacterRuntime["handleProjectileBlockHit"];
   readonly getMovementSpeedMultiplier?: CharacterRuntime["getMovementSpeedMultiplier"];
   readonly getCameraScaleMultiplier?: CharacterRuntime["getCameraScaleMultiplier"];
+  readonly getCameraFollowTarget?: CharacterRuntime["getCameraFollowTarget"];
   readonly isBasicAttackLocked?: CharacterRuntime["isBasicAttackLocked"];
   readonly isMovementLocked?: CharacterRuntime["isMovementLocked"];
   readonly getSkillCooldownRemainingMs?: CharacterRuntime["getSkillCooldownRemainingMs"];
   readonly getSkillCooldownDurationMs?: CharacterRuntime["getSkillCooldownDurationMs"];
+  readonly getSkillHudIndicators?: CharacterRuntime["getSkillHudIndicators"];
   readonly beforeSkillUse?: CharacterRuntime["beforeSkillUse"];
   readonly beforeDamage?: CharacterRuntime["beforeDamage"];
   readonly beforeStatusApply?: CharacterRuntime["beforeStatusApply"];
@@ -71,10 +75,12 @@ export class CharacterRuntimeObject implements CharacterRuntime {
     this.handleProjectileBlockHit = init.handleProjectileBlockHit;
     this.getMovementSpeedMultiplier = init.getMovementSpeedMultiplier;
     this.getCameraScaleMultiplier = init.getCameraScaleMultiplier;
+    this.getCameraFollowTarget = init.getCameraFollowTarget;
     this.isBasicAttackLocked = init.isBasicAttackLocked;
     this.isMovementLocked = init.isMovementLocked;
     this.getSkillCooldownRemainingMs = init.getSkillCooldownRemainingMs;
     this.getSkillCooldownDurationMs = init.getSkillCooldownDurationMs;
+    this.getSkillHudIndicators = init.getSkillHudIndicators;
     this.beforeSkillUse = init.beforeSkillUse;
     this.beforeDamage = init.beforeDamage;
     this.beforeStatusApply = init.beforeStatusApply;

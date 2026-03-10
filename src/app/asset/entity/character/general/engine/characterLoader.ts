@@ -21,7 +21,10 @@ const isHeadRelated = (obj: THREE.Object3D | null) => {
 const isArmRelated = (obj: THREE.Object3D | null) => {
   let current = obj;
   while (current) {
-    if (/arm|hand|weapon|gun|sword|blade/i.test(current.name)) return true;
+    const nodeName = current.name.trim().toLowerCase();
+    if (nodeName !== "armature" && /arm|hand|weapon|gun|sword|blade/i.test(nodeName)) {
+      return true;
+    }
     current = current.parent;
   }
   return false;
@@ -63,6 +66,8 @@ type CreateCharacterLoaderArgs = {
 type LoadCharacterVisualArgs = {
   path: string;
   groundY: number;
+  hideLocalHead?: boolean;
+  hideLocalBody?: boolean;
   previousModel: THREE.Object3D | null;
   onLoaded: (state: CharacterVisualState) => void;
 };
@@ -96,9 +101,13 @@ export const createCharacterLoader = ({
   const loadCharacterVisual = ({
     path,
     groundY,
+    hideLocalHead: hideLocalHeadOverride,
+    hideLocalBody: hideLocalBodyOverride,
     previousModel,
     onLoaded,
   }: LoadCharacterVisualArgs) => {
+    const resolvedHideLocalHead = hideLocalHeadOverride ?? hideLocalHead;
+    const resolvedHideLocalBody = hideLocalBodyOverride ?? hideLocalBody;
     loader.load(
       path,
       (gltf) => {
@@ -169,7 +178,8 @@ export const createCharacterLoader = ({
           }
         }
 
-        const useHideBody = hideLocalBody || (hideLocalHead && !foundHeadMesh);
+        const useHideBody =
+          resolvedHideLocalBody || (resolvedHideLocalHead && !foundHeadMesh);
         if (useHideBody) {
           miniCamera.layers.enable(bodyLayer);
         }
@@ -179,12 +189,12 @@ export const createCharacterLoader = ({
           if (useHideBody) {
             if (isArmRelated(mesh)) {
               mesh.layers.set(0);
-            } else if (hideLocalHead && isHeadRelated(mesh)) {
+            } else if (resolvedHideLocalHead && isHeadRelated(mesh)) {
               mesh.layers.set(headLayer);
             } else {
               mesh.layers.set(bodyLayer);
             }
-          } else if (hideLocalHead && isHeadRelated(mesh)) {
+          } else if (resolvedHideLocalHead && isHeadRelated(mesh)) {
             mesh.layers.set(headLayer);
           } else {
             mesh.layers.set(0);

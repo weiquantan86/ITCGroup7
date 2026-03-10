@@ -104,6 +104,10 @@ export const createPlayer = ({
   const jumpVelocity = 6.5;
   const headLayer = 1;
   const bodyLayer = 2;
+  const resolveLocalVisibility = (profile?: { camera?: { hideLocalHead?: boolean; hideLocalBody?: boolean } }) => ({
+    hideLocalHead: profile?.camera?.hideLocalHead ?? hideLocalHead,
+    hideLocalBody: profile?.camera?.hideLocalBody ?? hideLocalBody,
+  });
 
   const attackTargets = resolvedWorld.attackTargets ?? [];
   const projectileColliders = resolvedWorld.projectileColliders ?? [];
@@ -141,10 +145,12 @@ export const createPlayer = ({
     resolvedWorld.playerSpawn ?? new THREE.Vector3(0, resolvedWorld.groundY, 6)
   ).clone();
   avatar.position.copy(playerSpawn);
-  if (hideLocalBody) {
-    avatarBody.layers.set(bodyLayer);
-    avatarGlow.layers.set(bodyLayer);
-  }
+  const applyPlaceholderBodyLayer = (shouldHideLocalBody: boolean) => {
+    const targetLayer = shouldHideLocalBody ? bodyLayer : 0;
+    avatarBody.layers.set(targetLayer);
+    avatarGlow.layers.set(targetLayer);
+  };
+  applyPlaceholderBodyLayer(hideLocalBody);
   scene.add(avatar);
 
   let isMounted = true;
@@ -401,6 +407,7 @@ export const createPlayer = ({
         r: cooldownDurationMs.r / 1000,
       }
     );
+    statusHud.setSkillIndicators(characterRuntime?.getSkillHudIndicators?.() ?? null);
     statsState.emitUiState({
       now,
       getCooldownRemainingMs: (key) => cooldownRemainingMs[key],
@@ -637,6 +644,12 @@ export const createPlayer = ({
     const resolvedPath = path || defaultCharacterPath;
     const loadPath = withDevCacheBust(resolvedPath);
     const nextEntry = getCharacterEntry(resolvedPath);
+    const localVisibility = resolveLocalVisibility(nextEntry.profile);
+    cameraRig.setLocalVisibility({
+      hideLocalHead: localVisibility.hideLocalHead,
+      hideLocalBody: localVisibility.hideLocalBody,
+    });
+    applyPlaceholderBodyLayer(localVisibility.hideLocalBody);
     if (characterRuntime) {
       clearActiveProjectiles();
       characterRuntime.dispose();
@@ -663,12 +676,15 @@ export const createPlayer = ({
       spendMana: statsState.spendMana,
       clearSkillCooldown: statsState.clearSkillCooldown,
       getCurrentStats: () => statsState.currentStats,
+      getAttackTargets: () => attackTargets,
       noCooldown: infiniteFire,
     });
 
     characterLoader.loadCharacterVisual({
       path: loadPath,
       groundY: resolvedWorld.groundY,
+      hideLocalHead: localVisibility.hideLocalHead,
+      hideLocalBody: localVisibility.hideLocalBody,
       previousModel: visualState.avatarModel,
       onLoaded: (nextVisualState) => {
         invalidatePlayerHitMaterialCache();

@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node src/app/asset/entity/character/general/gen_all_characters.mjs",
+    "sync:characters": "node tools/character/sync-characters.mjs",
+    "predev": "npm run sync:characters && node src/app/asset/entity/character/general/gen_all_characters.mjs",
     "dev": "next dev",
-    "prebuild": "node src/app/asset/entity/character/general/gen_all_characters.mjs",
+    "prebuild": "npm run sync:characters && node src/app/asset/entity/character/general/gen_all_characters.mjs",
     "build": "next build",
-    "prestart": "node src/app/asset/entity/character/general/gen_all_characters.mjs",
+    "prestart": "npm run sync:characters && node src/app/asset/entity/character/general/gen_all_characters.mjs",
     "start": "next start"
   },
   "dependencies": {

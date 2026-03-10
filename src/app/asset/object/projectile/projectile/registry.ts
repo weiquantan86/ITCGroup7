@@ -1,7 +1,7 @@
 import { abilityOrbProjectileType } from "./adam/abilityOrb";
 import { shurikenProjectileType } from "./baron/shuriken";
-import { carrotDeepPhantomOrbProjectileType } from "./carrot/deepPhantomOrb";
-import { carrotDemonVolleyOrbProjectileType } from "./carrot/demonVolleyOrb";
+import { catronDeepPhantomOrbProjectileType } from "./catron/deepPhantomOrb";
+import { catronDemonVolleyOrbProjectileType } from "./catron/demonVolleyOrb";
 import { createStandardProjectileHooks } from "./shared/standardHooks";
 import type {
   ProjectileTypeHooks,
@@ -45,8 +45,8 @@ const baseHooks: ProjectileTypeHooks = createStandardProjectileHooks();
 const projectileTypeMap: Record<string, ProjectileTypeDefinition> = {
   abilityOrb: abilityOrbProjectileType,
   shuriken: shurikenProjectileType,
-  carrotDeepPhantomOrb: carrotDeepPhantomOrbProjectileType,
-  carrotDemonVolleyOrb: carrotDemonVolleyOrbProjectileType,
+  catronDeepPhantomOrb: catronDeepPhantomOrbProjectileType,
+  catronDemonVolleyOrb: catronDemonVolleyOrbProjectileType,
 };
 
 const fallbackProjectileTypeId = "abilityOrb";

@@ -1,4 +1,4 @@
-﻿import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Blob } from "node:buffer";
 import * as THREE from "three";
@@ -45,7 +45,7 @@ if (typeof globalThis.FileReader === "undefined") {
   };
 }
 
-const outPath = "public/assets/characters/carrot/carrot.glb";
+const outPath = "public/assets/characters/catron/catron.glb";
 mkdirSync(dirname(outPath), { recursive: true });
 
 const scene = new THREE.Scene();
@@ -178,7 +178,7 @@ const createTrianglePlate = (w, h, thickness = 0.08) => {
 };
 
 const root = new THREE.Group();
-root.name = "carrot_root";
+root.name = "catron_root";
 
 // Head sphere (this is the face).
 const head = new THREE.Group();

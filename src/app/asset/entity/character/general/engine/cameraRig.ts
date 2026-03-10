@@ -39,12 +39,28 @@ export const createPlayerCameraRig = ({
 
   const miniCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 80);
   miniCamera.position.set(0, 6, 6);
-  if (hideLocalHead) {
-    miniCamera.layers.enable(1);
-  }
-  if (hideLocalBody) {
-    miniCamera.layers.enable(2);
-  }
+  const applyLocalVisibilityLayers = ({
+    hideHead,
+    hideBody,
+  }: {
+    hideHead: boolean;
+    hideBody: boolean;
+  }) => {
+    if (hideHead) {
+      miniCamera.layers.enable(1);
+    } else {
+      miniCamera.layers.disable(1);
+    }
+    if (hideBody) {
+      miniCamera.layers.enable(2);
+    } else {
+      miniCamera.layers.disable(2);
+    }
+  };
+  applyLocalVisibilityLayers({
+    hideHead: hideLocalHead,
+    hideBody: hideLocalBody,
+  });
 
   const miniViewport = { size: 0, margin: 14 };
   const cameraTarget = new THREE.Vector3();
@@ -80,13 +96,17 @@ export const createPlayerCameraRig = ({
     miniLookUpOffset,
     headBone,
   }: UpdatePlayerCameraRigArgs) => {
+    const fallbackEyeY = avatar.position.y + eyeHeight;
     if (followHeadBone && headBone) {
       headBone.getWorldPosition(headWorldTarget);
       cameraTarget.copy(headWorldTarget);
+      if (cameraTarget.y < fallbackEyeY) {
+        cameraTarget.y = fallbackEyeY;
+      }
     } else {
       cameraTarget.set(
         avatar.position.x,
-        avatar.position.y + eyeHeight,
+        fallbackEyeY,
         avatar.position.z
       );
     }
@@ -162,6 +182,19 @@ export const createPlayerCameraRig = ({
     updateMiniViewport(mount.clientWidth, mount.clientHeight);
   };
 
+  const setLocalVisibility = ({
+    hideLocalHead: nextHideLocalHead,
+    hideLocalBody: nextHideLocalBody,
+  }: {
+    hideLocalHead: boolean;
+    hideLocalBody: boolean;
+  }) => {
+    applyLocalVisibilityLayers({
+      hideHead: nextHideLocalHead,
+      hideBody: nextHideLocalBody,
+    });
+  };
+
   return {
     camera,
     miniCamera,
@@ -170,5 +203,6 @@ export const createPlayerCameraRig = ({
     resize,
     setMiniMapVisible,
     updateMiniViewport,
+    setLocalVisibility,
   };
 };

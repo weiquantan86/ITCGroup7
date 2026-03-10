@@ -12,6 +12,10 @@ import {
   mochiSoldierProfile,
 } from "../../../asset/entity/monster/mochiSoldier/profile";
 import { createMochiSoldierDeathFxRuntime } from "../../../asset/entity/monster/mochiSoldier/runtime";
+import {
+  applyDamageToSlimluThreatOrPlayer,
+  resolveSlimluThreatTargetForEnemy,
+} from "../../../asset/entity/character/slimlu/threatRegistry";
 import { createSceneResourceTracker } from "../../../asset/scenes/general/resourceTracker";
 import { createMochiStreetScene } from "../../../asset/scenes/mochiStreet/sceneDefinition";
 import type {
@@ -984,19 +988,28 @@ export const createMochiSoldierSurgeScene = (
 
       let isMoving = false;
       if (!gameEnded) {
+        const resolvedTarget = resolveSlimluThreatTargetForEnemy({
+          fallbackTarget: player,
+          enemyObject: entry.anchor,
+        });
         const detectRange = entry.monster.stats.aggroRange;
-        let distance = entry.monster.distanceTo(player);
+        let distance = entry.monster.distanceTo(resolvedTarget);
         if (distance <= detectRange) {
           if (distance > entry.monster.stats.attackRange + 0.15) {
-            const movedDistance = navigateTowardPlayer(entry, player, now, delta);
-            distance = entry.monster.distanceTo(player);
+            const movedDistance = navigateTowardPlayer(
+              entry,
+              resolvedTarget,
+              now,
+              delta
+            );
+            distance = entry.monster.distanceTo(resolvedTarget);
             isMoving = movedDistance > 0.0001;
           } else {
             clearEntryPath(entry);
           }
 
-          entry.monster.faceTarget(player);
-          player.getWorldPosition(navTargetScratch);
+          entry.monster.faceTarget(resolvedTarget);
+          resolvedTarget.getWorldPosition(navTargetScratch);
           const canMeleeAttack = !isSegmentBlocked(
             entry.anchor.position.x,
             entry.anchor.position.z,
@@ -1009,7 +1022,11 @@ export const createMochiSoldierSurgeScene = (
             canMeleeAttack &&
             now - entry.lastAttackAt >= mochiSoldierCombatConfig.attackCooldownMs
           ) {
-            applyDamage(entry.monster.stats.attack);
+            applyDamageToSlimluThreatOrPlayer({
+              target: resolvedTarget,
+              amount: entry.monster.stats.attack,
+              applyPlayerDamage: applyDamage,
+            });
             entry.lastAttackAt = now;
           }
         } else {

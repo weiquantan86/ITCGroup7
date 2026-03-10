@@ -16,6 +16,10 @@ export interface CharacterFacing {
 
 export type SkillKey = "q" | "e" | "r";
 
+export type SkillHudIndicator = "detonation-ready";
+
+export type SkillHudIndicators = Partial<Record<SkillKey, SkillHudIndicator>>;
+
 export type SlashShape = "fan" | "rect" | "cube";
 
 export interface SlashEffectConfig {
@@ -75,6 +79,8 @@ export interface CharacterCameraConfig {
   miniBehindDistance?: number;
   miniUpDistance?: number;
   miniLookUpOffset?: number;
+  hideLocalHead?: boolean;
+  hideLocalBody?: boolean;
 }
 
 export interface SkillDefinition {
@@ -139,6 +145,23 @@ export interface CharacterRuntimeTickArgs {
   delta: number;
   isMoving: boolean;
   isSprinting: boolean;
+}
+
+export type RuntimeAttackSource = "projectile" | "slash";
+
+export interface RuntimeAttackHit {
+  now: number;
+  source: RuntimeAttackSource;
+  damage: number;
+  point: THREE.Vector3;
+  direction: THREE.Vector3;
+}
+
+export interface RuntimeAttackTarget {
+  id: string;
+  object: THREE.Object3D;
+  isActive?: () => boolean;
+  onHit: (hit: RuntimeAttackHit) => void;
 }
 
 export type ProjectileRemoveReason = "impact" | "expired" | "cleared";
@@ -296,10 +319,12 @@ export interface CharacterRuntime {
   handleProjectileBlockHit?: ProjectileBlockHitHandler;
   getMovementSpeedMultiplier?: () => number;
   getCameraScaleMultiplier?: () => number;
+  getCameraFollowTarget?: () => THREE.Object3D | null;
   isBasicAttackLocked?: () => boolean;
   isMovementLocked?: () => boolean;
   getSkillCooldownRemainingMs?: (key: SkillKey) => number | null;
   getSkillCooldownDurationMs?: (key: SkillKey) => number | null;
+  getSkillHudIndicators?: () => SkillHudIndicators | null;
   beforeSkillUse?: (args: {
     key: SkillKey;
     now: number;
@@ -338,6 +363,7 @@ export interface CharacterRuntimeFactory {
     spendMana?: (amount: number) => number;
     clearSkillCooldown?: (key: SkillKey) => void;
     getCurrentStats?: () => CharacterStats;
+    getAttackTargets?: () => RuntimeAttackTarget[];
   }): CharacterRuntime;
 }
 

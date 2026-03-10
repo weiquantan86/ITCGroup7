@@ -60,8 +60,8 @@
       "chance": 0.005,
       "reward": {
         "type": "character",
-        "characterId": "carrot",
-        "name": "Carrot",
+        "characterId": "catron",
+        "name": "Catron",
         "count": 1,
         "icon": "CHAR"
       }
@@ -132,12 +132,12 @@
       "chance": 1,
       "reward": {
         "type": "character",
-        "characterId": "adam",
-        "name": "Adam",
+        "characterId": "dakota",
+        "name": "Dakota",
         "count": 1,
         "icon": "CHAR"
       }
     }
   ],
-  "updatedAt": "2026-03-07T03:16:14.937Z"
+  "updatedAt": "2026-03-10T10:14:52.939Z"
 }

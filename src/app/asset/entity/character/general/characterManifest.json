@@ -1,0 +1,46 @@
+{
+  "characters": [
+    {
+      "id": "adam",
+      "label": "Adam",
+      "rarity": "common",
+      "starter": true
+    },
+    {
+      "id": "baron",
+      "label": "Baron",
+      "rarity": "rare",
+      "starter": false
+    },
+    {
+      "id": "catron",
+      "label": "Catron",
+      "rarity": "common",
+      "starter": false
+    },
+    {
+      "id": "dakota",
+      "label": "Dakota",
+      "rarity": "rare",
+      "starter": false
+    },
+    {
+      "id": "flare",
+      "label": "Flare",
+      "rarity": "epic",
+      "starter": true
+    },
+    {
+      "id": "harper",
+      "label": "Harper",
+      "rarity": "epic",
+      "starter": false
+    },
+    {
+      "id": "slimlu",
+      "label": "Slimlu",
+      "rarity": "common",
+      "starter": true
+    }
+  ]
+}

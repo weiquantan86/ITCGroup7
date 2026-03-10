@@ -1,5 +1,9 @@
 import * as THREE from "three";
 import type { PlayerAttackTarget } from "../../character/general/player";
+import {
+  applyDamageToSlimluThreatOrPlayer,
+  resolveSlimluThreatTargetForEnemy,
+} from "../../character/slimlu/threatRegistry";
 import { Monster } from "../general";
 import { mochiSoldierProfile } from "./profile";
 import {
@@ -185,14 +189,23 @@ export const createMochiSoldierLifecycle = ({
           removeEntry(entry, true);
           continue;
         }
+        const resolvedTarget = resolveSlimluThreatTargetForEnemy({
+          fallbackTarget: player,
+          enemyObject: entry.anchor,
+        });
         tickMochiSoldierCombat({
           entry,
           now,
           delta,
-          player,
+          player: resolvedTarget,
           gameEnded: isGameEnded(),
           isBlocked,
-          applyDamage,
+          applyDamage: (amount) =>
+            applyDamageToSlimluThreatOrPlayer({
+              target: resolvedTarget,
+              amount,
+              applyPlayerDamage: applyDamage,
+            }),
         });
       }
       summonFxRuntime.update(delta);

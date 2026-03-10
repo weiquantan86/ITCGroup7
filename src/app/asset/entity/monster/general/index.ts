@@ -39,7 +39,7 @@ export type MonsterBehavior = (args: {
 const defaultMonsterStats: MonsterStats = {
   health: 80,
   attack: 8,
-  defense: 2,
+  defense: 0.0,
   speed: 1.6,
   aggroRange: 10,
   attackRange: 1.6,
@@ -89,10 +89,11 @@ export class Monster {
     this.model = model;
     this.profile = profile;
     this.stats = resolveMonsterStats(profile);
+    const defenseRatio = THREE.MathUtils.clamp(this.stats.defense, 0, 1);
     this.hp = new HpPool({
       max: this.stats.health,
       current: this.stats.health,
-      resolveDamage: ({ amount }) => Math.max(0, amount - this.stats.defense),
+      resolveDamage: ({ amount }) => Math.max(0, amount * (1 - defenseRatio)),
     });
     this.behavior = behavior;
 

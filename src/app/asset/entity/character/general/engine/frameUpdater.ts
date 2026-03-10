@@ -281,6 +281,7 @@ export const createPlayerFrameUpdater = ({
     }
 
     const cameraScaleMultiplier = getCameraScaleMultiplier(runtime);
+    const runtimeCameraFollowTarget = runtime?.getCameraFollowTarget?.() ?? null;
     const cameraLookDir = cameraRig.update({
       avatar,
       eyeHeight: visualState.eyeHeight * cameraScaleMultiplier,
@@ -288,12 +289,13 @@ export const createPlayerFrameUpdater = ({
       miniOrbitYawOffset,
       miniOrbitPitchOffset,
       miniOrbitDistanceOffset,
-      followHeadBone: statsState.cameraConfig.followHeadBone,
+      followHeadBone:
+        Boolean(runtimeCameraFollowTarget) || statsState.cameraConfig.followHeadBone,
       miniBehindDistance:
         statsState.cameraConfig.miniBehindDistance * cameraScaleMultiplier,
       miniUpDistance: statsState.cameraConfig.miniUpDistance * cameraScaleMultiplier,
       miniLookUpOffset: statsState.cameraConfig.miniLookUpOffset * cameraScaleMultiplier,
-      headBone: visualState.headBone,
+      headBone: runtimeCameraFollowTarget ?? visualState.headBone,
     });
 
     runtime?.update({

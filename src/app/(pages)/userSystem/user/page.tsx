@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import pool from "../../../../database/client";
+import { ConnectionTimeoutWarning } from "./warning/ConnectionTimeoutWarning";
 
 type PanelProps = {
   children: ReactNode;
@@ -66,6 +67,33 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
+const isConnectionTimeoutError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+  const record = error as {
+    message?: unknown;
+    code?: unknown;
+    name?: unknown;
+    cause?: unknown;
+  };
+  const cause = record.cause as { message?: unknown; code?: unknown } | undefined;
+  const combined = [
+    record.message,
+    record.code,
+    record.name,
+    cause?.message,
+    cause?.code,
+  ]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    combined.includes("timeout") ||
+    combined.includes("etimedout") ||
+    combined.includes("connection terminated due to connection timeout")
+  );
+};
+
 export default async function UserPage() {
   const cookieStore = await cookies();
   const userIdValue = cookieStore.get("user_id")?.value;
@@ -91,7 +119,9 @@ export default async function UserPage() {
     username = userQuery.rows[0].username;
     isAuthorised = Boolean(userQuery.rows[0].is_authorised);
   } catch (error) {
-    console.error(error);
+    if (isConnectionTimeoutError(error)) {
+      return <ConnectionTimeoutWarning />;
+    }
     return <ErrorState message="Load failed: unable to read user information." />;
   }
 

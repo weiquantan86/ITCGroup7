@@ -1,9 +1,9 @@
 import type { CharacterProfile } from "../general/types";
 
 export const profile: CharacterProfile = {
-  id: "carrot",
-  label: "Carrot",
-  pathToken: "/carrot/",
+  id: "catron",
+  label: "Catron",
+  pathToken: "/catron/",
   energy: {
     passivePerSecond: 0,
     movingPerSecond: 0,

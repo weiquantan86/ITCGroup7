@@ -27,7 +27,7 @@ const legTrackPattern = /shoe|leg|foot/i;
 const primaryHoldActivationMs = 180;
 const primaryHoldTickIntervalMs = 1000;
 const primaryHoldStaminaCostPerSecond = 20;
-const skillQMinManaToCast = 100;
+const skillQMinEnergyToCast = 100;
 const basicAttackHitManaGain = 4.5;
 const burnDamageEnergyGain = 5;
 const primaryHoldBaseDamagePerTick = 20;
@@ -113,6 +113,7 @@ const secondaryBurnSwingTrailLifetimeMs = 420;
 const secondaryBurnSwingTrailMinDistance = 0.008;
 const secondaryBurnSwingTrailMaxDistance = 2.4;
 const secondaryBurnSwingTrailSpawnIntervalMs = 8;
+const superBurnSwingTrailSpawnIntervalMs = 22;
 const secondaryBurnFlameBaseHeight = 0.42;
 const secondaryBurnSwingTrailVisualMinDistance = 0.22;
 const secondaryBurnSwingTrailMinLengthScale = 0.92;
@@ -130,6 +131,7 @@ const superBurnLightIntensityMultiplier = 1.7;
 const superBurnComboChainTriggerProgress = 0.72;
 const superBurnBasicAttackDamage = 40;
 const superBurnBasicAttackBurnStacks = 2;
+const superBurnBasicAttackHitIntervalMs = 72;
 const superBurnThirdAttackHitStart = 0.04;
 const superBurnThirdAttackHitEnd = 0.94;
 const superBurnThirdAttackCollisionRadius = 1.48;
@@ -935,7 +937,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   applyEnergy,
   applyMana,
   spendStamina,
-  spendMana,
+  spendEnergy,
   getCurrentStats,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
@@ -1010,6 +1012,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const superBurnSkillRFanDirection = new THREE.Vector3();
   const superBurnSkillRFanFlowDirection = new THREE.Vector3();
   const secondaryBurnSwingTrailDirection = new THREE.Vector3();
+  const attackSweepDirection = new THREE.Vector3();
   const primaryHoldAttackDirection = new THREE.Vector3();
   const primaryHoldReflectCenterWorld = new THREE.Vector3();
   const primaryHoldReflectLocalPosition = new THREE.Vector3();
@@ -2505,45 +2508,61 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const activeSuperBurnFlamePools: SuperBurnFlamePoolEntry[] = [];
+  const inactiveSuperBurnFlamePools: SuperBurnFlamePoolEntry[] = [];
 
-  const clearSuperBurnFlamePoolEntry = (index: number) => {
-    const entry = activeSuperBurnFlamePools[index];
-    if (!entry) return;
+  const resetSuperBurnFlamePoolEntry = (entry: SuperBurnFlamePoolEntry) => {
+    entry.root.visible = false;
     entry.root.removeFromParent();
-    entry.coreMaterial.dispose();
-    entry.ringMaterial.dispose();
-    entry.glowMaterial.dispose();
+    entry.root.position.set(0, 0, 0);
+    entry.root.rotation.set(0, 0, 0);
+    entry.root.scale.setScalar(1);
+    entry.center.set(0, 0, 0);
+    entry.direction.set(0, 0, 1);
+    entry.radius = superBurnThirdAttackPoolRadius;
+    entry.startedAt = 0;
+    entry.expiresAt = 0;
+    entry.nextTickAt = 0;
+    entry.phase = 0;
+
+    entry.core.position.set(0, 0.01, 0);
+    entry.core.rotation.set(-Math.PI * 0.5, 0, 0);
+    entry.core.scale.setScalar(1);
+    entry.coreMaterial.opacity = 0;
+
+    entry.ring.position.set(0, 0.012, 0);
+    entry.ring.rotation.set(-Math.PI * 0.5, 0, 0);
+    entry.ring.scale.setScalar(1);
+    entry.ringMaterial.opacity = 0;
+
+    entry.glow.position.set(0, 0.08, 0);
+    entry.glow.rotation.set(0, 0, 0);
+    entry.glow.scale.set(2, 0.45, 2);
+    entry.glowMaterial.opacity = 0;
+
+    entry.light.position.set(0, 0.32, 0);
+    entry.light.intensity = 0;
+    entry.light.distance = 0;
+
     for (let i = 0; i < entry.flames.length; i += 1) {
-      entry.flames[i].material.dispose();
+      const flame = entry.flames[i];
+      flame.mesh.visible = true;
+      flame.mesh.position.set(0, 0, 0);
+      flame.mesh.rotation.set(0, 0, 0);
+      flame.mesh.scale.copy(flame.baseScale);
+      flame.material.opacity = 0;
     }
     for (let i = 0; i < entry.sparks.length; i += 1) {
-      entry.sparks[i].material.dispose();
-    }
-    activeSuperBurnFlamePools.splice(index, 1);
-  };
-
-  const clearAllSuperBurnFlamePools = () => {
-    for (let i = activeSuperBurnFlamePools.length - 1; i >= 0; i -= 1) {
-      clearSuperBurnFlamePoolEntry(i);
+      const spark = entry.sparks[i];
+      spark.mesh.visible = false;
+      spark.mesh.position.set(0, 0, 0);
+      spark.mesh.rotation.set(0, 0, 0);
+      spark.mesh.scale.setScalar(1);
+      spark.material.opacity = 0;
     }
   };
 
-  const spawnSuperBurnThirdAttackFlamePool = (now: number) => {
-    if (!superBurnState.active) return;
-    const worldRoot = avatar.parent ?? avatar;
-    avatar.updateMatrixWorld(true);
-    avatar.getWorldPosition(superBurnFlamePoolSpawnCenter);
-    getAttackDirection(superBurnFlamePoolSpawnDirection);
-    superBurnFlamePoolSpawnCenter.addScaledVector(
-      superBurnFlamePoolSpawnDirection,
-      superBurnThirdAttackPoolForwardOffset
-    );
-    superBurnFlamePoolSpawnCenter.y += superBurnThirdAttackPoolGroundLift;
-
+  const createSuperBurnFlamePoolEntry = (): SuperBurnFlamePoolEntry => {
     const root = new THREE.Group();
-    root.position.copy(superBurnFlamePoolSpawnCenter);
-    worldRoot.add(root);
-
     const coreMaterial = new THREE.MeshBasicMaterial({
       color: 0xff6f1f,
       transparent: true,
@@ -2649,15 +2668,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
     );
 
-    activeSuperBurnFlamePools.push({
+    const entry: SuperBurnFlamePoolEntry = {
       root,
-      center: superBurnFlamePoolSpawnCenter.clone(),
-      direction: superBurnFlamePoolSpawnDirection.clone(),
+      center: new THREE.Vector3(),
+      direction: new THREE.Vector3(0, 0, 1),
       radius: superBurnThirdAttackPoolRadius,
-      startedAt: now,
-      expiresAt: now + superBurnThirdAttackPoolDurationMs,
-      nextTickAt: now + superBurnThirdAttackPoolTickMs,
-      phase: Math.random() * Math.PI * 2,
+      startedAt: 0,
+      expiresAt: 0,
+      nextTickAt: 0,
+      phase: 0,
       core,
       coreMaterial,
       ring,
@@ -2667,11 +2686,85 @@ export const createRuntime: CharacterRuntimeFactory = ({
       flames,
       sparks,
       light,
-    });
+    };
+    resetSuperBurnFlamePoolEntry(entry);
+    return entry;
+  };
 
-    while (activeSuperBurnFlamePools.length > superBurnThirdAttackPoolMaxActive) {
-      clearSuperBurnFlamePoolEntry(0);
+  const acquireSuperBurnFlamePoolEntry = () => {
+    const idle = inactiveSuperBurnFlamePools.pop();
+    if (idle) {
+      resetSuperBurnFlamePoolEntry(idle);
+      return idle;
     }
+    return createSuperBurnFlamePoolEntry();
+  };
+
+  const releaseSuperBurnFlamePoolEntry = (index: number) => {
+    const entry = activeSuperBurnFlamePools[index];
+    if (!entry) return;
+    activeSuperBurnFlamePools.splice(index, 1);
+    resetSuperBurnFlamePoolEntry(entry);
+    inactiveSuperBurnFlamePools.push(entry);
+  };
+
+  const clearAllSuperBurnFlamePools = () => {
+    for (let i = activeSuperBurnFlamePools.length - 1; i >= 0; i -= 1) {
+      releaseSuperBurnFlamePoolEntry(i);
+    }
+  };
+
+  const disposeSuperBurnFlamePoolEntry = (entry: SuperBurnFlamePoolEntry) => {
+    entry.root.removeFromParent();
+    entry.coreMaterial.dispose();
+    entry.ringMaterial.dispose();
+    entry.glowMaterial.dispose();
+    for (let i = 0; i < entry.flames.length; i += 1) {
+      entry.flames[i].material.dispose();
+    }
+    for (let i = 0; i < entry.sparks.length; i += 1) {
+      entry.sparks[i].material.dispose();
+    }
+  };
+
+  const disposeAllSuperBurnFlamePools = () => {
+    clearAllSuperBurnFlamePools();
+    for (let i = inactiveSuperBurnFlamePools.length - 1; i >= 0; i -= 1) {
+      disposeSuperBurnFlamePoolEntry(inactiveSuperBurnFlamePools[i]);
+    }
+    inactiveSuperBurnFlamePools.length = 0;
+  };
+
+  const spawnSuperBurnThirdAttackFlamePool = (now: number) => {
+    if (!superBurnState.active) return;
+    const worldRoot = avatar.parent ?? avatar;
+    avatar.updateMatrixWorld(true);
+    avatar.getWorldPosition(superBurnFlamePoolSpawnCenter);
+    getAttackDirection(superBurnFlamePoolSpawnDirection);
+    superBurnFlamePoolSpawnCenter.addScaledVector(
+      superBurnFlamePoolSpawnDirection,
+      superBurnThirdAttackPoolForwardOffset
+    );
+    superBurnFlamePoolSpawnCenter.y += superBurnThirdAttackPoolGroundLift;
+
+    while (activeSuperBurnFlamePools.length >= superBurnThirdAttackPoolMaxActive) {
+      releaseSuperBurnFlamePoolEntry(0);
+    }
+
+    const entry = acquireSuperBurnFlamePoolEntry();
+    entry.root.position.copy(superBurnFlamePoolSpawnCenter);
+    entry.root.visible = true;
+    worldRoot.add(entry.root);
+
+    entry.center.copy(superBurnFlamePoolSpawnCenter);
+    entry.direction.copy(superBurnFlamePoolSpawnDirection);
+    entry.radius = superBurnThirdAttackPoolRadius;
+    entry.startedAt = now;
+    entry.expiresAt = now + superBurnThirdAttackPoolDurationMs;
+    entry.nextTickAt = now + superBurnThirdAttackPoolTickMs;
+    entry.phase = Math.random() * Math.PI * 2;
+
+    activeSuperBurnFlamePools.push(entry);
   };
 
   const updateSuperBurnFlamePools = (now: number) => {
@@ -2680,7 +2773,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     for (let i = activeSuperBurnFlamePools.length - 1; i >= 0; i -= 1) {
       const entry = activeSuperBurnFlamePools[i];
       if (!entry.root.parent || now >= entry.expiresAt) {
-        clearSuperBurnFlamePoolEntry(i);
+        releaseSuperBurnFlamePoolEntry(i);
         continue;
       }
 
@@ -2949,6 +3042,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let lastAnimationUpdateAt = 0;
   let lastCompletedAttackIndex = -1;
   let lastCompletedAttackAt = -Infinity;
+  let runtimeFrameStamp = 0;
+  let boundWeaponMatrixFrameStamp = -1;
 
   const attackState = {
     active: false,
@@ -2963,6 +3058,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     superThirdPoolHasWeaponSample: false,
     superThirdPoolPeakWeaponY: 0,
     superThirdPoolPreviousWeaponY: 0,
+    nextHitAt: 0,
   };
 
   const primaryHoldState = {
@@ -3034,15 +3130,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
     endsAt: 0,
   };
 
-  const getCurrentMana = () => getCurrentStats?.().mana ?? 0;
+  const getCurrentEnergy = () => getCurrentStats?.().energy ?? 0;
 
-  const canCastSkillQByMana = () => getCurrentMana() + 0.0001 >= skillQMinManaToCast;
+  const canCastSkillQByEnergy = () =>
+    getCurrentEnergy() + 0.0001 >= skillQMinEnergyToCast;
 
-  const consumeAllMana = () => {
-    if (!spendMana) return;
-    const mana = getCurrentMana();
-    if (mana <= 0) return;
-    spendMana(mana);
+  const consumeAllEnergy = () => {
+    if (!spendEnergy) return;
+    const energy = getCurrentEnergy();
+    if (energy <= 0) return;
+    spendEnergy(energy);
   };
 
   const grantEnergyFromBurnDamage = () => {
@@ -3519,6 +3616,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     opacityScale = 1,
     glowOpacityScale = opacityScale,
     ignoreSpawnInterval = false,
+    spawnIntervalMs,
     suppressHoldBoost = false,
   }: {
     start: THREE.Vector3;
@@ -3529,11 +3627,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
     opacityScale?: number;
     glowOpacityScale?: number;
     ignoreSpawnInterval?: boolean;
+    spawnIntervalMs?: number;
     suppressHoldBoost?: boolean;
   }) => {
+    const resolvedSpawnIntervalMs = Math.max(
+      0,
+      spawnIntervalMs ?? secondaryBurnSwingTrailSpawnIntervalMs
+    );
     if (
       !ignoreSpawnInterval &&
-      now - secondaryBurnSwingTrailLastSpawnAt < secondaryBurnSwingTrailSpawnIntervalMs
+      now - secondaryBurnSwingTrailLastSpawnAt < resolvedSpawnIntervalMs
     ) {
       return;
     }
@@ -3746,6 +3849,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     attackState.superThirdPoolHasWeaponSample = false;
     attackState.superThirdPoolPeakWeaponY = 0;
     attackState.superThirdPoolPreviousWeaponY = 0;
+    attackState.nextHitAt = 0;
   };
 
   const resetPrimaryHoldState = () => {
@@ -3840,6 +3944,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     boundBurningModeSurface = null;
     boundBurningModeAnchor = null;
     boundWeapon = null;
+    boundWeaponMatrixFrameStamp = -1;
     boundWeaponMeshes = [];
     lastAnimationUpdateAt = 0;
     resetAttackState();
@@ -3871,6 +3976,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       ? findDominantSkinBone(boundBurningModeSurface) ?? boundBurningModeSurface
       : boundBurningModeSurface;
     boundWeapon = findWeaponNode(model);
+    boundWeaponMatrixFrameStamp = -1;
     boundWeaponMeshes = findWeaponMeshes(model);
     mixer = new THREE.AnimationMixer(model);
 
@@ -4020,7 +4126,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     target: THREE.Vector3
   ) => {
     if (!boundWeapon) return false;
-    boundWeapon.updateMatrixWorld(true);
+    if (boundWeaponMatrixFrameStamp !== runtimeFrameStamp) {
+      boundWeapon.updateMatrixWorld(true);
+      boundWeaponMatrixFrameStamp = runtimeFrameStamp;
+    }
     target.copy(localPoint);
     boundWeapon.localToWorld(target);
     if (!Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.z)) {
@@ -4100,7 +4209,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const contactHitRadius = config.collisionRadius * flareWeaponContactRadiusScale;
     const sweepDirection =
       sweepDistance > 0.0001
-        ? swingDelta.clone().divideScalar(sweepDistance)
+        ? attackSweepDirection.copy(swingDelta).multiplyScalar(1 / sweepDistance)
         : attackDirection;
     const burnStackCount = superBurnState.active ? superBurnBasicAttackBurnStacks : 1;
     const burnApplicationMode = "direct";
@@ -4125,11 +4234,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
       : undefined;
 
     if (secondaryBurnState.active) {
+      const trailSpawnInterval = superBurnState.active
+        ? superBurnSwingTrailSpawnIntervalMs
+        : secondaryBurnSwingTrailSpawnIntervalMs;
       spawnSecondaryBurnSwingTrail({
         start: previousWeaponWorldPosition,
         end: currentWeaponWorldPosition,
         now,
         fallbackDirection: attackDirection,
+        spawnIntervalMs: trailSpawnInterval,
       });
     }
 
@@ -4139,7 +4252,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         maxDistance: clampedSweepDistance,
         hitRadius: sweepHitRadius,
         maxHits: config.maxHits,
-        origin: previousWeaponWorldPosition.clone(),
+        origin: previousWeaponWorldPosition,
         direction: sweepDirection,
         excludeTargetIds: hitTargetIds,
         onHitTarget: (targetId) => {
@@ -4156,7 +4269,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       performMeleeAttack({
         damage: config.damage,
         maxDistance: 0.001,
-        contactCenter: center.clone(),
+        contactCenter: center,
         contactRadius: radius,
         maxHits: config.maxHits,
         direction: attackDirection,
@@ -4214,6 +4327,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     attackState.superThirdPoolHasWeaponSample = false;
     attackState.superThirdPoolPeakWeaponY = 0;
     attackState.superThirdPoolPreviousWeaponY = 0;
+    attackState.nextHitAt = 0;
 
     return playActionBinding(binding);
   };
@@ -5599,13 +5713,23 @@ export const createRuntime: CharacterRuntimeFactory = ({
       if (!attackState.hasWeaponSample) {
         sampleWeaponPosition(attackState);
       }
-      applyWeaponSweepHit(
-        binding.config,
-        attackState.hitTargetIds,
-        undefined,
-        now,
-        true
-      );
+      const shouldApplyHit =
+        attackState.comboVariant !== "super" ||
+        now + 0.001 >= attackState.nextHitAt;
+      if (shouldApplyHit) {
+        applyWeaponSweepHit(
+          binding.config,
+          attackState.hitTargetIds,
+          undefined,
+          now,
+          true
+        );
+        if (attackState.comboVariant === "super") {
+          attackState.nextHitAt = now + superBurnBasicAttackHitIntervalMs;
+        }
+      } else {
+        sampleWeaponPosition(attackState);
+      }
     } else {
       sampleWeaponPosition(attackState);
     }
@@ -7239,7 +7363,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const handleSkillQ = () => {
     const now = performance.now();
-    if (!canCastSkillQByMana()) {
+    if (!canCastSkillQByEnergy()) {
       return false;
     }
     if (
@@ -7255,7 +7379,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
     const started = startSkillQ(now);
     if (!started) return false;
-    consumeAllMana();
+    consumeAllEnergy();
     return true;
   };
 
@@ -7411,6 +7535,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const update = (args: CharacterRuntimeUpdate) => {
+    runtimeFrameStamp += 1;
     bindModel(args.avatarModel);
     if (args.aimOriginWorld) {
       latestAimOriginWorld.copy(args.aimOriginWorld);
@@ -7509,7 +7634,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       clearAnimationBinding();
       clearAllSkillRBurns();
       clearAllSkillRBurnExplosionFx();
-      clearAllSuperBurnFlamePools();
+      disposeAllSuperBurnFlamePools();
       primaryHoldReflectBlocker.removeFromParent();
       superBurnSkillRFanFxRoot.removeFromParent();
       secondaryBurnFlameGeometry.dispose();

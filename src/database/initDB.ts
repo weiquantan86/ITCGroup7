@@ -98,6 +98,37 @@ async function initDB() {
     console.log('Community comments table created or already exists');
 
     await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_type
+          WHERE typname = 'user_feedback_status'
+        ) THEN
+          CREATE TYPE user_feedback_status AS ENUM (
+            'not_started',
+            'validating',
+            'in_progress',
+            'in_valid',
+            'done'
+          );
+        END IF;
+      END
+      $$;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_feedback (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status user_feedback_status NOT NULL,
+        report_date TIMESTAMPTZ NOT NULL,
+        settle_date TIMESTAMPTZ
+      );
+    `);
+    console.log('User feedback table created or already exists');
+
+    await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_community_comments_user_id
       ON community_comments (user_id);
     `);
