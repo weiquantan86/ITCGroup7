@@ -46,6 +46,18 @@ export default async function AdminPage() {
           >
             Gacha Manager
           </Link>
+          <Link
+            href="/admin/comment"
+            className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 transition-colors hover:bg-slate-700"
+          >
+            Community
+          </Link>
+          <Link
+            href="/admin/feedback"
+            className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 transition-colors hover:bg-slate-700"
+          >
+            Feedback
+          </Link>
         </section>
       </main>
     </div>

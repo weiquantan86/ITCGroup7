@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
+import EmailLauncher from "@/app/components/email/EmailLauncher";
 import pool from "../../../../database/client";
 import { ConnectionTimeoutWarning } from "./warning/ConnectionTimeoutWarning";
 
@@ -136,28 +137,31 @@ export default async function UserPage() {
         <div className="h-full w-full rounded-[36px] border border-white/10 bg-white/[0.03] py-10 px-12 shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md lg:py-12 lg:px-14">
           <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[1fr_1.5fr_1fr] lg:grid-rows-[280px_minmax(0,1fr)] xl:grid-rows-[320px_minmax(0,1fr)]">
             <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
-              <div className="flex h-full items-center justify-center gap-3 text-base text-slate-200/90">
-                <span className="h-2.5 w-2.5 rounded-full bg-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.7)]" />
-                <span className="inline-flex items-center text-center text-2xl font-semibold tracking-wide md:text-3xl">
-                  {username}
-                  {isAuthorised ? (
-                    <span className="ml-2.5 inline-flex h-8 w-8 items-center justify-center">
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-8 w-8 drop-shadow-[0_0_10px_rgba(251,191,36,0.95)]"
-                        aria-label="Authorised"
-                        role="img"
-                      >
-                        <path
-                          d="M12 2.6l2.75 5.57 6.15.9-4.45 4.34 1.05 6.13L12 16.66l-5.5 2.88 1.05-6.13L3.1 9.07l6.15-.9L12 2.6z"
-                          fill="#facc15"
-                          stroke="#fff7cc"
-                          strokeWidth="1.5"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </span>
-                  ) : null}
+              <div className="grid h-full min-h-0 grid-cols-[auto_1fr] items-center gap-4">
+                <EmailLauncher username={username} />
+                <span className="flex min-w-0 items-center justify-center gap-3 text-base text-slate-200/90">
+                  <span className="h-2.5 w-2.5 rounded-full bg-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.7)]" />
+                  <span className="inline-flex items-center text-center text-2xl font-semibold tracking-wide md:text-3xl">
+                    {username}
+                    {isAuthorised ? (
+                      <span className="ml-2.5 inline-flex h-8 w-8 items-center justify-center">
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-8 w-8 drop-shadow-[0_0_10px_rgba(251,191,36,0.95)]"
+                          aria-label="Authorised"
+                          role="img"
+                        >
+                          <path
+                            d="M12 2.6l2.75 5.57 6.15.9-4.45 4.34 1.05 6.13L12 16.66l-5.5 2.88 1.05-6.13L3.1 9.07l6.15-.9L12 2.6z"
+                            fill="#facc15"
+                            stroke="#fff7cc"
+                            strokeWidth="1.5"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                    ) : null}
+                  </span>
                 </span>
               </div>
 
@@ -183,7 +187,7 @@ export default async function UserPage() {
             <Panel className="flex h-full items-center justify-between gap-10 px-10 py-8">
               <div className="h-14 w-14 rounded-full border border-white/20 bg-white/10 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
               <div className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-center text-6xl font-semibold italic tracking-[0.16em] text-transparent md:text-7xl">
-                Lab 7.5
+                Strike!
               </div>
               <div className="h-14 w-14 rounded-full border border-white/20 bg-white/10 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
             </Panel>

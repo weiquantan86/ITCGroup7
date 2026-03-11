@@ -129,8 +129,36 @@ async function initDB() {
     console.log('User feedback table created or already exists');
 
     await pool.query(`
+      ALTER TABLE user_feedback
+      ADD COLUMN IF NOT EXISTS description TEXT;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_email (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        reward TEXT,
+        send_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        is_read BOOLEAN NOT NULL DEFAULT FALSE
+      );
+    `);
+    console.log('User email table created or already exists');
+
+    await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_community_comments_user_id
       ON community_comments (user_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_email_user_id
+      ON user_email (user_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_email_send_date
+      ON user_email (send_date DESC);
     `);
 
     await pool.query(`
