@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { describeEmailRewardText } from "./rewardUtils";
 
 type EmailLauncherProps = {
   username: string;
+  initialHasUnreadEmail?: boolean;
 };
 
 type UserEmailItem = {
@@ -17,6 +17,8 @@ type UserEmailItem = {
   rewardLabel: string;
   sendDate: string;
   isRead: boolean;
+  hasClaimableReward: boolean;
+  canDelete: boolean;
 };
 
 type EmailListResponse = {
@@ -24,18 +26,40 @@ type EmailListResponse = {
   error?: string;
 };
 
+type ClaimedRewardMap = Record<string, number>;
+
 type EmailClaimResponse = {
   success?: boolean;
   claimed?: boolean;
   title?: string;
   rewardSummary?: string;
+  claimedRewards?: ClaimedRewardMap;
   message?: string;
+  canDelete?: boolean;
   error?: string;
+};
+
+type EmailMutationResponse = {
+  success?: boolean;
+  email?: {
+    id: number;
+    isRead: boolean;
+    canDelete: boolean;
+  };
+  deletedEmailId?: number;
+  error?: string;
+};
+
+type ClaimSuccessReward = {
+  key: string;
+  label: string;
+  amount: number;
 };
 
 type ClaimSuccessState = {
   emailTitle: string;
   rewardSummary: string;
+  rewards: ClaimSuccessReward[];
 };
 
 const formatDate = (value: string) => {
@@ -48,10 +72,33 @@ const formatDate = (value: string) => {
   ).padStart(2, "0")}`;
 };
 
-const hasReward = (item: UserEmailItem) =>
-  typeof item.reward === "string" && item.reward.trim().length > 0;
+const formatRewardLabel = (value: string) =>
+  value
+    .split("_")
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
 
-export default function EmailLauncher({ username }: EmailLauncherProps) {
+const toClaimSuccessRewards = (claimedRewards?: ClaimedRewardMap) => {
+  if (!claimedRewards || typeof claimedRewards !== "object") {
+    return [] as ClaimSuccessReward[];
+  }
+
+  return Object.entries(claimedRewards)
+    .map(([key, amount]) => ({
+      key,
+      label: formatRewardLabel(key),
+      amount: Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0,
+    }))
+    .filter((entry) => entry.amount > 0);
+};
+
+const hasReward = (item: UserEmailItem) => item.hasClaimableReward;
+
+export default function EmailLauncher({
+  username: _username,
+  initialHasUnreadEmail = false,
+}: EmailLauncherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [emails, setEmails] = useState<UserEmailItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -59,7 +106,11 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [claimingEmailId, setClaimingEmailId] = useState<number | null>(null);
+  const [markingReadEmailId, setMarkingReadEmailId] = useState<number | null>(null);
+  const [deletingEmailId, setDeletingEmailId] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [hasLoadedEmails, setHasLoadedEmails] = useState(false);
+  const [hasUnreadEmail, setHasUnreadEmail] = useState(initialHasUnreadEmail);
   const [claimSuccessState, setClaimSuccessState] = useState<ClaimSuccessState | null>(null);
 
   const selectedEmail = useMemo(
@@ -67,17 +118,24 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
     [emails, selectedEmailId]
   );
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedEmails) return;
+    setHasUnreadEmail(emails.some((item) => !item.isRead));
+  }, [emails, hasLoadedEmails]);
+
   const closeModal = () => {
     setIsOpen(false);
     setErrorMessage("");
     setStatusMessage("");
     setClaimingEmailId(null);
+    setMarkingReadEmailId(null);
+    setDeletingEmailId(null);
     setClaimSuccessState(null);
   };
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -109,6 +167,7 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
         }
 
         const list = Array.isArray(data.emails) ? data.emails : [];
+        setHasLoadedEmails(true);
         setEmails(list);
         setSelectedEmailId((previousId) => {
           if (previousId && list.some((item) => item.id === previousId)) {
@@ -139,6 +198,44 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
     };
   }, [isOpen]);
 
+  const handleMarkAsRead = async (email: UserEmailItem) => {
+    if (email.isRead || markingReadEmailId === email.id) return;
+
+    setMarkingReadEmailId(email.id);
+    try {
+      const response = await fetch(`/api/user/email/${email.id}`, {
+        method: "PATCH",
+      });
+      const data = (await response.json()) as EmailMutationResponse;
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to mark email as read.");
+      }
+
+      setEmails((previous) =>
+        previous.map((item) =>
+          item.id === email.id
+            ? {
+                ...item,
+                isRead: data.email?.isRead ?? true,
+                canDelete: item.canDelete || Boolean(data.email?.canDelete),
+              }
+            : item
+        )
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to mark email as read."
+      );
+    } finally {
+      setMarkingReadEmailId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen || !selectedEmail || selectedEmail.isRead) return;
+    void handleMarkAsRead(selectedEmail);
+  }, [isOpen, selectedEmail]);
+
   const handleClaimReward = async () => {
     if (!selectedEmail || !hasReward(selectedEmail)) return;
 
@@ -162,6 +259,11 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
                 reward: null,
                 rewardLabel: "No reward",
                 isRead: true,
+                hasClaimableReward: false,
+                canDelete:
+                  typeof data.canDelete === "boolean"
+                    ? data.canDelete
+                    : item.userId != null,
               }
             : item
         )
@@ -171,12 +273,11 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
         const rewardSummary = data.rewardSummary?.trim()
           ? data.rewardSummary
           : "Reward claimed successfully.";
-        setStatusMessage(
-          `Reward claimed: ${rewardSummary}`
-        );
+        setStatusMessage(`Reward claimed: ${rewardSummary}`);
         setClaimSuccessState({
           emailTitle: data.title?.trim() ? data.title : "System Mail",
           rewardSummary,
+          rewards: toClaimSuccessRewards(data.claimedRewards),
         });
       } else {
         setStatusMessage(data.message || "This email has no claimable reward.");
@@ -190,6 +291,48 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
     }
   };
 
+  const handleDeleteEmail = async () => {
+    if (!selectedEmail || !selectedEmail.canDelete || deletingEmailId != null) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete email "${selectedEmail.title || "Untitled"}"?`
+    );
+    if (!confirmed) return;
+
+    setDeletingEmailId(selectedEmail.id);
+    setErrorMessage("");
+    setStatusMessage("");
+    try {
+      const response = await fetch(`/api/user/email/${selectedEmail.id}`, {
+        method: "DELETE",
+      });
+      const data = (await response.json()) as EmailMutationResponse;
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to delete email.");
+      }
+
+      const currentIndex = emails.findIndex((item) => item.id === selectedEmail.id);
+      const nextEmails = emails.filter((item) => item.id !== selectedEmail.id);
+      const nextSelectedEmail =
+        nextEmails[currentIndex] ??
+        nextEmails[Math.max(0, currentIndex - 1)] ??
+        nextEmails[0] ??
+        null;
+
+      setEmails(nextEmails);
+      setSelectedEmailId(nextSelectedEmail?.id ?? null);
+      setStatusMessage("Email deleted.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to delete email."
+      );
+    } finally {
+      setDeletingEmailId(null);
+    }
+  };
+
   return (
     <>
       <button
@@ -198,6 +341,9 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
         aria-label="Open user email inbox"
         className="group relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[16px] border border-orange-200/35 bg-gradient-to-br from-orange-400/50 to-pink-500/40 text-orange-50 shadow-[0_10px_28px_rgba(251,146,60,0.34)] transition duration-200 hover:-translate-y-0.5 hover:brightness-110"
       >
+        {hasUnreadEmail ? (
+          <span className="absolute right-2.5 top-2.5 h-3.5 w-3.5 rounded-full border border-white/80 bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)]" />
+        ) : null}
         <svg
           viewBox="0 0 24 24"
           className="h-8 w-8 drop-shadow-[0_0_8px_rgba(253,186,116,0.7)] transition duration-200 group-hover:scale-105"
@@ -287,18 +433,30 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
                                 }`}
                               >
                                 <div className="min-w-0">
-                                  <p className="truncate text-xl font-semibold text-slate-100">
-                                    {item.title || "Untitled"}
-                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    {!item.isRead ? (
+                                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
+                                    ) : null}
+                                    <p className="truncate text-xl font-semibold text-slate-100">
+                                      {item.title || "Untitled"}
+                                    </p>
+                                  </div>
                                   <p className="mt-1 text-xs text-slate-400">
                                     Admin - {formatDate(item.sendDate)}
                                   </p>
                                 </div>
-                                {hasReward(item) ? (
-                                  <span className="ml-4 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-sky-200/70 text-2xl font-semibold text-sky-100">
-                                    G
-                                  </span>
-                                ) : null}
+                                <div className="ml-4 flex shrink-0 items-center gap-2">
+                                  {item.canDelete ? (
+                                    <span className="rounded-full border border-slate-300/30 bg-slate-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
+                                      Delete
+                                    </span>
+                                  ) : null}
+                                  {hasReward(item) ? (
+                                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-sky-200/70 text-2xl font-semibold text-sky-100">
+                                      G
+                                    </span>
+                                  ) : null}
+                                </div>
                               </button>
                             );
                           })
@@ -307,12 +465,33 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
                   </section>
 
                   <section className="grid min-h-0 grid-rows-[auto_1fr_auto] rounded-[34px] border border-white/20 bg-slate-950/35 p-4 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] md:p-6">
-                    <div className="border-b border-white/20 pb-3 text-center text-3xl font-semibold text-slate-100 md:text-4xl">
-                      {selectedEmail?.title || "Title"}
+                    <div className="border-b border-white/20 pb-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-center text-3xl font-semibold text-slate-100 md:text-4xl">
+                          {selectedEmail?.title || "Title"}
+                        </div>
+                        {selectedEmail ? (
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                              selectedEmail.isRead
+                                ? "border-slate-400/35 bg-slate-500/10 text-slate-200"
+                                : "border-red-400/35 bg-red-500/10 text-red-200"
+                            }`}
+                          >
+                            {markingReadEmailId === selectedEmail.id
+                              ? "Opening"
+                              : selectedEmail.isRead
+                                ? "Read"
+                                : "Unread"}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
 
                     <div className="min-h-0 overflow-y-auto py-4">
-                      <div className="text-2xl font-semibold text-slate-100 md:text-3xl">Description</div>
+                      <div className="text-2xl font-semibold text-slate-100 md:text-3xl">
+                        Description
+                      </div>
                       <p className="mt-3 whitespace-pre-wrap text-lg leading-relaxed text-slate-200/90">
                         {selectedEmail?.description?.trim()
                           ? selectedEmail.description
@@ -321,28 +500,42 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
                     </div>
 
                     {selectedEmail ? (
-                      hasReward(selectedEmail) ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleClaimReward()}
-                          disabled={claimingEmailId === selectedEmail.id}
-                          className="mt-2 flex min-h-[92px] w-full flex-col items-start justify-center rounded-[14px] border border-sky-300/70 bg-gradient-to-r from-sky-500/16 to-cyan-400/14 px-4 text-left transition hover:from-sky-500/22 hover:to-cyan-400/18 disabled:cursor-not-allowed disabled:opacity-70"
-                        >
-                          <span className="text-sm font-semibold uppercase tracking-wide text-sky-200">
-                            {claimingEmailId === selectedEmail.id
-                              ? "Claiming..."
-                              : "Click to claim reward"}
-                          </span>
-                          <span className="mt-1 text-base text-slate-100">
-                            {selectedEmail.rewardLabel ||
-                              describeEmailRewardText(selectedEmail.reward)}
-                          </span>
-                        </button>
-                      ) : (
-                        <div className="mt-2 flex min-h-[92px] w-full items-center rounded-[14px] border border-white/20 bg-white/[0.02] px-4 text-slate-400">
-                          No reward in this email.
-                        </div>
-                      )
+                      <div className="mt-2 flex flex-col gap-3">
+                        {hasReward(selectedEmail) ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleClaimReward()}
+                            disabled={claimingEmailId === selectedEmail.id}
+                            className="flex min-h-[92px] w-full flex-col items-start justify-center rounded-[14px] border border-sky-300/70 bg-gradient-to-r from-sky-500/16 to-cyan-400/14 px-4 text-left transition hover:from-sky-500/22 hover:to-cyan-400/18 disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            <span className="text-sm font-semibold uppercase tracking-wide text-sky-200">
+                              {claimingEmailId === selectedEmail.id
+                                ? "Claiming..."
+                                : "Click to claim reward"}
+                            </span>
+                            <span className="mt-1 text-base text-slate-100">
+                              {selectedEmail.rewardLabel || "Reward available"}
+                            </span>
+                          </button>
+                        ) : (
+                          <div className="flex min-h-[92px] w-full items-center rounded-[14px] border border-white/20 bg-white/[0.02] px-4 text-slate-400">
+                            No reward in this email.
+                          </div>
+                        )}
+
+                        {selectedEmail.canDelete ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteEmail()}
+                            disabled={deletingEmailId === selectedEmail.id}
+                            className="flex min-h-[60px] w-full items-center justify-center rounded-[14px] border border-slate-300/30 bg-slate-400/10 px-4 text-sm font-semibold uppercase tracking-wide text-slate-100 transition hover:bg-slate-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deletingEmailId === selectedEmail.id
+                              ? "Deleting..."
+                              : "Delete this email"}
+                          </button>
+                        ) : null}
+                      </div>
                     ) : (
                       <div className="mt-2 flex min-h-[92px] w-full items-center rounded-[14px] border border-white/20 bg-white/[0.02] px-4 text-slate-400">
                         Select an email from the left side.
@@ -379,6 +572,21 @@ export default function EmailLauncher({ username }: EmailLauncherProps) {
                       <div className="mt-4 rounded-lg border border-emerald-300/25 bg-emerald-500/10 px-4 py-3 text-slate-100">
                         Successfully received: {claimSuccessState.rewardSummary}
                       </div>
+                      {claimSuccessState.rewards.length > 0 ? (
+                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                          {claimSuccessState.rewards.map((reward) => (
+                            <div
+                              key={reward.key}
+                              className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-100"
+                            >
+                              <span>{reward.label}</span>
+                              <span className="font-semibold text-emerald-200">
+                                x{reward.amount}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       <div className="mt-5 flex justify-end">
                         <button
                           type="button"

@@ -45,7 +45,7 @@ const STATUS_COLORS: Record<string, string> = {
   not_started: "border-slate-500/40 bg-slate-500/15 text-slate-200",
   validating: "border-amber-400/40 bg-amber-400/15 text-amber-200",
   in_progress: "border-sky-400/40 bg-sky-400/15 text-sky-200",
-  in_valid: "border-rose-400/40 bg-rose-400/15 text-rose-200",
+  in_valid: "border-slate-400/40 bg-slate-400/15 text-slate-200",
   done: "border-emerald-400/40 bg-emerald-400/15 text-emerald-200",
 };
 

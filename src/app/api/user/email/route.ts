@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import pool from "../../../../database/client";
-import { describeEmailRewardText } from "@/app/components/email/rewardUtils";
+import {
+  describeEmailRewardText,
+  hasClaimableEmailReward,
+} from "@/app/components/email/rewardUtils";
 
 const parseUserIdFromCookie = async () => {
   const cookieStore = await cookies();
@@ -37,22 +40,29 @@ export async function GET() {
     );
 
     return NextResponse.json({
-      emails: result.rows.map((row) => ({
-        id: Number(row.id),
-        userId: row.user_id == null ? null : Number(row.user_id),
-        title: String(row.title ?? ""),
-        description:
-          typeof row.description === "string" ? row.description : "",
-        reward: typeof row.reward === "string" ? row.reward : null,
-        rewardLabel: describeEmailRewardText(
-          typeof row.reward === "string" ? row.reward : null
-        ),
-        sendDate:
-          row.send_date instanceof Date
-            ? row.send_date.toISOString()
-            : String(row.send_date ?? ""),
-        isRead: Boolean(row.is_read),
-      })),
+      emails: result.rows.map((row) => {
+        const rawReward =
+          typeof row.reward === "string" ? row.reward : null;
+        const isRead = Boolean(row.is_read);
+        const hasReward = hasClaimableEmailReward(rawReward);
+        const userIdValue = row.user_id == null ? null : Number(row.user_id);
+        return {
+          id: Number(row.id),
+          userId: userIdValue,
+          title: String(row.title ?? ""),
+          description:
+            typeof row.description === "string" ? row.description : "",
+          reward: rawReward,
+          rewardLabel: describeEmailRewardText(rawReward),
+          sendDate:
+            row.send_date instanceof Date
+              ? row.send_date.toISOString()
+              : String(row.send_date ?? ""),
+          isRead,
+          hasClaimableReward: hasReward,
+          canDelete: isRead && !hasReward && userIdValue === userId,
+        };
+      }),
     });
   } catch (error) {
     console.error(error);

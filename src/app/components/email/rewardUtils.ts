@@ -139,6 +139,10 @@ export const parseEmailRewardResources = (
   return hasAnyEmailReward(rewards) ? rewards : null;
 };
 
+export const hasClaimableEmailReward = (
+  rawReward: string | null | undefined
+) => parseEmailRewardResources(rawReward) != null;
+
 const toTitleCase = (value: string) =>
   value
     .split("_")

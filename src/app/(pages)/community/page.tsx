@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
 type CommentSort = "newest" | "oldest" | "username_asc" | "username_desc";
@@ -199,27 +198,17 @@ export default function CommunityPage() {
   };
 
   return (
-    <main className="min-h-screen w-full bg-[#060a11] text-slate-100">
+    <main className="min-h-screen w-full bg-[#060a11] font-sans text-slate-100">
       <div className="min-h-screen w-full bg-[radial-gradient(circle_at_16%_16%,rgba(34,211,238,0.2),transparent_38%),radial-gradient(circle_at_88%_20%,rgba(251,146,60,0.25),transparent_35%),linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[length:auto,auto,30px_30px,30px_30px]">
-        <div className="mx-auto w-full max-w-6xl px-4 py-10 md:px-6 lg:px-8">
-          <section className="rounded-[30px] border border-white/15 bg-slate-900/70 px-6 py-7 shadow-[0_0_42px_rgba(56,189,248,0.17)] backdrop-blur-md md:px-8">
+        <div className="mx-auto w-full max-w-[1720px] px-4 py-10 md:px-6 lg:px-8 xl:px-10 2xl:px-12">
+          <section className="rounded-[30px] border border-white/15 bg-slate-900/70 px-6 py-7 shadow-[0_0_42px_rgba(56,189,248,0.17)] backdrop-blur-md md:px-8 lg:px-10 lg:py-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-100 md:text-4xl">
+              <div>
+                <h1 className="text-4xl font-semibold tracking-tight text-slate-100 md:text-5xl">
                   Community
                 </h1>
-                <p className="max-w-3xl text-sm leading-6 text-slate-300 md:text-base">
-                  View player comments, sort/filter by different conditions, and submit
-                  bug reports for review.
-                </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link
-                  href="/userSystem/user"
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-slate-300/25 px-5 text-sm font-semibold text-slate-100 transition hover:border-slate-100/55 hover:bg-white/10"
-                >
-                  Back to User Home
-                </Link>
                 <button
                   type="button"
                   onClick={() => {
@@ -227,7 +216,7 @@ export default function CommunityPage() {
                     setReportError(null);
                     setReportSuccess(null);
                   }}
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-amber-300/35 bg-gradient-to-r from-amber-500/90 to-orange-500/85 px-5 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(251,146,60,0.35)] transition hover:brightness-110"
+                  className="inline-flex h-12 items-center justify-center rounded-full border border-red-300/35 bg-gradient-to-r from-rose-600/90 to-red-600/85 px-6 text-base font-semibold text-white shadow-[0_10px_28px_rgba(239,68,68,0.35)] transition hover:brightness-110"
                 >
                   Report gaming bug
                 </button>
@@ -235,14 +224,14 @@ export default function CommunityPage() {
             </div>
           </section>
 
-          <section className="mt-6 grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <aside className="rounded-[26px] border border-white/15 bg-slate-900/70 p-5 shadow-[0_0_34px_rgba(15,23,42,0.45)] backdrop-blur-md">
-              <h2 className="text-lg font-semibold text-slate-100">Sort & Filter</h2>
+          <section className="mt-6 grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)]">
+            <aside className="rounded-[26px] border border-white/15 bg-slate-900/70 p-5 shadow-[0_0_34px_rgba(15,23,42,0.45)] backdrop-blur-md md:p-6">
+              <h2 className="text-xl font-semibold text-slate-100 md:text-2xl">Sort & Filter</h2>
               <form className="mt-4 space-y-4" onSubmit={applyFilters}>
                 <div className="space-y-1.5">
                   <label
                     htmlFor="comment-keyword"
-                    className="text-xs font-semibold uppercase tracking-wide text-slate-300"
+                    className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300"
                   >
                     Keyword
                   </label>
@@ -253,14 +242,14 @@ export default function CommunityPage() {
                       setDraftFilters((prev) => ({ ...prev, keyword: event.target.value }))
                     }
                     placeholder="Search comment text"
-                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-300/50"
+                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/70 px-4 py-3 text-base text-slate-100 outline-none transition focus:border-cyan-300/50"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label
                     htmlFor="comment-username"
-                    className="text-xs font-semibold uppercase tracking-wide text-slate-300"
+                    className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300"
                   >
                     Username
                   </label>
@@ -271,14 +260,14 @@ export default function CommunityPage() {
                       setDraftFilters((prev) => ({ ...prev, username: event.target.value }))
                     }
                     placeholder="Filter by user"
-                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-300/50"
+                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/70 px-4 py-3 text-base text-slate-100 outline-none transition focus:border-cyan-300/50"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label
                     htmlFor="comment-days"
-                    className="text-xs font-semibold uppercase tracking-wide text-slate-300"
+                    className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300"
                   >
                     Time range
                   </label>
@@ -291,7 +280,7 @@ export default function CommunityPage() {
                         days: event.target.value as CommentDays,
                       }))
                     }
-                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-300/50"
+                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/70 px-4 py-3 text-base text-slate-100 outline-none transition focus:border-cyan-300/50"
                   >
                     <option value="all">All time</option>
                     <option value="1">Last 24 hours</option>
@@ -303,7 +292,7 @@ export default function CommunityPage() {
                 <div className="space-y-1.5">
                   <label
                     htmlFor="comment-sort"
-                    className="text-xs font-semibold uppercase tracking-wide text-slate-300"
+                    className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300"
                   >
                     Sort by
                   </label>
@@ -316,7 +305,7 @@ export default function CommunityPage() {
                         sort: event.target.value as CommentSort,
                       }))
                     }
-                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-300/50"
+                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/70 px-4 py-3 text-base text-slate-100 outline-none transition focus:border-cyan-300/50"
                   >
                     <option value="newest">Newest first</option>
                     <option value="oldest">Oldest first</option>
@@ -328,14 +317,14 @@ export default function CommunityPage() {
                 <div className="flex gap-2 pt-2">
                   <button
                     type="submit"
-                    className="inline-flex flex-1 items-center justify-center rounded-xl border border-cyan-300/35 bg-cyan-500/25 px-3 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/30"
+                    className="inline-flex flex-1 items-center justify-center rounded-xl border border-cyan-300/35 bg-cyan-500/25 px-4 py-3 text-base font-semibold text-cyan-100 transition hover:bg-cyan-400/30"
                   >
                     Apply
                   </button>
                   <button
                     type="button"
                     onClick={resetFilters}
-                    className="inline-flex flex-1 items-center justify-center rounded-xl border border-slate-300/25 bg-slate-800/70 px-3 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-700/80"
+                    className="inline-flex flex-1 items-center justify-center rounded-xl border border-slate-300/25 bg-slate-800/70 px-4 py-3 text-base font-semibold text-slate-200 transition hover:bg-slate-700/80"
                   >
                     Reset
                   </button>
@@ -343,12 +332,12 @@ export default function CommunityPage() {
               </form>
             </aside>
 
-            <section className="rounded-[26px] border border-white/15 bg-slate-900/70 p-5 shadow-[0_0_34px_rgba(15,23,42,0.45)] backdrop-blur-md md:p-6">
+            <section className="rounded-[26px] border border-white/15 bg-slate-900/70 p-5 shadow-[0_0_34px_rgba(15,23,42,0.45)] backdrop-blur-md md:p-6 lg:p-7">
               <form
-                className="mb-4 rounded-2xl border border-slate-200/15 bg-slate-950/60 p-4"
+                className="mb-5 rounded-2xl border border-slate-200/15 bg-slate-950/60 p-5"
                 onSubmit={submitComment}
               >
-                <label htmlFor="comment-draft" className="mb-2 block text-sm font-semibold text-slate-200">
+                <label htmlFor="comment-draft" className="mb-2 block text-base font-semibold text-slate-200 md:text-lg">
                   Write a comment
                 </label>
                 <textarea
@@ -358,51 +347,51 @@ export default function CommunityPage() {
                   rows={3}
                   maxLength={2000}
                   placeholder="Share your idea, feedback, or game experience..."
-                  className="w-full rounded-xl border border-slate-300/20 bg-slate-950/80 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-300/50"
+                  className="w-full rounded-xl border border-slate-300/20 bg-slate-950/80 px-4 py-3 text-base leading-7 text-slate-100 outline-none transition focus:border-cyan-300/50"
                 />
                 <div className="mt-3 flex items-center justify-between gap-3">
-                  <span className="text-xs text-slate-400">{commentDraft.trim().length}/2000</span>
+                  <span className="text-sm text-slate-400">{commentDraft.trim().length}/2000</span>
                   <button
                     type="submit"
                     disabled={commentSubmitting}
-                    className="inline-flex h-9 items-center justify-center rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 items-center justify-center rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-5 text-base font-semibold text-cyan-100 transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {commentSubmitting ? "Posting..." : "Post comment"}
                   </button>
                 </div>
                 {commentSubmitError ? (
-                  <p className="mt-2 rounded-lg border border-rose-300/35 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                  <p className="mt-2 rounded-lg border border-rose-300/35 bg-rose-500/10 px-3 py-2 text-base text-rose-200">
                     {commentSubmitError}
                   </p>
                 ) : null}
               </form>
 
               <div className="mb-4 flex items-center justify-between gap-4">
-                <h2 className="text-xl font-semibold text-slate-100">
+                <h2 className="text-2xl font-semibold text-slate-100 md:text-[1.75rem]">
                   Community comments
                 </h2>
                 <button
                   type="button"
                   onClick={() => void loadComments(activeFilters)}
                   disabled={commentsLoading}
-                  className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200/30 px-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200/30 px-4 text-base font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {commentsLoading ? "Loading..." : "Refresh"}
                 </button>
               </div>
 
               {commentsError ? (
-                <div className="rounded-xl border border-rose-300/35 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                <div className="rounded-xl border border-rose-300/35 bg-rose-500/10 px-4 py-3 text-base text-rose-200">
                   {commentsError}
                 </div>
               ) : null}
 
               {!commentsError && commentsLoading ? (
-                <p className="text-sm text-slate-300">Loading comments...</p>
+                <p className="text-base text-slate-300">Loading comments...</p>
               ) : null}
 
               {!commentsError && !commentsLoading && comments.length === 0 ? (
-                <div className="rounded-xl border border-slate-300/20 bg-slate-950/70 px-4 py-6 text-center text-sm text-slate-300">
+                <div className="rounded-xl border border-slate-300/20 bg-slate-950/70 px-4 py-6 text-center text-base text-slate-300">
                   No comments found for the current filters.
                 </div>
               ) : null}
@@ -412,17 +401,17 @@ export default function CommunityPage() {
                   {comments.map((item) => (
                     <li
                       key={item.id}
-                      className="rounded-2xl border border-slate-200/15 bg-slate-950/65 p-4"
+                      className="rounded-2xl border border-slate-200/15 bg-slate-950/65 p-5"
                     >
                       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                        <span className="inline-flex items-center rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-cyan-100">
+                        <span className="inline-flex items-center rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3.5 py-1.5 text-sm font-semibold tracking-wide text-cyan-100">
                           {item.username}
                         </span>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-sm text-slate-400">
                           {formatDateTime(item.commented_date)}
                         </span>
                       </div>
-                      <p className="whitespace-pre-wrap text-sm leading-6 text-slate-200">
+                      <p className="whitespace-pre-wrap text-base leading-7 text-slate-200 md:text-[1.05rem]">
                         {item.comment}
                       </p>
                     </li>
@@ -436,9 +425,9 @@ export default function CommunityPage() {
 
       {isReportModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[24px] border border-white/20 bg-slate-900/95 shadow-[0_0_42px_rgba(34,211,238,0.2)]">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[24px] border border-white/20 bg-slate-900/95 shadow-[0_0_42px_rgba(34,211,238,0.2)]">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-slate-900/95 px-5 py-4 backdrop-blur">
-              <h3 className="text-lg font-semibold text-slate-100">
+              <h3 className="text-xl font-semibold text-slate-100 md:text-2xl">
                 Report gaming bug
               </h3>
               <button
@@ -452,8 +441,8 @@ export default function CommunityPage() {
             </div>
 
             <div className="space-y-5 px-5 py-5">
-              <div className="rounded-xl border border-amber-300/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
-                <p className="font-semibold">Bug report reward rules</p>
+              <div className="rounded-xl border border-amber-300/30 bg-amber-500/10 p-4 text-base leading-7 text-amber-100">
+                <p className="font-semibold md:text-lg">Bug report reward rules</p>
                 <p className="mt-1">
                   Valid, reproducible, and non-duplicate game bugs can receive in-game
                   rewards after verification by the team.
@@ -469,7 +458,7 @@ export default function CommunityPage() {
                 <div className="space-y-1.5">
                   <label
                     htmlFor="bug-description"
-                    className="text-sm font-medium text-slate-200"
+                    className="text-base font-medium text-slate-200 md:text-lg"
                   >
                     Bug description
                   </label>
@@ -484,12 +473,12 @@ export default function CommunityPage() {
                     }
                     rows={4}
                     placeholder="What happened, and how does it affect gameplay?"
-                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/75 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-300/50"
+                    className="w-full rounded-xl border border-slate-300/20 bg-slate-950/75 px-4 py-3 text-base leading-7 text-slate-100 outline-none transition focus:border-cyan-300/50"
                     required
                   />
                 </div>
 
-                <label className="flex items-start gap-3 rounded-xl border border-slate-300/20 bg-slate-950/65 px-3 py-2.5 text-sm text-slate-200">
+                <label className="flex items-start gap-3 rounded-xl border border-slate-300/20 bg-slate-950/65 px-4 py-3 text-base leading-7 text-slate-200">
                   <input
                     type="checkbox"
                     checked={bugReportForm.rewardAcknowledged}
@@ -507,13 +496,13 @@ export default function CommunityPage() {
                 </label>
 
                 {reportError ? (
-                  <p className="rounded-lg border border-rose-300/35 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                  <p className="rounded-lg border border-rose-300/35 bg-rose-500/10 px-3 py-2 text-base text-rose-200">
                     {reportError}
                   </p>
                 ) : null}
 
                 {reportSuccess ? (
-                  <p className="rounded-lg border border-emerald-300/35 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+                  <p className="rounded-lg border border-emerald-300/35 bg-emerald-500/10 px-3 py-2 text-base text-emerald-200">
                     {reportSuccess}
                   </p>
                 ) : null}
@@ -522,14 +511,14 @@ export default function CommunityPage() {
                   <button
                     type="button"
                     onClick={() => setIsReportModalOpen(false)}
-                    className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300/25 px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                    className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300/25 px-5 text-base font-semibold text-slate-200 transition hover:bg-white/10"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={reportSubmitting}
-                    className="inline-flex h-10 items-center justify-center rounded-xl border border-amber-300/35 bg-gradient-to-r from-amber-500/85 to-orange-500/85 px-4 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-65"
+                    className="inline-flex h-11 items-center justify-center rounded-xl border border-amber-300/35 bg-gradient-to-r from-amber-500/85 to-orange-500/85 px-5 text-base font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-65"
                   >
                     {reportSubmitting ? "Submitting..." : "Submit report"}
                   </button>

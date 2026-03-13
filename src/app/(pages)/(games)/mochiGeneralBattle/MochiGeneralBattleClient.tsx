@@ -39,6 +39,7 @@ type RewardEntry = {
   label: string;
   count: number;
 };
+type EndTransitionPhase = "idle" | "fadingScene" | "showingResult";
 type RewardClaimResponse = {
   error?: string;
   granted?: Partial<SurgeSnackRewards>;
@@ -62,6 +63,7 @@ const SCORE_DELTA_LIFETIME_MS = 980;
 const SCORE_DELTA_LANE_COUNT = 3;
 const MOCHI_GENERAL_VICTORY_SCORE_STEP = 100;
 const MOCHI_GENERAL_DEFEAT_SCORE_STEP = 400;
+const END_SCENE_FADE_OUT_MS = 950;
 
 const cloneRewards = (rewards: SurgeSnackRewards): SurgeSnackRewards => ({
   energy_sugar: rewards.energy_sugar || 0,
@@ -118,17 +120,27 @@ export default function MochiGeneralBattleClient({
   const [rewardPackTarget, setRewardPackTarget] = useState<number | null>(null);
   const [animatedRewardPackCount, setAnimatedRewardPackCount] = useState(0);
   const [scoreDeltaFxList, setScoreDeltaFxList] = useState<ScoreDeltaFx[]>([]);
+  const [endTransitionPhase, setEndTransitionPhase] =
+    useState<EndTransitionPhase>("idle");
   const rewardSubmittedRef = useRef(false);
   const rewardAnimationTimersRef = useRef<number[]>([]);
   const scorePreviousValueRef = useRef<number | null>(0);
   const scoreDeltaTimerIdsRef = useRef<number[]>([]);
   const scoreDeltaNextIdRef = useRef(1);
+  const endTransitionTimerRef = useRef<number | null>(null);
 
   const clearScoreDeltaTimers = useCallback(() => {
     scoreDeltaTimerIdsRef.current.forEach((timerId) => {
       window.clearTimeout(timerId);
     });
     scoreDeltaTimerIdsRef.current = [];
+  }, []);
+
+  const clearEndTransitionTimer = useCallback(() => {
+    if (endTransitionTimerRef.current !== null) {
+      window.clearTimeout(endTransitionTimerRef.current);
+      endTransitionTimerRef.current = null;
+    }
   }, []);
 
   const selectedCharacter = useMemo(() => {
@@ -223,6 +235,7 @@ export default function MochiGeneralBattleClient({
   }, []);
 
   const resetRunUi = useCallback(() => {
+    clearEndTransitionTimer();
     setSurgeState(createInitialMochiSoldierSurgeState());
     setRewardClaimStatus("idle");
     setRewardClaimMessage("");
@@ -237,9 +250,10 @@ export default function MochiGeneralBattleClient({
     setAnimatedRewardPackCount(0);
     clearScoreDeltaTimers();
     setScoreDeltaFxList([]);
+    setEndTransitionPhase("idle");
     scorePreviousValueRef.current = 0;
     rewardSubmittedRef.current = false;
-  }, [clearScoreDeltaTimers]);
+  }, [clearEndTransitionTimer, clearScoreDeltaTimers]);
 
   const startGame = async () => {
     if (isStarting || !selectedCharacter) return;
@@ -357,6 +371,34 @@ export default function MochiGeneralBattleClient({
   ]);
 
   useEffect(() => {
+    if (!hasStarted || !surgeState.gameEnded) {
+      clearEndTransitionTimer();
+      setEndTransitionPhase("idle");
+      return;
+    }
+
+    setEndTransitionPhase((prev) => {
+      if (prev !== "idle") return prev;
+      endTransitionTimerRef.current = window.setTimeout(() => {
+        endTransitionTimerRef.current = null;
+        setEndTransitionPhase("showingResult");
+      }, END_SCENE_FADE_OUT_MS);
+      return "fadingScene";
+    });
+  }, [clearEndTransitionTimer, hasStarted, surgeState.gameEnded]);
+
+  useEffect(() => {
+    return () => {
+      clearEndTransitionTimer();
+    };
+  }, [clearEndTransitionTimer]);
+
+  const isSettlementVisible =
+    hasStarted && surgeState.gameEnded && endTransitionPhase === "showingResult";
+  const shouldRenderBattleSection =
+    hasStarted && (!surgeState.gameEnded || endTransitionPhase !== "showingResult");
+
+  useEffect(() => {
     rewardAnimationTimersRef.current.forEach((timer) => {
       window.clearTimeout(timer);
       window.clearInterval(timer);
@@ -368,7 +410,7 @@ export default function MochiGeneralBattleClient({
     setWinBonusAnimatedCounts({});
     setAnimatedRewardPackCount(0);
 
-    if (!surgeState.gameEnded || rewardClaimStatus !== "claimed") return;
+    if (!isSettlementVisible || rewardClaimStatus !== "claimed") return;
 
     const scheduleRewardLineAnimation = (startDelayMs: number) => {
       obtainedSnackEntries.forEach((entry, index) => {
@@ -452,7 +494,7 @@ export default function MochiGeneralBattleClient({
       rewardAnimationTimersRef.current = [];
     };
   }, [
-    surgeState.gameEnded,
+    isSettlementVisible,
     rewardClaimStatus,
     obtainedSnackEntries,
     winBonusEntries,
@@ -498,255 +540,274 @@ export default function MochiGeneralBattleClient({
           </h1>
         </section>
 
-        {hasStarted ? surgeState.gameEnded ? (
-          <section className="mt-6 flex w-full justify-center">
-            <div className="w-full max-w-[1280px] rounded-[34px] border border-white/15 bg-[#0b1220]/95 p-8 text-center shadow-[0_30px_90px_-35px_rgba(2,6,23,0.95)] md:p-12">
-              <p
-                className={`text-lg font-semibold uppercase tracking-[0.24em] md:text-xl ${
-                  surgeState.victory ? "text-emerald-300" : "text-rose-300"
+        {hasStarted ? (
+          <>
+            {shouldRenderBattleSection ? (
+              <section
+                className={`mt-4 grid w-full gap-4 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(0,1fr)_390px] ${
+                  surgeState.gameEnded
+                    ? "pointer-events-none opacity-0 blur-[8px] scale-[0.985]"
+                    : "opacity-100 blur-0 scale-100"
                 }`}
+                style={{ transitionDuration: `${END_SCENE_FADE_OUT_MS}ms` }}
               >
-                {surgeState.victory ? "Victory" : "Defeat"}
-              </p>
-              <h3 className="mt-4 text-5xl font-bold text-slate-100 md:text-7xl">
-                {surgeState.victory
-                  ? "Mochi General Defeated"
-                  : "Player Eliminated"}
-              </h3>
-
-              <div className="mt-8 rounded-[22px] border border-white/10 bg-slate-950/70 p-6 text-left md:p-8">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">
-                  Total Score
-                </p>
-                <p className="mt-2 text-5xl font-bold tabular-nums text-cyan-100 md:text-6xl">
-                  {surgeState.score}
-                </p>
-
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-xl border border-white/10 bg-slate-900/70 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                      Settlement Bill
-                    </p>
-                    <ul className="mt-3 space-y-2 text-sm text-slate-200 md:text-base">
-                      <li className="flex items-center justify-between gap-4">
-                        <span className="text-slate-400">Completion Time</span>
-                        <span className="font-semibold tabular-nums">
-                          {formatDurationLabel(surgeState.elapsedSeconds)}
-                        </span>
-                      </li>
-                      <li className="flex items-center justify-between gap-4">
-                        <span className="text-slate-400">Damage Score</span>
-                        <span className="font-semibold tabular-nums text-emerald-300">
-                          +{surgeState.damageScore}
-                        </span>
-                      </li>
-                      <li className="flex items-center justify-between gap-4">
-                        <span className="text-slate-400">Time Bonus</span>
-                        <span className="font-semibold tabular-nums text-emerald-300">
-                          +{surgeState.victoryTimeBonusScore}
-                        </span>
-                      </li>
-                      <li className="flex items-center justify-between gap-4">
-                        <span className="text-slate-400">Times Hit</span>
-                        <span className="font-semibold tabular-nums">
-                          {surgeState.hitPenaltyCount}
-                        </span>
-                      </li>
-                      <li className="flex items-center justify-between gap-4">
-                        <span className="text-slate-400">Hit Penalty</span>
-                        <span className="font-semibold tabular-nums text-rose-300">
-                          -{surgeState.hitPenaltyScore}
-                        </span>
-                      </li>
-                      <li className="flex items-center justify-between gap-4 border-t border-white/10 pt-2">
-                        <span className="text-slate-300">Final Score</span>
-                        <span className="font-bold tabular-nums text-cyan-100">
-                          {surgeState.score}
-                        </span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="rounded-xl border border-cyan-300/25 bg-cyan-950/25 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
-                      Score To Reward
-                    </p>
-                    <ul className="mt-3 space-y-2 text-sm text-cyan-100 md:text-base">
-                      <li className="flex items-center justify-between gap-4">
-                        <span className="text-cyan-200/80">Rule</span>
-                        <span className="font-semibold tabular-nums">
-                          Every {resolvedRewardScoreStep} score = 1 pack
-                        </span>
-                      </li>
-                      <li className="flex items-center justify-between gap-4">
-                        <span className="text-cyan-200/80">Converted Score</span>
-                        <span
-                          className={`font-semibold tabular-nums ${
-                            rewardConversionInProgress
-                              ? "animate-pulse text-cyan-100"
-                              : "text-cyan-100"
-                          }`}
-                        >
-                          {rewardConvertedScoreAnimated}/{rewardConvertedScoreTarget}
-                        </span>
-                      </li>
-                      <li className="flex items-center justify-between gap-4">
-                        <span className="text-cyan-200/80">Reward Packs</span>
-                        <span
-                          className={`font-semibold tabular-nums ${
-                            rewardConversionInProgress
-                              ? "animate-pulse text-cyan-100"
-                              : "text-cyan-100"
-                          }`}
-                        >
-                          {animatedRewardPackCount}/{resolvedRewardPackTarget}
-                        </span>
-                      </li>
-                      <li className="flex items-center justify-between gap-4">
-                        <span className="text-cyan-200/80">Remaining Score</span>
-                        <span className="font-semibold tabular-nums text-cyan-100">
-                          {rewardScoreRemainder}
-                        </span>
-                      </li>
-                    </ul>
-                  </div>
+                <div className="relative flex w-full justify-center">
+                  <SceneLauncher
+                    key={sceneSessionId}
+                    gameMode="mochiGeneralBattle"
+                    characterPath={selectedCharacter?.path}
+                    sceneLoader={loadSurgeScene}
+                    deltaStartAtMs={deltaStartAtMs ?? undefined}
+                    onSceneStateChange={handleSceneStateChange}
+                    className="h-[72vh] min-h-[560px] w-full max-w-[1680px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
+                  />
                 </div>
 
-                <div className="mt-6 rounded-xl border border-white/10 bg-slate-900/70 p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    Converted Rewards
-                  </p>
-                  {rewardClaimStatus === "claiming" ? (
-                    <p className="mt-3 text-sm text-slate-300">Calculating...</p>
-                  ) : obtainedSnackEntries.length === 0 ? (
-                    <p className="mt-3 text-sm text-slate-300">None</p>
-                  ) : (
-                    <ul className="mt-3 space-y-2 text-sm md:text-base">
-                      {obtainedSnackEntries.slice(0, revealedObtainedLines).map((entry) => {
-                        const shownCount = obtainedAnimatedCounts[entry.key] ?? 1;
-                        const isCounting = shownCount < entry.count;
-                        return (
-                          <li
-                            key={entry.key}
-                            className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition ${
-                              isCounting
-                                ? "border-cyan-300/45 bg-cyan-500/12 text-cyan-100 shadow-[0_0_22px_rgba(34,211,238,0.2)]"
-                                : "border-white/12 bg-white/[0.03] text-slate-100"
-                            }`}
-                          >
-                            <span className="font-semibold">{entry.label}</span>
+                <aside className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
+                  <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    Run Data
+                  </h2>
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                        Game Time
+                      </p>
+                      <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-100">
+                        {formatDurationLabel(surgeState.elapsedSeconds)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                        Score
+                      </p>
+                      <p className="relative mt-1 text-3xl font-semibold tabular-nums text-cyan-200">
+                        {surgeState.score}
+                        <span className="pointer-events-none absolute inset-0 overflow-visible">
+                          {scoreDeltaFxList.map((entry) => (
                             <span
-                              className={`inline-flex min-w-[84px] items-center justify-center rounded-full px-3 py-1 text-sm font-bold tabular-nums ${
-                                isCounting
-                                  ? "animate-pulse bg-cyan-300/25 text-cyan-100"
-                                  : "bg-slate-100/12 text-slate-100"
+                              key={entry.id}
+                              className={`absolute text-xl font-bold tabular-nums animate-[mochiScoreDeltaFloat_980ms_cubic-bezier(0.18,0.8,0.32,1)_forwards] ${
+                                entry.delta > 0
+                                  ? "text-emerald-300 drop-shadow-[0_0_14px_rgba(52,211,153,0.45)]"
+                                  : "text-rose-300 drop-shadow-[0_0_14px_rgba(251,113,133,0.45)]"
                               }`}
+                              style={{
+                                right: `${10 + entry.lane * 34}px`,
+                                top: "50%",
+                              }}
                             >
-                              x {shownCount}
+                              {entry.delta > 0 ? `+${entry.delta}` : `${entry.delta}`}
+                            </span>
+                          ))}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex min-h-[360px] flex-1 flex-col rounded-xl border border-red-300/35 bg-red-950/45 p-3 shadow-[0_0_34px_rgba(220,38,38,0.22)]">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                      Mochi General
+                    </p>
+                    <div className="mt-2 min-h-0 flex-1 overflow-hidden rounded-lg border border-red-300/40 bg-[radial-gradient(circle_at_40%_25%,rgba(248,113,113,0.5),transparent_56%),linear-gradient(180deg,rgba(69,10,10,0.9)_0%,rgba(127,29,29,0.95)_100%)]">
+                      <MochiGeneralPreview />
+                    </div>
+                  </div>
+                </aside>
+              </section>
+            ) : null}
+
+            {isSettlementVisible ? (
+              <section
+                className="mt-6 flex w-full justify-center"
+                style={{
+                  animation:
+                    "mochiSettlementFadeIn 760ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
+                }}
+              >
+                <div className="w-full max-w-[1280px] rounded-[34px] border border-white/15 bg-[#0b1220]/95 p-8 text-center shadow-[0_30px_90px_-35px_rgba(2,6,23,0.95)] md:p-12">
+                  <p
+                    className={`text-lg font-semibold uppercase tracking-[0.24em] md:text-xl ${
+                      surgeState.victory ? "text-emerald-300" : "text-rose-300"
+                    }`}
+                  >
+                    {surgeState.victory ? "Victory" : "Defeat"}
+                  </p>
+                  <h3 className="mt-4 text-5xl font-bold text-slate-100 md:text-7xl">
+                    {surgeState.victory
+                      ? "Mochi General Defeated"
+                      : "Player Eliminated"}
+                  </h3>
+
+                  <div className="mt-8 rounded-[22px] border border-white/10 bg-slate-950/70 p-6 text-left md:p-8">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">
+                      Total Score
+                    </p>
+                    <p className="mt-2 text-5xl font-bold tabular-nums text-cyan-100 md:text-6xl">
+                      {surgeState.score}
+                    </p>
+
+                    <div className="mt-6 grid gap-4 md:grid-cols-2">
+                      <div className="rounded-xl border border-white/10 bg-slate-900/70 p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                          Settlement Bill
+                        </p>
+                        <ul className="mt-3 space-y-2 text-sm text-slate-200 md:text-base">
+                          <li className="flex items-center justify-between gap-4">
+                            <span className="text-slate-400">Completion Time</span>
+                            <span className="font-semibold tabular-nums">
+                              {formatDurationLabel(surgeState.elapsedSeconds)}
                             </span>
                           </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
+                          <li className="flex items-center justify-between gap-4">
+                            <span className="text-slate-400">Damage Score</span>
+                            <span className="font-semibold tabular-nums text-emerald-300">
+                              +{surgeState.damageScore}
+                            </span>
+                          </li>
+                          <li className="flex items-center justify-between gap-4">
+                            <span className="text-slate-400">Time Bonus</span>
+                            <span className="font-semibold tabular-nums text-emerald-300">
+                              +{surgeState.victoryTimeBonusScore}
+                            </span>
+                          </li>
+                          <li className="flex items-center justify-between gap-4">
+                            <span className="text-slate-400">Times Hit</span>
+                            <span className="font-semibold tabular-nums">
+                              {surgeState.hitPenaltyCount}
+                            </span>
+                          </li>
+                          <li className="flex items-center justify-between gap-4">
+                            <span className="text-slate-400">Hit Penalty</span>
+                            <span className="font-semibold tabular-nums text-rose-300">
+                              -{surgeState.hitPenaltyScore}
+                            </span>
+                          </li>
+                          <li className="flex items-center justify-between gap-4 border-t border-white/10 pt-2">
+                            <span className="text-slate-300">Final Score</span>
+                            <span className="font-bold tabular-nums text-cyan-100">
+                              {surgeState.score}
+                            </span>
+                          </li>
+                        </ul>
+                      </div>
 
-                <p
-                  className={`mt-6 text-sm md:text-base ${
-                    rewardClaimStatus === "error"
-                      ? "text-rose-300"
-                      : rewardClaimStatus === "claimed"
-                      ? "text-emerald-300"
-                      : "text-slate-400"
-                  }`}
-                >
-                  {rewardClaimStatus === "claiming"
-                    ? "Claiming rewards..."
-                    : rewardClaimMessage || "Settlement pending..."}
-                </p>
-              </div>
+                      <div className="rounded-xl border border-cyan-300/25 bg-cyan-950/25 p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                          Score To Reward
+                        </p>
+                        <ul className="mt-3 space-y-2 text-sm text-cyan-100 md:text-base">
+                          <li className="flex items-center justify-between gap-4">
+                            <span className="text-cyan-200/80">Rule</span>
+                            <span className="font-semibold tabular-nums">
+                              Every {resolvedRewardScoreStep} score = 1 pack
+                            </span>
+                          </li>
+                          <li className="flex items-center justify-between gap-4">
+                            <span className="text-cyan-200/80">Converted Score</span>
+                            <span
+                              className={`font-semibold tabular-nums ${
+                                rewardConversionInProgress
+                                  ? "animate-pulse text-cyan-100"
+                                  : "text-cyan-100"
+                              }`}
+                            >
+                              {rewardConvertedScoreAnimated}/{rewardConvertedScoreTarget}
+                            </span>
+                          </li>
+                          <li className="flex items-center justify-between gap-4">
+                            <span className="text-cyan-200/80">Reward Packs</span>
+                            <span
+                              className={`font-semibold tabular-nums ${
+                                rewardConversionInProgress
+                                  ? "animate-pulse text-cyan-100"
+                                  : "text-cyan-100"
+                              }`}
+                            >
+                              {animatedRewardPackCount}/{resolvedRewardPackTarget}
+                            </span>
+                          </li>
+                          <li className="flex items-center justify-between gap-4">
+                            <span className="text-cyan-200/80">Remaining Score</span>
+                            <span className="font-semibold tabular-nums text-cyan-100">
+                              {rewardScoreRemainder}
+                            </span>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
 
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-                <Link
-                  href="/userSystem/user"
-                  className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-8 text-base font-semibold text-white transition hover:brightness-105"
-                >
-                  Back to Menu
-                </Link>
-                <Link
-                  href="/storage"
-                  className="inline-flex h-12 items-center justify-center rounded-full border border-white/25 px-8 text-base font-semibold text-slate-100 transition hover:border-white/45 hover:bg-white/10"
-                >
-                  Open Storage
-                </Link>
-              </div>
-            </div>
-          </section>
-        ) : (
-          <section className="mt-4 grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
-            <div className="relative flex w-full justify-center">
-              <SceneLauncher
-                key={sceneSessionId}
-                gameMode="mochiGeneralBattle"
-                characterPath={selectedCharacter?.path}
-                sceneLoader={loadSurgeScene}
-                deltaStartAtMs={deltaStartAtMs ?? undefined}
-                onSceneStateChange={handleSceneStateChange}
-                className="h-[72vh] min-h-[560px] w-full max-w-[1680px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
-              />
-            </div>
+                    <div className="mt-6 rounded-xl border border-white/10 bg-slate-900/70 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        Converted Rewards
+                      </p>
+                      {rewardClaimStatus === "claiming" ? (
+                        <p className="mt-3 text-sm text-slate-300">Calculating...</p>
+                      ) : obtainedSnackEntries.length === 0 ? (
+                        <p className="mt-3 text-sm text-slate-300">None</p>
+                      ) : (
+                        <ul className="mt-3 space-y-2 text-sm md:text-base">
+                          {obtainedSnackEntries.slice(0, revealedObtainedLines).map((entry) => {
+                            const shownCount = obtainedAnimatedCounts[entry.key] ?? 1;
+                            const isCounting = shownCount < entry.count;
+                            return (
+                              <li
+                                key={entry.key}
+                                className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition ${
+                                  isCounting
+                                    ? "border-cyan-300/45 bg-cyan-500/12 text-cyan-100 shadow-[0_0_22px_rgba(34,211,238,0.2)]"
+                                    : "border-white/12 bg-white/[0.03] text-slate-100"
+                                }`}
+                              >
+                                <span className="font-semibold">{entry.label}</span>
+                                <span
+                                  className={`inline-flex min-w-[84px] items-center justify-center rounded-full px-3 py-1 text-sm font-bold tabular-nums ${
+                                    isCounting
+                                      ? "animate-pulse bg-cyan-300/25 text-cyan-100"
+                                      : "bg-slate-100/12 text-slate-100"
+                                  }`}
+                                >
+                                  x {shownCount}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
 
-            <aside className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Run Data
-              </h2>
-              <div className="mt-4 space-y-3">
-                <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                    Game Time
-                  </p>
-                  <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-100">
-                    {formatDurationLabel(surgeState.elapsedSeconds)}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                    Score
-                  </p>
-                  <p className="relative mt-1 text-3xl font-semibold tabular-nums text-cyan-200">
-                    {surgeState.score}
-                    <span className="pointer-events-none absolute inset-0 overflow-visible">
-                      {scoreDeltaFxList.map((entry) => (
-                        <span
-                          key={entry.id}
-                          className={`absolute text-xl font-bold tabular-nums animate-[mochiScoreDeltaFloat_980ms_cubic-bezier(0.18,0.8,0.32,1)_forwards] ${
-                            entry.delta > 0
-                              ? "text-emerald-300 drop-shadow-[0_0_14px_rgba(52,211,153,0.45)]"
-                              : "text-rose-300 drop-shadow-[0_0_14px_rgba(251,113,133,0.45)]"
-                          }`}
-                          style={{
-                            right: `${10 + entry.lane * 34}px`,
-                            top: "50%",
-                          }}
-                        >
-                          {entry.delta > 0 ? `+${entry.delta}` : `${entry.delta}`}
-                        </span>
-                      ))}
-                    </span>
-                  </p>
-                </div>
-              </div>
+                    <p
+                      className={`mt-6 text-sm md:text-base ${
+                        rewardClaimStatus === "error"
+                          ? "text-rose-300"
+                          : rewardClaimStatus === "claimed"
+                          ? "text-emerald-300"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {rewardClaimStatus === "claiming"
+                        ? "Claiming rewards..."
+                        : rewardClaimMessage || "Settlement pending..."}
+                    </p>
+                  </div>
 
-              <div className="mt-4 flex min-h-[360px] flex-1 flex-col rounded-xl border border-red-300/35 bg-red-950/45 p-3 shadow-[0_0_34px_rgba(220,38,38,0.22)]">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                  Mochi General
-                </p>
-                <div className="mt-2 min-h-0 flex-1 overflow-hidden rounded-lg border border-red-300/40 bg-[radial-gradient(circle_at_40%_25%,rgba(248,113,113,0.5),transparent_56%),linear-gradient(180deg,rgba(69,10,10,0.9)_0%,rgba(127,29,29,0.95)_100%)]">
-                  <MochiGeneralPreview />
+                  <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+                    <Link
+                      href="/userSystem/user"
+                      className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-8 text-base font-semibold text-white transition hover:brightness-105"
+                    >
+                      Back to Menu
+                    </Link>
+                    <Link
+                      href="/storage"
+                      className="inline-flex h-12 items-center justify-center rounded-full border border-white/25 px-8 text-base font-semibold text-slate-100 transition hover:border-white/45 hover:bg-white/10"
+                    >
+                      Open Storage
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            </aside>
-          </section>
+              </section>
+            ) : null}
+          </>
         ) : (
           <section className="mt-4 flex w-full justify-center">
             <div className="w-full max-w-[1400px] rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-6 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] backdrop-blur-xl md:p-8">
@@ -850,6 +911,19 @@ export default function MochiGeneralBattleClient({
         )}
       </div>
       <style jsx>{`
+        @keyframes mochiSettlementFadeIn {
+          0% {
+            opacity: 0;
+            transform: translateY(24px) scale(0.985);
+            filter: blur(10px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            filter: blur(0);
+          }
+        }
+
         @keyframes mochiScoreDeltaFloat {
           0% {
             opacity: 0;

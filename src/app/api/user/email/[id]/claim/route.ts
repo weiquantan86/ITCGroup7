@@ -74,7 +74,7 @@ export async function POST(_request: Request, context: RequestContext) {
 
     const emailResult = await client.query(
       `
-        SELECT id, title, reward
+        SELECT id, user_id, title, reward
         FROM user_email
         WHERE id = $1
           AND (user_id = $2 OR user_id IS NULL)
@@ -92,6 +92,10 @@ export async function POST(_request: Request, context: RequestContext) {
       typeof emailResult.rows[0].reward === "string"
         ? emailResult.rows[0].reward
         : null;
+    const emailUserId =
+      emailResult.rows[0].user_id == null
+        ? null
+        : Number(emailResult.rows[0].user_id);
 
     const parsedRewards = parseEmailRewardResources(rewardText);
     const hasRawReward = Boolean(rewardText && rewardText.trim());
@@ -145,6 +149,7 @@ export async function POST(_request: Request, context: RequestContext) {
         emailId,
         title: String(emailResult.rows[0].title ?? ""),
         message: "This email has no claimable reward.",
+        canDelete: emailUserId === userId,
       });
     }
 
@@ -210,6 +215,7 @@ export async function POST(_request: Request, context: RequestContext) {
         },
         {}
       ),
+      canDelete: emailUserId === userId,
     });
   } catch (error) {
     try {

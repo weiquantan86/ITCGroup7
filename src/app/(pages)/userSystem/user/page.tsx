@@ -109,16 +109,30 @@ export default async function UserPage() {
 
   let username = "";
   let isAuthorised = false;
+  let hasUnreadEmail = false;
   try {
-    const userQuery = await pool.query(
-      "SELECT username, is_authorised FROM users WHERE id = $1",
-      [userId]
-    );
+    const [userQuery, unreadEmailQuery] = await Promise.all([
+      pool.query("SELECT username, is_authorised FROM users WHERE id = $1", [
+        userId,
+      ]),
+      pool.query(
+        `
+          SELECT EXISTS (
+            SELECT 1
+            FROM user_email
+            WHERE (user_id = $1 OR user_id IS NULL)
+              AND is_read = FALSE
+          ) AS has_unread
+        `,
+        [userId]
+      ),
+    ]);
     if (userQuery.rows.length === 0) {
       return <ErrorState message="Load failed: user does not exist." />;
     }
     username = userQuery.rows[0].username;
     isAuthorised = Boolean(userQuery.rows[0].is_authorised);
+    hasUnreadEmail = Boolean(unreadEmailQuery.rows[0]?.has_unread);
   } catch (error) {
     if (isConnectionTimeoutError(error)) {
       return <ConnectionTimeoutWarning />;
@@ -138,7 +152,10 @@ export default async function UserPage() {
           <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[1fr_1.5fr_1fr] lg:grid-rows-[280px_minmax(0,1fr)] xl:grid-rows-[320px_minmax(0,1fr)]">
             <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
               <div className="grid h-full min-h-0 grid-cols-[auto_1fr] items-center gap-4">
-                <EmailLauncher username={username} />
+                <EmailLauncher
+                  username={username}
+                  initialHasUnreadEmail={hasUnreadEmail}
+                />
                 <span className="flex min-w-0 items-center justify-center gap-3 text-base text-slate-200/90">
                   <span className="h-2.5 w-2.5 rounded-full bg-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.7)]" />
                   <span className="inline-flex items-center text-center text-2xl font-semibold tracking-wide md:text-3xl">
