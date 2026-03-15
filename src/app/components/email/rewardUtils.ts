@@ -45,7 +45,7 @@ const addReward = (
   if (!key) return;
   const count = normalizeCount(rawCount);
   if (count <= 0) return;
-  target[key] += count;
+  target[key] = (target[key] ?? 0) + count;
 };
 
 const applyRewardRecord = (
@@ -119,7 +119,9 @@ const parseTextReward = (target: EmailRewardResources, rawText: string) => {
 };
 
 export const hasAnyEmailReward = (rewards: EmailRewardResources) =>
-  Object.keys(rewards).length > 0;
+  Object.values(rewards).some(
+    (value) => Number.isFinite(value) && value > 0
+  );
 
 export const parseEmailRewardResources = (
   rawReward: string | null | undefined
