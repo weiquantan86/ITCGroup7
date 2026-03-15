@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { HpPool } from "../../../hpPool";
-import { characterProfiles, getCharacterEntry } from "../player/registry";
+import { defaultCharacterPath, getCharacterEntry } from "../player/registry";
 import { bindPlayerInput } from "./input";
 import { createStatusHud } from "./statusHud";
 import { AttackTargetResolver } from "../combat/attackResolver";
@@ -318,11 +318,6 @@ export const createPlayer = ({
     schedulePlayerHitFlashRestore();
   };
 
-  const defaultProfile = characterProfiles[0];
-  if (!defaultProfile) {
-    throw new Error("No character profiles registered.");
-  }
-  const defaultCharacterPath = `/assets/characters${defaultProfile.pathToken}${defaultProfile.id}.glb`;
   let characterEntry = getCharacterEntry(characterPath || defaultCharacterPath);
   let characterRuntime: CharacterRuntime | null = null;
 

@@ -1,17 +1,15 @@
-import { access, readFile, writeFile } from "node:fs/promises";
+import { access, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
-const manifestPath = path.join(
+const charactersRoot = path.join(
   projectRoot,
   "src",
   "app",
   "asset",
   "entity",
-  "character",
-  "general",
-  "characterManifest.json"
+  "character"
 );
 const registryPath = path.join(
   projectRoot,
@@ -23,16 +21,6 @@ const registryPath = path.join(
   "general",
   "player",
   "registry.ts"
-);
-const gachaConfigPath = path.join(
-  projectRoot,
-  "src",
-  "app",
-  "asset",
-  "entity",
-  "character",
-  "general",
-  "gachaConfig.ts"
 );
 const characterCatalogPath = path.join(
   projectRoot,
@@ -64,82 +52,105 @@ const writeIfChanged = async (filePath, nextContent) => {
   return true;
 };
 
-const parseManifest = async () => {
-  const rawContent = await readFile(manifestPath, "utf8");
-  const parsed = JSON.parse(rawContent);
-  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.characters)) {
-    throw new Error("Invalid character manifest: missing `characters` array.");
+const readRequiredFile = async (filePath) => {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch {
+    throw new Error(`Missing file: ${filePath}`);
+  }
+};
+
+const matchTopLevelString = (source, fieldName, profilePath) => {
+  const match = source.match(new RegExp(`^\\s{2}${fieldName}:\\s*"([^"]+)"`, "m"));
+  if (!match) {
+    throw new Error(`Missing top-level string field '${fieldName}' in ${profilePath}`);
+  }
+  return match[1].trim();
+};
+
+const matchTopLevelBoolean = (source, fieldName, profilePath) => {
+  const match = source.match(new RegExp(`^\\s{2}${fieldName}:\\s*(true|false)`, "m"));
+  if (!match) {
+    throw new Error(`Missing top-level boolean field '${fieldName}' in ${profilePath}`);
+  }
+  return match[1] === "true";
+};
+
+const parseCharacterDefinition = async (directoryName) => {
+  const characterDir = path.join(charactersRoot, directoryName);
+  const profilePath = path.join(characterDir, "profile.ts");
+  const runtimePath = path.join(characterDir, "runtime.ts");
+
+  await access(profilePath).catch(() => {
+    throw new Error(`Missing file for '${directoryName}': ${profilePath}`);
+  });
+  await access(runtimePath).catch(() => {
+    throw new Error(`Missing file for '${directoryName}': ${runtimePath}`);
+  });
+
+  const profileSource = await readRequiredFile(profilePath);
+  const id = matchTopLevelString(profileSource, "id", profilePath).toLowerCase();
+  const label = matchTopLevelString(profileSource, "label", profilePath);
+  const pathToken = matchTopLevelString(profileSource, "pathToken", profilePath);
+  const rarity = matchTopLevelString(profileSource, "rarity", profilePath).toLowerCase();
+  const starter = matchTopLevelBoolean(profileSource, "starter", profilePath);
+
+  if (id !== directoryName) {
+    throw new Error(
+      `Profile id '${id}' in ${profilePath} must match directory '${directoryName}'.`
+    );
+  }
+  if (!/^[a-z0-9_-]+$/.test(id)) {
+    throw new Error(`Character id '${id}' must use [a-z0-9_-].`);
+  }
+  if (!label) {
+    throw new Error(`Character label is required in ${profilePath}.`);
+  }
+  if (pathToken !== `/${id}/`) {
+    throw new Error(
+      `Character pathToken '${pathToken}' in ${profilePath} must equal '/${id}/'.`
+    );
+  }
+  if (!validRarities.has(rarity)) {
+    throw new Error(
+      `Character rarity '${rarity}' in ${profilePath} must be one of ${Array.from(
+        validRarities
+      ).join(", ")}.`
+    );
+  }
+
+  return { id, label, rarity, starter };
+};
+
+const readCharacterDefinitions = async () => {
+  const entries = await readdir(charactersRoot, { withFileTypes: true });
+  const characterDirs = entries
+    .filter((entry) => entry.isDirectory() && entry.name !== "general")
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right));
+
+  if (!characterDirs.length) {
+    throw new Error("No character directories found.");
   }
 
   const seenIds = new Set();
   const seenLabels = new Set();
-  const normalized = [];
+  const characters = [];
 
-  for (let index = 0; index < parsed.characters.length; index += 1) {
-    const item = parsed.characters[index];
-    const prefix = `characters[${index}]`;
-    const id =
-      typeof item?.id === "string" ? item.id.trim().toLowerCase() : "";
-    const label =
-      typeof item?.label === "string" ? item.label.trim() : "";
-    const rarity =
-      typeof item?.rarity === "string" ? item.rarity.trim().toLowerCase() : "";
-    const starter = Boolean(item?.starter);
-
-    if (!id || !/^[a-z0-9_-]+$/.test(id)) {
-      throw new Error(`${prefix}.id must be lowercase and use [a-z0-9_-].`);
+  for (const directoryName of characterDirs) {
+    const character = await parseCharacterDefinition(directoryName);
+    if (seenIds.has(character.id)) {
+      throw new Error(`Duplicate character id: ${character.id}`);
     }
-    if (!label) {
-      throw new Error(`${prefix}.label is required.`);
+    if (seenLabels.has(character.label.toLowerCase())) {
+      throw new Error(`Duplicate character label: ${character.label}`);
     }
-    if (!validRarities.has(rarity)) {
-      throw new Error(
-        `${prefix}.rarity must be one of: ${Array.from(validRarities).join(", ")}.`
-      );
-    }
-    if (seenIds.has(id)) {
-      throw new Error(`Duplicate character id: ${id}`);
-    }
-    if (seenLabels.has(label.toLowerCase())) {
-      throw new Error(`Duplicate character label: ${label}`);
-    }
-
-    seenIds.add(id);
-    seenLabels.add(label.toLowerCase());
-    normalized.push({ id, label, rarity, starter });
+    seenIds.add(character.id);
+    seenLabels.add(character.label.toLowerCase());
+    characters.push(character);
   }
 
-  if (!normalized.length) {
-    throw new Error("Character manifest cannot be empty.");
-  }
-
-  return normalized;
-};
-
-const assertCharacterFilesExist = async (characters) => {
-  for (const character of characters) {
-    const characterDir = path.join(
-      projectRoot,
-      "src",
-      "app",
-      "asset",
-      "entity",
-      "character",
-      character.id
-    );
-    const profilePath = path.join(characterDir, "profile.ts");
-    const runtimePath = path.join(characterDir, "runtime.ts");
-    try {
-      await access(profilePath);
-    } catch {
-      throw new Error(`Missing file for '${character.id}': ${profilePath}`);
-    }
-    try {
-      await access(runtimePath);
-    } catch {
-      throw new Error(`Missing file for '${character.id}': ${runtimePath}`);
-    }
-  }
+  return characters;
 };
 
 const generateRegistrySource = (characters) => {
@@ -175,6 +186,12 @@ const defaultStats: CharacterStats = {
   energy: 100,
 };
 const profiles: CharacterProfile[] = entries.map((entry) => entry.profile);
+const defaultEntry =
+  entries.find((entry) => entry.profile.starter) ?? entries[0];
+
+if (!defaultEntry) {
+  throw new Error("No character entries registered.");
+}
 
 export const resolveCharacterStats = (
   profile?: CharacterProfile
@@ -183,57 +200,15 @@ export const resolveCharacterStats = (
   ...(profile?.stats ?? {}),
 });
 
-export const getCharacterProfile = (path?: string) => {
-  const fallbackProfile = profiles[0];
-  if (!fallbackProfile) {
-    throw new Error("No character profiles registered.");
-  }
-  if (!path) return fallbackProfile;
-  return profiles.find((profile) => path.includes(profile.pathToken)) || fallbackProfile;
-};
-
 export const getCharacterEntry = (path?: string) => {
-  const fallbackEntry = entries[0];
-  if (!fallbackEntry) {
-    throw new Error("No character entries registered.");
-  }
-  if (!path) return fallbackEntry;
-  return entries.find((entry) => path.includes(entry.profile.pathToken)) || fallbackEntry;
+  if (!path) return defaultEntry;
+  return entries.find((entry) => path.includes(entry.profile.pathToken)) || defaultEntry;
 };
 
+export const characterEntries = entries;
 export const characterProfiles = profiles;
-`;
-};
-
-const generateGachaConfigSource = (characters) => {
-  const rarityLines = characters.map(
-    (character) => `  ${character.id}: '${character.rarity}',`
-  );
-
-  return `// AUTO-GENERATED by tools/character/sync-characters.mjs. Do not edit manually.
-export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
-
-export interface GachaConfig {
-  rarity: Rarity;
-  weight: number; // Relative weight for probability
-  color: string; // Display color
-}
-
-export const RARITY_CONFIG: Record<Rarity, { weight: number; color: string; label: string }> = {
-  common: { weight: 100, color: '#94a3b8', label: 'Common' }, // Slate-400
-  rare: { weight: 50, color: '#38bdf8', label: 'Rare' },    // Sky-400
-  epic: { weight: 25, color: '#a78bfa', label: 'Epic' },    // Violet-400
-  legendary: { weight: 10, color: '#fbbf24', label: 'Legendary' }, // Amber-400
-};
-
-// Character specific overrides or assignments
-export const CHARACTER_RARITY: Record<string, Rarity> = {
-${rarityLines.join("\n")}
-};
-
-export const getCharacterRarity = (id: string): Rarity => {
-  return CHARACTER_RARITY[id.toLowerCase()] || 'common';
-};
+export const defaultCharacterEntry = defaultEntry;
+export const defaultCharacterPath = \`/assets/characters\${defaultEntry.profile.pathToken}\${defaultEntry.profile.id}.glb\`;
 `;
 };
 
@@ -298,16 +273,11 @@ export { ALL_CHARACTER_NAMES, STARTER_CHARACTER_NAMES };
 };
 
 const main = async () => {
-  const characters = await parseManifest();
-  await assertCharacterFilesExist(characters);
-
+  const characters = await readCharacterDefinitions();
   const updatedFiles = [];
 
   if (await writeIfChanged(registryPath, generateRegistrySource(characters))) {
     updatedFiles.push(path.relative(projectRoot, registryPath));
-  }
-  if (await writeIfChanged(gachaConfigPath, generateGachaConfigSource(characters))) {
-    updatedFiles.push(path.relative(projectRoot, gachaConfigPath));
   }
   if (
     await writeIfChanged(
@@ -330,4 +300,3 @@ const main = async () => {
 };
 
 await main();
-

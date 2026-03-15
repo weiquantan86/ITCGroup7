@@ -4,13 +4,11 @@ export const profile: CharacterProfile = {
   id: "catron",
   label: "Catron",
   pathToken: "/catron/",
+  rarity: "common",
+  starter: false,
   energy: {
     passivePerSecond: 0,
     movingPerSecond: 0,
-  },
-  movement: {
-    baseSpeed: 5,
-    sprintMultiplier: 1.6,
   },
   camera: {
     miniBehindDistance: 5.8,

@@ -4,15 +4,13 @@ export const profile: CharacterProfile = {
   id: "baron",
   label: "Baron",
   pathToken: "/baron/",
+  rarity: "rare",
+  starter: false,
   energy: {
     movingPerSecond: 0,
   },
   mana: {
     passivePerSecond: 0.5,
-  },
-  movement: {
-    baseSpeed: 5,
-    sprintMultiplier: 1.6,
   },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },

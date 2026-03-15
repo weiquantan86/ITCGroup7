@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-type ArmSide = "right" | "left";
+export type ArmSide = "right" | "left";
 
 const scoreArmCandidate = (arm: THREE.Object3D, side: ArmSide) => {
   const name = (arm.name || "").toLowerCase();
@@ -15,11 +15,16 @@ const scoreArmCandidate = (arm: THREE.Object3D, side: ArmSide) => {
   return score;
 };
 
-export const pickArm = (arms: THREE.Object3D[], side: ArmSide) => {
+export const pickArm = (
+  arms: THREE.Object3D[],
+  side: ArmSide,
+  exclude?: THREE.Object3D | null
+) => {
   let best: THREE.Object3D | null = null;
   let bestScore = -Infinity;
   for (let i = 0; i < arms.length; i += 1) {
     const arm = arms[i];
+    if (exclude && arm === exclude) continue;
     const score = scoreArmCandidate(arm, side);
     if (score > bestScore) {
       best = arm;
@@ -28,4 +33,3 @@ export const pickArm = (arms: THREE.Object3D[], side: ArmSide) => {
   }
   return best;
 };
-

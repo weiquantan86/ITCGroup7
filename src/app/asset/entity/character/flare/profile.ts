@@ -4,6 +4,8 @@ export const profile: CharacterProfile = {
   id: "flare",
   label: "Flare",
   pathToken: "/flare/",
+  rarity: "epic",
+  starter: true,
   energy: {
     passivePerSecond: 0,
     hitGain: 5,
@@ -11,10 +13,6 @@ export const profile: CharacterProfile = {
   },
   mana: {
     passivePerSecond: 0.5,
-  },
-  movement: {
-    baseSpeed: 5,
-    sprintMultiplier: 1.6,
   },
   camera: {
     miniBehindDistance: 6.9,

@@ -20,6 +20,8 @@ export type SkillHudIndicator = "detonation-ready";
 
 export type SkillHudIndicators = Partial<Record<SkillKey, SkillHudIndicator>>;
 
+export type CharacterRarity = "common" | "rare" | "epic" | "legendary";
+
 export type SlashShape = "fan" | "rect" | "cube";
 
 export interface SlashEffectConfig {
@@ -106,6 +108,8 @@ export interface CharacterProfile {
   id: string;
   label: string;
   pathToken: string;
+  rarity: CharacterRarity;
+  starter: boolean;
   stats?: Partial<CharacterStats>;
   energy?: CharacterEnergyConfig;
   mana?: CharacterManaConfig;

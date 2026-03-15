@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import { pickArm } from "../general/runtime/armSelection";
+import {
+  createNoopChargeHud,
+  createSvgHudElements,
+} from "../general/runtime/domHud";
 import { createCharacterRuntime } from "../general/runtime/runtimeBase";
 import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
 import type { CharacterRuntimeFactory, SkillKey } from "../general/types";
@@ -11,32 +16,21 @@ type ChargeHud = {
 };
 
 const createChargeHud = (mount?: HTMLElement): ChargeHud => {
-  if (!mount) {
-    return {
-      setVisible: () => {},
-      setRatio: () => {},
-      dispose: () => {},
-    };
+  const elements = createSvgHudElements({
+    mount,
+    containerStyle:
+      "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);" +
+      "width:180px;height:120px;pointer-events:none;opacity:0;" +
+      "transition:opacity 160ms ease;z-index:5;",
+    viewBox: "0 0 200 140",
+    width: "180",
+    height: "120",
+  });
+  if (!elements) {
+    return createNoopChargeHud();
   }
 
-  const hudHost = mount.parentElement ?? mount;
-  if (!hudHost.style.position) {
-    hudHost.style.position = "relative";
-  }
-
-  const chargeHud = document.createElement("div");
-  chargeHud.style.cssText =
-    "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);" +
-    "width:180px;height:120px;pointer-events:none;opacity:0;" +
-    "transition:opacity 160ms ease;z-index:5;";
-
-  const chargeSvg = document.createElementNS(
-    "http://www.w3.org/2000/svg",
-    "svg"
-  );
-  chargeSvg.setAttribute("viewBox", "0 0 200 140");
-  chargeSvg.setAttribute("width", "180");
-  chargeSvg.setAttribute("height", "120");
+  const { container: chargeHud, svg: chargeSvg } = elements;
 
   const chargeTrack = document.createElementNS(
     "http://www.w3.org/2000/svg",
@@ -64,8 +58,6 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
 
   chargeSvg.appendChild(chargeTrack);
   chargeSvg.appendChild(chargeFill);
-  chargeHud.appendChild(chargeSvg);
-  hudHost.appendChild(chargeHud);
 
   let chargePathLength = 0;
   const setRatio = (ratio: number) => {
@@ -902,36 +894,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const entry = { mesh, aura };
     skillQProjectilePool.push(entry);
     return entry;
-  };
-
-  const scoreArmCandidate = (
-    arm: THREE.Object3D,
-    side: "right" | "left"
-  ) => {
-    const name = (arm.name || "").toLowerCase();
-    let score = 0;
-    if (name.includes(side)) score += 10;
-    if (name.includes("arm")) score += 5;
-    if (name.includes("upper") || name.includes("shoulder")) score += 3;
-    if (name.includes("hand") || name.includes("fore") || name.includes("lower")) {
-      score -= 6;
-    }
-    if (name === `arm${side}` || name === `${side}arm`) score += 6;
-    return score;
-  };
-
-  const pickArm = (arms: THREE.Object3D[], side: "right" | "left") => {
-    let best: THREE.Object3D | null = null;
-    let bestScore = -Infinity;
-    for (let i = 0; i < arms.length; i += 1) {
-      const arm = arms[i];
-      const score = scoreArmCandidate(arm, side);
-      if (score > bestScore) {
-        best = arm;
-        bestScore = score;
-      }
-    }
-    return best;
   };
 
   const isObjectWithinSkillRSphere = (object: THREE.Object3D | null | undefined) => {
@@ -2458,7 +2420,4 @@ export const createRuntime: CharacterRuntimeFactory = ({
     isFacingLocked: baseRuntime.isFacingLocked,
   });
 };
-
-
-
 

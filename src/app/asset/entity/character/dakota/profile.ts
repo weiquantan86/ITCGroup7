@@ -4,15 +4,13 @@ export const profile: CharacterProfile = {
   id: "dakota",
   label: "Dakota",
   pathToken: "/dakota/",
+  rarity: "rare",
+  starter: false,
   energy: {
     hitGain: 0,
   },
   mana: {
     passivePerSecond: 0,
-  },
-  movement: {
-    baseSpeed: 5,
-    sprintMultiplier: 1.6,
   },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },

@@ -31,6 +31,12 @@ const defaultStats: CharacterStats = {
   energy: 100,
 };
 const profiles: CharacterProfile[] = entries.map((entry) => entry.profile);
+const defaultEntry =
+  entries.find((entry) => entry.profile.starter) ?? entries[0];
+
+if (!defaultEntry) {
+  throw new Error("No character entries registered.");
+}
 
 export const resolveCharacterStats = (
   profile?: CharacterProfile
@@ -39,22 +45,12 @@ export const resolveCharacterStats = (
   ...(profile?.stats ?? {}),
 });
 
-export const getCharacterProfile = (path?: string) => {
-  const fallbackProfile = profiles[0];
-  if (!fallbackProfile) {
-    throw new Error("No character profiles registered.");
-  }
-  if (!path) return fallbackProfile;
-  return profiles.find((profile) => path.includes(profile.pathToken)) || fallbackProfile;
-};
-
 export const getCharacterEntry = (path?: string) => {
-  const fallbackEntry = entries[0];
-  if (!fallbackEntry) {
-    throw new Error("No character entries registered.");
-  }
-  if (!path) return fallbackEntry;
-  return entries.find((entry) => path.includes(entry.profile.pathToken)) || fallbackEntry;
+  if (!path) return defaultEntry;
+  return entries.find((entry) => path.includes(entry.profile.pathToken)) || defaultEntry;
 };
 
+export const characterEntries = entries;
 export const characterProfiles = profiles;
+export const defaultCharacterEntry = defaultEntry;
+export const defaultCharacterPath = `/assets/characters${defaultEntry.profile.pathToken}${defaultEntry.profile.id}.glb`;

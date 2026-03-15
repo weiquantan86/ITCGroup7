@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import { pickArm } from "../general/runtime/armSelection";
+import {
+  createNoopChargeHud,
+  createSvgHudElements,
+} from "../general/runtime/domHud";
 import { createCharacterRuntime } from "../general/runtime/runtimeBase";
 import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
 import type { CharacterRuntimeFactory } from "../general/types";
@@ -23,31 +28,24 @@ type ChargeHud = {
 };
 
 const createChargeHud = (mount?: HTMLElement): ChargeHud => {
-  if (!mount || typeof document === "undefined") {
-    return {
-      setVisible: () => {},
-      setRatio: () => {},
+  const elements = createSvgHudElements({
+    mount,
+    containerStyle:
+      "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);" +
+      "width:220px;height:120px;pointer-events:none;opacity:0;" +
+      "transition:opacity 140ms ease;z-index:5;",
+    viewBox: "0 0 260 140",
+    width: "220",
+    height: "120",
+  });
+  if (!elements) {
+    return createNoopChargeHud({
       setFlickerMode: () => {},
       update: () => {},
-      dispose: () => {},
-    };
+    });
   }
 
-  const hudHost = mount.parentElement ?? mount;
-  if (!hudHost.style.position) {
-    hudHost.style.position = "relative";
-  }
-
-  const hud = document.createElement("div");
-  hud.style.cssText =
-    "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);" +
-    "width:220px;height:120px;pointer-events:none;opacity:0;" +
-    "transition:opacity 140ms ease;z-index:5;";
-
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 260 140");
-  svg.setAttribute("width", "220");
-  svg.setAttribute("height", "120");
+  const { container: hud, svg } = elements;
 
   const trackLeft = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   const trackRight = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -231,8 +229,6 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
   svg.appendChild(fillRight);
   svg.appendChild(bridgeFill);
   svg.appendChild(templeRight);
-  hud.appendChild(svg);
-  hudHost.appendChild(hud);
 
   let leftPathLength = 0;
   let rightPathLength = 0;
@@ -277,32 +273,6 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
       hud.parentElement?.removeChild(hud);
     },
   };
-};
-
-const pickArm = (
-  arms: THREE.Object3D[],
-  side: "right" | "left",
-  exclude?: THREE.Object3D | null
-) => {
-  if (!arms.length) return null;
-  let best: THREE.Object3D | null = arms[0];
-  let bestScore = -Infinity;
-  for (let i = 0; i < arms.length; i += 1) {
-    const arm = arms[i];
-    if (exclude && arm === exclude) continue;
-    const name = (arm.name || "").toLowerCase();
-    let score = 0;
-    if (name.includes(side)) score += 10;
-    if (name.includes("arm")) score += 4;
-    if (name.includes("hand") || name.includes("fore") || name.includes("lower")) {
-      score -= 4;
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      best = arm;
-    }
-  }
-  return best;
 };
 
 type FootParticleFxUpdateArgs = {

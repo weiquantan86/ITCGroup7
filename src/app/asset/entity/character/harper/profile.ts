@@ -4,14 +4,12 @@ export const profile: CharacterProfile = {
   id: "harper",
   label: "Harper",
   pathToken: "/harper/",
+  rarity: "epic",
+  starter: false,
   energy: {
     passivePerSecond: 2,
     hitGain: 6,
     movingPerSecond: 2,
-  },
-  movement: {
-    baseSpeed: 5,
-    sprintMultiplier: 1.6,
   },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },

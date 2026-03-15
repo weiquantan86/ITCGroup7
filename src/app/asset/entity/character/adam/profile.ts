@@ -4,6 +4,8 @@ export const profile: CharacterProfile = {
   id: "adam",
   label: "Adam",
   pathToken: "/adam/",
+  rarity: "common",
+  starter: true,
   energy: {
     passivePerSecond: 0,
     movingPerSecond: 0,
@@ -12,10 +14,6 @@ export const profile: CharacterProfile = {
   },
   mana: {
     passivePerSecond: 2,
-  },
-  movement: {
-    baseSpeed: 5,
-    sprintMultiplier: 1.6,
   },
   kit: {
     basicAttack: { id: "basic", label: "Basic", description: "..." },

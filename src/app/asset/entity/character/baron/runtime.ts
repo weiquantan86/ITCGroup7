@@ -1,12 +1,16 @@
 import * as THREE from "three";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { pickArm } from "../general/runtime/armSelection";
+import {
+  createNoopChargeHud,
+  createSvgHudElements,
+} from "../general/runtime/domHud";
 import { createCharacterRuntime } from "../general/runtime/runtimeBase";
 import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
 import {
   tryReflectLinearProjectile,
   type ProjectileReflector,
 } from "../../../object/projectile/reflection";
-import { pickArm } from "./runtime/armSelection";
 import type { CharacterRuntime, CharacterRuntimeFactory } from "../general/types";
 import { profile } from "./profile";
 
@@ -17,29 +21,21 @@ type ChargeHud = {
 };
 
 const createShurikenChargeHud = (mount?: HTMLElement): ChargeHud => {
-  if (!mount) {
-    return {
-      setVisible: () => {},
-      setRatio: () => {},
-      dispose: () => {},
-    };
+  const elements = createSvgHudElements({
+    mount,
+    containerStyle:
+      "position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);" +
+      "width:196px;height:196px;pointer-events:none;opacity:0;" +
+      "transition:opacity 140ms ease;z-index:6;",
+    viewBox: "0 0 180 180",
+    width: "196",
+    height: "196",
+  });
+  if (!elements) {
+    return createNoopChargeHud();
   }
 
-  const hudHost = mount.parentElement ?? mount;
-  if (!hudHost.style.position) {
-    hudHost.style.position = "relative";
-  }
-
-  const hud = document.createElement("div");
-  hud.style.cssText =
-    "position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);" +
-    "width:196px;height:196px;pointer-events:none;opacity:0;" +
-    "transition:opacity 140ms ease;z-index:6;";
-
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 180 180");
-  svg.setAttribute("width", "196");
-  svg.setAttribute("height", "196");
+  const { container: hud, svg } = elements;
 
   const track = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   track.setAttribute("cx", "90");
@@ -93,8 +89,6 @@ const createShurikenChargeHud = (mount?: HTMLElement): ChargeHud => {
   svg.appendChild(track);
   svg.appendChild(fill);
   svg.appendChild(shurikenGroup);
-  hud.appendChild(svg);
-  hudHost.appendChild(hud);
 
   let ringLength = 0;
   const setRatio = (ratio: number) => {

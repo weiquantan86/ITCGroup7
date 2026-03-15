@@ -1,4 +1,8 @@
 import * as THREE from "three";
+import {
+  createNoopChargeHud,
+  createSvgHudElements,
+} from "../general/runtime/domHud";
 import { createCharacterRuntime } from "../general/runtime/runtimeBase";
 import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
 import type {
@@ -108,29 +112,21 @@ const easeInOutCubic = (value: number) =>
   value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
 
 const createCatronChargeHud = (mount?: HTMLElement): ChargeHud => {
-  if (!mount) {
-    return {
-      setVisible: () => {},
-      setRatio: () => {},
-      dispose: () => {},
-    };
+  const elements = createSvgHudElements({
+    mount,
+    containerStyle:
+      "position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);" +
+      "width:220px;height:140px;pointer-events:none;opacity:0;" +
+      "transition:opacity 140ms ease;z-index:6;",
+    viewBox: "0 0 220 140",
+    width: "220",
+    height: "140",
+  });
+  if (!elements) {
+    return createNoopChargeHud();
   }
 
-  const hudHost = mount.parentElement ?? mount;
-  if (!hudHost.style.position) {
-    hudHost.style.position = "relative";
-  }
-
-  const hud = document.createElement("div");
-  hud.style.cssText =
-    "position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);" +
-    "width:220px;height:140px;pointer-events:none;opacity:0;" +
-    "transition:opacity 140ms ease;z-index:6;";
-
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 220 140");
-  svg.setAttribute("width", "220");
-  svg.setAttribute("height", "140");
+  const { container: hud, svg } = elements;
 
   const track = document.createElementNS("http://www.w3.org/2000/svg", "path");
   const fill = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -173,8 +169,6 @@ const createCatronChargeHud = (mount?: HTMLElement): ChargeHud => {
   svg.appendChild(eyeOuter);
   svg.appendChild(eyeCore);
   svg.appendChild(eyeShine);
-  hud.appendChild(svg);
-  hudHost.appendChild(hud);
 
   let arcLength = 0;
   const setRatio = (ratio: number) => {

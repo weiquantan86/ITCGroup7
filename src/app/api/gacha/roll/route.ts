@@ -2,10 +2,17 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import pool from "../../../../database/client";
 import { characterProfiles } from "../../../asset/entity/character/general/player/registry";
-import {
-  RARITY_CONFIG,
-  getCharacterRarity,
-} from "../../../asset/entity/character/general/gachaConfig";
+import type { CharacterRarity } from "../../../asset/entity/character/general/types";
+
+const RARITY_CONFIG: Record<
+  CharacterRarity,
+  { weight: number; color: string; label: string }
+> = {
+  common: { weight: 100, color: "#94a3b8", label: "Common" },
+  rare: { weight: 50, color: "#38bdf8", label: "Rare" },
+  epic: { weight: 25, color: "#a78bfa", label: "Epic" },
+  legendary: { weight: 10, color: "#fbbf24", label: "Legendary" },
+};
 
 export async function POST() {
   const cookieStore = await cookies();
@@ -49,7 +56,7 @@ export async function POST() {
     // 3. Calculate weights
     let totalWeight = 0;
     const weightedPool = poolCandidates.map((profile) => {
-      const rarity = getCharacterRarity(profile.id);
+      const rarity = profile.rarity;
       const weight = RARITY_CONFIG[rarity].weight;
       totalWeight += weight;
       return { profile, weight, rarity };

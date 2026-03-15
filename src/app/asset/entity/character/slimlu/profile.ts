@@ -4,15 +4,13 @@ export const profile: CharacterProfile = {
   id: "slimlu",
   label: "Slimlu",
   pathToken: "/slimlu/",
+  rarity: "common",
+  starter: true,
   energy: {
     hitGain: 5,
   },
   mana: {
     passivePerSecond: 1,
-  },
-  movement: {
-    baseSpeed: 5,
-    sprintMultiplier: 1.6,
   },
   camera: {
     followHeadBone: true,
