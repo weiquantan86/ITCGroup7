@@ -15,6 +15,7 @@ type UpdatePlayerCameraRigArgs = {
   miniOrbitYawOffset: number;
   miniOrbitPitchOffset: number;
   miniOrbitDistanceOffset: number;
+  followTarget: THREE.Object3D | null;
   followHeadBone: boolean;
   miniBehindDistance: number;
   miniUpDistance: number;
@@ -90,6 +91,7 @@ export const createPlayerCameraRig = ({
     miniOrbitYawOffset,
     miniOrbitPitchOffset,
     miniOrbitDistanceOffset,
+    followTarget,
     followHeadBone,
     miniBehindDistance,
     miniUpDistance,
@@ -97,7 +99,9 @@ export const createPlayerCameraRig = ({
     headBone,
   }: UpdatePlayerCameraRigArgs) => {
     const fallbackEyeY = avatar.position.y + eyeHeight;
-    if (followHeadBone && headBone) {
+    if (followTarget) {
+      followTarget.getWorldPosition(cameraTarget);
+    } else if (followHeadBone && headBone) {
       headBone.getWorldPosition(headWorldTarget);
       cameraTarget.copy(headWorldTarget);
       if (cameraTarget.y < fallbackEyeY) {

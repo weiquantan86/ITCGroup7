@@ -4,6 +4,10 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import {
+  applyCharacterModelVisibility,
+  createVisibleModelBounds,
+} from "../../../asset/entity/character/general/engine/modelVisibility";
 
 type CharacterSceneProps = {
   characterPath?: string;
@@ -194,14 +198,15 @@ export default function CharacterScene({
       (gltf) => {
         if (cancelled || !gltf?.scene) return;
         const model = gltf.scene;
+        applyCharacterModelVisibility(model, resolvedPath);
         model.traverse((child) => {
           const mesh = child as THREE.Mesh;
-          if (mesh.isMesh) {
+          if (mesh.isMesh && mesh.visible) {
             mesh.castShadow = true;
           }
         });
 
-        const box = new THREE.Box3().setFromObject(model);
+        const box = createVisibleModelBounds(model);
         const size = new THREE.Vector3();
         box.getSize(size);
         const maxAxis = Math.max(size.x, size.y, size.z) || 1;
@@ -209,23 +214,7 @@ export default function CharacterScene({
         model.scale.setScalar(scale);
         model.updateMatrixWorld(true);
 
-        const meshBounds = new THREE.Box3();
-        let hasMesh = false;
-        model.traverse((child) => {
-          const mesh = child as THREE.Mesh;
-          if (mesh.isMesh) {
-            const meshBox = new THREE.Box3().setFromObject(mesh);
-            if (!hasMesh) {
-              meshBounds.copy(meshBox);
-              hasMesh = true;
-            } else {
-              meshBounds.union(meshBox);
-            }
-          }
-        });
-        if (!hasMesh) {
-          meshBounds.setFromObject(model);
-        }
+        const meshBounds = createVisibleModelBounds(model);
 
         const center = new THREE.Vector3();
         meshBounds.getCenter(center);

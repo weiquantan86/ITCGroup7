@@ -1,5 +1,11 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import {
+  applyCharacterModelVisibility,
+  createVisibleModelBounds,
+  filterCharacterArmControls,
+  shouldHideCharacterNode,
+} from "./modelVisibility";
 
 export const characterGltfAnimationClipsKey = "__characterGltfAnimationClips";
 
@@ -121,6 +127,7 @@ export const createCharacterLoader = ({
         avatarModel.userData[characterGltfAnimationClipsKey] = gltf.animations;
         avatarModel.scale.setScalar(1.15);
         avatarModel.position.set(0, 0, 0);
+        applyCharacterModelVisibility(avatarModel, path);
 
         const arms: THREE.Object3D[] = [];
         let legLeft: THREE.Object3D | null = null;
@@ -135,6 +142,9 @@ export const createCharacterLoader = ({
           const mesh = child as THREE.Mesh;
           if (mesh.isMesh) {
             meshes.push(mesh);
+            if (!mesh.visible) {
+              return;
+            }
             if (isHeadRelated(mesh)) {
               foundHeadMesh = true;
             }
@@ -142,7 +152,12 @@ export const createCharacterLoader = ({
               skinnedMeshes.push(mesh as THREE.SkinnedMesh);
             }
           }
-          if (child.name && !mesh.isMesh && isArmControlNodeName(child.name)) {
+          if (
+            child.name &&
+            !mesh.isMesh &&
+            isArmControlNodeName(child.name) &&
+            !shouldHideCharacterNode(path, child.name)
+          ) {
             arms.push(child);
           }
           if (child.name === "legLeft") legLeft = child;
@@ -178,6 +193,7 @@ export const createCharacterLoader = ({
           }
         }
 
+        const visibleArms = filterCharacterArmControls(arms, path);
         const useHideBody =
           resolvedHideLocalBody || (resolvedHideLocalHead && !foundHeadMesh);
         if (useHideBody) {
@@ -185,6 +201,7 @@ export const createCharacterLoader = ({
         }
 
         meshes.forEach((mesh) => {
+          if (!mesh.visible) return;
           mesh.castShadow = true;
           if (useHideBody) {
             if (isArmRelated(mesh)) {
@@ -204,7 +221,7 @@ export const createCharacterLoader = ({
         lookPivot.remove(avatarBody, avatarGlow);
         lookPivot.add(avatarModel);
         avatar.updateMatrixWorld(true);
-        const modelBounds = new THREE.Box3().setFromObject(avatarModel);
+        const modelBounds = createVisibleModelBounds(avatarModel);
         const modelFootOffset = avatar.position.y - modelBounds.min.y;
         const modelHeight = modelBounds.max.y - modelBounds.min.y;
         const eyeHeight = THREE.MathUtils.clamp(modelHeight * 0.85, 1.4, 2.1);
@@ -212,7 +229,7 @@ export const createCharacterLoader = ({
 
         onLoaded({
           avatarModel,
-          arms,
+          arms: visibleArms,
           legLeft,
           legRight,
           headBone,

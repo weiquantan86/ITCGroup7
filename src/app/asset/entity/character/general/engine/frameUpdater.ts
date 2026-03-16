@@ -17,6 +17,10 @@ type PlayerProjectileSystem = ReturnType<typeof createProjectileSystem>;
 type PlayerSurvivalState = ReturnType<typeof createPlayerSurvivalState>;
 type PlayerStatusEffectState = ReturnType<typeof createPlayerStatusEffectState>;
 
+type PlayerMovementBlockerUserData = {
+  playerBlocker?: boolean;
+};
+
 type CreatePlayerFrameUpdaterArgs = {
   avatar: THREE.Group;
   lookPivot: THREE.Group;
@@ -101,6 +105,36 @@ export const createPlayerFrameUpdater = ({
   };
   const projectileSystemBlockers: THREE.Object3D[] = [];
   const cameraAimOriginWorld = new THREE.Vector3();
+  const movementBlockerBounds = new THREE.Box3();
+  const movementBlockerPadding = 0.24;
+  const hasPlayerBlockerFlag = (object: THREE.Object3D | null | undefined) => {
+    let current = object ?? null;
+    while (current) {
+      const userData = current.userData as PlayerMovementBlockerUserData;
+      if (userData.playerBlocker) return true;
+      current = current.parent;
+    }
+    return false;
+  };
+  const isRuntimeMovementBlocked = (x: number, z: number) => {
+    const blockers = getProjectileBlockers();
+    if (!blockers.length) return false;
+    for (let i = 0; i < blockers.length; i += 1) {
+      const blocker = blockers[i];
+      if (!hasPlayerBlockerFlag(blocker)) continue;
+      movementBlockerBounds.setFromObject(blocker);
+      if (movementBlockerBounds.isEmpty()) continue;
+      if (
+        x >= movementBlockerBounds.min.x - movementBlockerPadding &&
+        x <= movementBlockerBounds.max.x + movementBlockerPadding &&
+        z >= movementBlockerBounds.min.z - movementBlockerPadding &&
+        z <= movementBlockerBounds.max.z + movementBlockerPadding
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
   const applyLookOverride = (
     override: PlayerLookOverride | null,
     delta: number
@@ -234,7 +268,10 @@ export const createPlayerFrameUpdater = ({
       const nextX = avatar.position.x + moveDir.x * moveSpeed;
       const nextZ = avatar.position.z + moveDir.z * moveSpeed;
       const clamped = clampToBounds(bounds, nextX, nextZ);
-      if (!isBlocked(clamped.x, clamped.z)) {
+      if (
+        !isBlocked(clamped.x, clamped.z) &&
+        !isRuntimeMovementBlocked(clamped.x, clamped.z)
+      ) {
         avatar.position.x = clamped.x;
         avatar.position.z = clamped.z;
         isMoving = true;
@@ -289,13 +326,13 @@ export const createPlayerFrameUpdater = ({
       miniOrbitYawOffset,
       miniOrbitPitchOffset,
       miniOrbitDistanceOffset,
-      followHeadBone:
-        Boolean(runtimeCameraFollowTarget) || statsState.cameraConfig.followHeadBone,
+      followTarget: runtimeCameraFollowTarget,
+      followHeadBone: statsState.cameraConfig.followHeadBone,
       miniBehindDistance:
         statsState.cameraConfig.miniBehindDistance * cameraScaleMultiplier,
       miniUpDistance: statsState.cameraConfig.miniUpDistance * cameraScaleMultiplier,
       miniLookUpOffset: statsState.cameraConfig.miniLookUpOffset * cameraScaleMultiplier,
-      headBone: runtimeCameraFollowTarget ?? visualState.headBone,
+      headBone: visualState.headBone,
     });
 
     runtime?.update({

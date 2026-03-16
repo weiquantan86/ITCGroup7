@@ -6,6 +6,12 @@ export const profile: CharacterProfile = {
   pathToken: "/harper/",
   rarity: "epic",
   starter: false,
+  camera: {
+    followHeadBone: true,
+    hideLocalHead: true,
+    hideLocalBody: true,
+    miniUpDistance: 2.4,
+  },
   energy: {
     passivePerSecond: 2,
     hitGain: 6,
@@ -17,23 +23,24 @@ export const profile: CharacterProfile = {
       q: {
         id: "q",
         label: "Q",
-        description: `CD：0s
-Mana：20 EN
-Description：...`,
+        cost: 100,
+        description: `CD:0s
+Energy:100 EN
+Description:...`,
       },
       e: {
         id: "e",
         label: "E",
-        description: `CD：0s
-Mana：0 Mana
-Description：...`,
+        description: `CD:0s
+Mana:0
+Description:...`,
       },
       r: {
         id: "r",
         label: "R",
-        description: `CD：0s
-Mana：0 Mana
-Description：...`,
+        description: `CD:0s
+Mana:0
+Description:...`,
       },
     },
   },
@@ -42,4 +49,3 @@ Description：...`,
     color: 0xa78bfa,
   },
 };
-

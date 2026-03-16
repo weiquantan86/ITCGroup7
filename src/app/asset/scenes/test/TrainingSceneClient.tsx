@@ -51,8 +51,8 @@ export default function TrainingScenePage({
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 px-6 py-12 text-slate-100">
-      <main className="mx-auto flex w-full max-w-none flex-col gap-8">
+    <div className="min-h-screen bg-slate-950 px-6 py-2 text-slate-100 md:py-3">
+      <main className="mx-auto flex w-full max-w-none flex-col gap-3">
         <div className="flex items-center">
           <Link
             href="/characterManagement"
@@ -62,11 +62,11 @@ export default function TrainingScenePage({
           </Link>
         </div>
 
-        <h1 className="text-center text-4xl font-semibold text-slate-100">
+        <h1 className="-mt-1 text-center text-4xl font-semibold text-slate-100">
           Training Scene
         </h1>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_200px] xl:grid-cols-[minmax(0,1fr)_220px]">
           <div className="flex justify-center">
             <SceneLauncher
               sceneId="training"
@@ -75,7 +75,7 @@ export default function TrainingScenePage({
               infiniteFire={infiniteFire}
               onSceneStateChange={handleSceneStateChange}
               useDefaultLights={false}
-              className="relative h-[70vh] min-h-[520px] w-full max-w-[1300px] overflow-hidden rounded-[32px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
+              className="relative h-[86vh] min-h-[700px] w-full max-w-[1920px] overflow-hidden rounded-[32px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
             />
           </div>
           <aside className="rounded-2xl border border-white/10 bg-slate-900/70 p-4 shadow-[0_20px_50px_-30px_rgba(2,6,23,0.7)]">
