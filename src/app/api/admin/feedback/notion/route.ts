@@ -4,8 +4,9 @@ import pool from "@/database/client";
 import { adminAccessCookieName, hasAdminAccess } from "@/app/admin/adminAuth";
 import {
   probeNotionConnection,
-  upsertFeedbackToNotion,
+  pruneFeedbackPagesInNotion,
 } from "@/app/components/notion/feedbackSync";
+import { syncFeedbackRowToNotion } from "@/app/api/feedback/syncFromDatabase";
 
 const MAX_FEEDBACK_IDS_PER_REQUEST = 500;
 
@@ -21,6 +22,7 @@ type FeedbackRow = {
 
 type SyncPayload = {
   feedbackIds?: unknown;
+  fullReplace?: unknown;
 };
 
 type FailedRow = {
@@ -43,6 +45,8 @@ const parseFeedbackIds = (value: unknown) => {
   return Array.from(new Set(parsed));
 };
 
+const parseBooleanFlag = (value: unknown) => value === true;
+
 export async function POST(request: Request) {
   if (!(await ensureAdminAccess())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -56,6 +60,7 @@ export async function POST(request: Request) {
   }
 
   const feedbackIds = parseFeedbackIds(payload.feedbackIds);
+  const fullReplace = parseBooleanFlag(payload.fullReplace);
   if (feedbackIds.length === 0) {
     return NextResponse.json({ error: "No feedback ids provided." }, { status: 400 });
   }
@@ -124,23 +129,7 @@ export async function POST(request: Request) {
     let syncedCount = 0;
 
     for (const row of rows) {
-      const syncResult = await upsertFeedbackToNotion({
-        id: Number(row.id),
-        userId: Number(row.user_id),
-        username: String(row.username ?? ""),
-        status: String(row.status ?? ""),
-        reportDate:
-          row.report_date instanceof Date
-            ? row.report_date.toISOString()
-            : String(row.report_date ?? ""),
-        settleDate:
-          row.settle_date instanceof Date
-            ? row.settle_date.toISOString()
-            : row.settle_date
-              ? String(row.settle_date)
-              : null,
-        description: typeof row.description === "string" ? row.description : null,
-      });
+      const syncResult = await syncFeedbackRowToNotion(row);
 
       if (syncResult.synced) {
         syncedCount += 1;
@@ -185,11 +174,49 @@ export async function POST(request: Request) {
       );
     }
 
+    let archivedCount = 0;
+    let duplicateArchivedCount = 0;
+    let orphanArchivedCount = 0;
+    if (fullReplace) {
+      const allFeedbackIdsResult = await pool.query(
+        `
+          SELECT id
+          FROM user_feedback
+        `
+      );
+      const allFeedbackIds = (allFeedbackIdsResult.rows as Array<{ id?: unknown }>)
+        .map((row) => Number.parseInt(String(row.id), 10))
+        .filter((id) => Number.isFinite(id) && id > 0);
+
+      const pruneResult = await pruneFeedbackPagesInNotion(allFeedbackIds);
+      if (!pruneResult.pruned) {
+        return NextResponse.json(
+          {
+            success: false,
+            notionSynced: false,
+            syncedCount,
+            totalCount: rows.length,
+            error: "Feedback rows synced, but Notion cleanup failed.",
+            reason: pruneResult.reason,
+          },
+          { status: 502 }
+        );
+      }
+
+      archivedCount = pruneResult.archivedCount;
+      duplicateArchivedCount = pruneResult.duplicateArchivedCount;
+      orphanArchivedCount = pruneResult.orphanArchivedCount;
+    }
+
     return NextResponse.json({
       success: true,
       notionSynced: true,
       syncedCount,
       totalCount: rows.length,
+      fullReplace,
+      archivedCount,
+      duplicateArchivedCount,
+      orphanArchivedCount,
     });
   } catch (error) {
     console.error("[api/admin/feedback/notion] Failed to sync feedback table:", error);

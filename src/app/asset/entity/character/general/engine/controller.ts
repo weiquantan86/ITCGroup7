@@ -661,6 +661,9 @@ export const createPlayer = ({
     characterRuntime = nextEntry.createRuntime({
       avatar,
       mount,
+      groundY: resolvedWorld.groundY,
+      bounds: resolvedWorld.bounds,
+      isBlocked: resolvedWorld.isBlocked,
       fireProjectile,
       performMeleeAttack,
       applyHealth,

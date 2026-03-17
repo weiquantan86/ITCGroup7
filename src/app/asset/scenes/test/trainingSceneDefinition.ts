@@ -3,6 +3,10 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { resolveProjectileBlockHit } from "../../object/projectile/blocking";
 import { LinearProjectileUpdater } from "../../object/projectile/linearUpdater";
 import { tryReflectLinearProjectile } from "../../object/projectile/reflection";
+import {
+  applyDamageToSlimluThreatOrPlayer,
+  resolveSlimluThreatTargetForEnemy,
+} from "../../entity/character/slimlu/threatRegistry";
 import type {
   PlayerAttackTarget,
   PlayerWorld,
@@ -653,10 +657,14 @@ export const createTrainingScene = (
   type LauncherArrow = {
     mesh: THREE.Mesh;
     velocity: THREE.Vector3;
+    damage: number;
     life: number;
     maxLife: number;
     radius: number;
   };
+  const launcherArrowDamage = 14;
+  const launcherTargetHeightOffset = 1.2;
+  const launcherTargetHitPadding = 0.48;
   const launcherArrows: LauncherArrow[] = [];
   const launcherArrowGeometry = new THREE.CylinderGeometry(0.03, 0.03, 1.1, 10);
   launcherArrowGeometry.rotateX(Math.PI / 2);
@@ -674,14 +682,18 @@ export const createTrainingScene = (
   const launcherAimDirection = new THREE.Vector3();
   const launcherArrowForward = new THREE.Vector3(0, 0, 1);
   const launcherReflectedDirection = new THREE.Vector3();
-  const playerChest = new THREE.Vector3();
+  const launcherTargetProbe = new THREE.Vector3();
   let launcherCooldownUntil = 0;
 
   const spawnLauncherArrow = (player: THREE.Object3D, now: number) => {
     launcherBarrel.getWorldPosition(launcherOrigin);
-    playerChest.copy(player.position);
-    playerChest.y += 1.2;
-    launcherAimDirection.copy(playerChest).sub(launcherOrigin);
+    const resolvedTarget = resolveSlimluThreatTargetForEnemy({
+      fallbackTarget: player,
+      enemyObject: launcherBarrel,
+    });
+    resolvedTarget.getWorldPosition(launcherTargetProbe);
+    launcherTargetProbe.y += launcherTargetHeightOffset;
+    launcherAimDirection.copy(launcherTargetProbe).sub(launcherOrigin);
     if (launcherAimDirection.lengthSq() < 0.000001) return;
     launcherAimDirection.normalize();
 
@@ -697,6 +709,7 @@ export const createTrainingScene = (
     launcherArrows.push({
       mesh: arrowMesh,
       velocity: launcherAimDirection.clone().multiplyScalar(13.5),
+      damage: launcherArrowDamage,
       life: 0,
       maxLife: 2.4,
       radius: 0.3,
@@ -842,14 +855,19 @@ export const createTrainingScene = (
     delta: number,
     player: THREE.Object3D,
     applyDamage: (amount: number) => number,
-    projectileBlockers: THREE.Object3D[]
+    projectileBlockers: THREE.Object3D[],
+    handleProjectileBlockHit?: PlayerWorldTickArgs["handleProjectileBlockHit"]
   ) => {
     for (let i = 0; i < projectileBlockers.length; i += 1) {
       projectileBlockers[i].updateMatrixWorld(true);
     }
 
-    playerChest.copy(player.position);
-    playerChest.y += 1.2;
+    const resolvedTarget = resolveSlimluThreatTargetForEnemy({
+      fallbackTarget: player,
+      enemyObject: launcherBarrel,
+    });
+    resolvedTarget.getWorldPosition(launcherTargetProbe);
+    launcherTargetProbe.y += launcherTargetHeightOffset;
     launcherArrowUpdater.update(launcherArrows, now, delta, {
       getObject: (arrow) => arrow.mesh,
       onTravel: (
@@ -879,8 +897,21 @@ export const createTrainingScene = (
             direction: blockDirection,
             travelDistance: blockTravelDistance,
             nextPosition: blockNextPosition,
-          }) =>
-            tryReflectLauncherArrow({
+          }) => {
+            if (
+              handleProjectileBlockHit?.({
+                blockerHit,
+                now: blockNow,
+                projectile: arrow,
+                origin: blockOrigin,
+                direction: blockDirection,
+                travelDistance: blockTravelDistance,
+                nextPosition: blockNextPosition,
+              })
+            ) {
+              return true;
+            }
+            return tryReflectLauncherArrow({
               arrow,
               blockerHit,
               now: blockNow,
@@ -888,7 +919,8 @@ export const createTrainingScene = (
               direction: blockDirection,
               travelDistance: blockTravelDistance,
               nextPosition: blockNextPosition,
-            }),
+            });
+          },
         });
         if (blockResolution === "blocked") {
           remove();
@@ -896,12 +928,16 @@ export const createTrainingScene = (
       },
       shouldExpire: (arrow) => arrow.mesh.position.y <= groundY + 0.05,
       onAfterMove: (arrow, _stepNow, _stepDelta, remove) => {
-        const hitRadius = arrow.radius + 0.48;
+        const hitRadius = arrow.radius + launcherTargetHitPadding;
         if (
-          arrow.mesh.position.distanceToSquared(playerChest) <=
+          arrow.mesh.position.distanceToSquared(launcherTargetProbe) <=
           hitRadius * hitRadius
         ) {
-          applyDamage(14);
+          applyDamageToSlimluThreatOrPlayer({
+            target: resolvedTarget,
+            amount: arrow.damage,
+            applyPlayerDamage: applyDamage,
+          });
           remove();
         }
       },
@@ -917,6 +953,7 @@ export const createTrainingScene = (
     player,
     applyDamage,
     projectileBlockers,
+    handleProjectileBlockHit,
   }: PlayerWorldTickArgs) => {
     const previousDps = dps;
     dps = resolveCurrentDps(now);
@@ -935,7 +972,14 @@ export const createTrainingScene = (
       spawnLauncherArrow(player, now);
     }
 
-    updateLauncherArrows(now, delta, player, applyDamage, projectileBlockers);
+    updateLauncherArrows(
+      now,
+      delta,
+      player,
+      applyDamage,
+      projectileBlockers,
+      handleProjectileBlockHit
+    );
     if (Math.abs(dps - previousDps) > 0.000001) {
       emitTrainingState();
     }

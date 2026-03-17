@@ -356,6 +356,14 @@ export interface CharacterRuntimeFactory {
   (args: {
     avatar: THREE.Object3D;
     mount?: HTMLElement;
+    groundY?: number;
+    bounds?: {
+      minX: number;
+      maxX: number;
+      minZ: number;
+      maxZ: number;
+    };
+    isBlocked?: (x: number, z: number) => boolean;
     noCooldown?: boolean;
     fireProjectile?: (args?: FireProjectileArgs) => void;
     performMeleeAttack?: (args: MeleeAttackArgs) => number;

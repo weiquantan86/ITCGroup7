@@ -1,10 +1,19 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { characterGltfAnimationClipsKey } from "../general/engine/characterLoader";
 import { createCharacterRuntime } from "../general/runtime/runtimeBase";
 import { CharacterRuntimeObject } from "../general/runtime/runtimeObject";
 import type { CharacterRuntimeFactory } from "../general/types";
 import { profile } from "./profile";
+import {
+  applyDamageToHarperEnemyTarget,
+  createHarperEnemyTarget,
+  isHarperEnemyTargetAlive,
+  registerHarperEnemyTarget,
+  type HarperEnemyTarget,
+  unregisterHarperEnemyTarget,
+} from "./purcleThreat";
 
 const hiddenNodePattern = /^weapon(root)?$/i;
 const idleBareClipName = "idleBare";
@@ -27,6 +36,27 @@ const normalAttackBareProjectileLifetime = 1.4;
 const normalAttackBareProjectileRadius = 0.34;
 const normalAttackBareProjectileScale = 2.25;
 const normalAttackBareProjectileForwardOffset = 0.62;
+const skillEWeaponThrowProgressFallback = 0.45;
+const skillEWeaponProjectileSpeed = 23.5;
+const skillEWeaponProjectileLifetime = 2.2;
+const skillEWeaponProjectileRadius = 0.2;
+const skillEWeaponProjectileTargetHitRadius = 0.34;
+const skillEWeaponProjectileDamage = 30;
+const skillEWeaponProjectileExplosionRadius = 5.8;
+const skillEWeaponProjectileExplosionDamage = 62;
+const skillEWeaponProjectileExplosionMinDamage = 24;
+const skillEWeaponProjectileForwardOffset = 0.52;
+const skillEWeaponProjectileUpwardOffset = 0.16;
+const skillEWeaponExplosionFxDurationMs = 5200;
+const skillEWeaponExplosionShakeDurationMs = skillEWeaponExplosionFxDurationMs;
+const skillEWeaponExplosionShakeMagnitude = 0.34;
+const skillEWeaponExplosionCameraShakeMagnitude = 0.32;
+const skillEWeaponExplosionCameraShakeDurationMs = skillEWeaponExplosionFxDurationMs;
+const skillEWeaponExplosionParticleCount = 24;
+const skillEWeaponExplosionMaxActiveCount = 3;
+const skillEWeaponExplosionFlashIntervalMs = 250;
+const skillEWeaponExplosionDamageTickIntervalMs = 250;
+const skillEWeaponExplosionDamageTick = 12;
 const skillQBareGateSummonProgress = 0.52;
 const skillQBareGateSpawnForwardOffset = 2.2;
 const skillQBareGateGroundYOffset = -0.04;
@@ -35,10 +65,27 @@ const skillQBareGateRiseDurationMs = 900;
 const skillQBareGateScale = 1;
 const skillQBareGateColliderDepth = 0.78;
 const skillQBareGatePurcleSpawnIntervalMs = 7000;
+const skillQBareGateMaxHealth = 10;
 const skillQBarePurcleScale = 0.86;
 const skillQBarePurcleMoveSpeed = 3.6;
-const skillQBarePurcleForwardDistance = 3;
+const skillQBarePurcleSpawnForwardOffset = 1.15;
+const skillQBarePurcleLifetimeMs = 20000;
+const skillQBarePurcleMaxHealth = 50;
 const skillQBarePurcleEnemySearchRadius = 100;
+const skillQBarePurcleAttackRange = 1.55;
+const skillQBarePurcleAttackReach = 0.42;
+const skillQBarePurcleAttackHitRadius = 0.68;
+const skillQBarePurcleAttackDamage = 9;
+const skillQBarePurcleAttackCooldownMs = 900;
+const skillQBarePurcleAttackHitProgress = 0.5;
+const skillQBarePurcleSpawnBoundsPadding = 0.28;
+const skillQBarePurcleSpawnCheckRadius = 0.48;
+const skillQBarePurcleSpawnStep = 0.45;
+const skillQBarePurcleGravity = -22;
+const skillQBarePurcleMeleeHitHeightMin = 1.05;
+const skillQBarePurcleMeleeHitHeightMax = 2.4;
+const skillQBarePurcleMeleeHitRadiusMin = 0.58;
+const skillQBarePurcleMeleeHitRadiusMax = 1.28;
 const skillQBarePortalParticleCount = 24;
 const skillRBareLiftStartProgress = 0.08;
 const skillRBareLiftPeakProgress = 0.56;
@@ -48,17 +95,37 @@ const skillRBareChargeStartProgress = 0.08;
 const skillRBareChargeEndProgress = 0.64;
 const skillRBareBurstProgress = 0.68;
 const skillRBareFxFadeOutProgress = 0.95;
-const skillRBareOrbitParticleCount = 24;
-const skillRBareHomingProjectileCount = 28;
-const skillRBareHomingSpawnRadius = 0.88;
+const skillRBareOrbitParticleCount = 36;
+const skillRBareHomingProjectileCount = 34;
+const skillRBareHomingSpawnRadius = 1.32;
 const skillRBareHomingSpawnHeight = 1.14;
 const skillRBareFxBaseHeight = 1.22;
+const skillRBareOuterRingBaseYOffset = 0.36;
+const skillRBareOuterRingOrbitRadius = 0.3;
+const skillRBareOuterRingVerticalOrbitRadius = 0.2;
+const skillRBareOuterRingOrbitSpeedA = 1.9;
+const skillRBareOuterRingOrbitSpeedB = 2.6;
+const skillRBareOuterRingSpinSpeedX = 2.1;
+const skillRBareOuterRingSpinSpeedY = 2.8;
+const skillRBareOuterRingSpinSpeedZ = 2.3;
+const skillRBareExpandingRingBaseYOffset = 0.18;
+const skillRBareExpandingRingOrbitRadius = 0.56;
+const skillRBareExpandingRingVerticalOrbitRadius = 0.3;
+const skillRBareExpandingRingOrbitSpeedA = 1.45;
+const skillRBareExpandingRingOrbitSpeedB = 2.05;
+const skillRBareExpandingRingSpinSpeedX = 1.7;
+const skillRBareExpandingRingSpinSpeedY = 2.2;
+const skillRBareExpandingRingSpinSpeedZ = 1.9;
+const skillRBareExplosionSphereBaseYOffset = -0.34;
+const skillRBareExplosionSphereBurstScaleBoost = 3.9;
+const skillRBareExplosionSphereShakeDurationMs = 800;
+const skillRBareExplosionSphereShakeMagnitude = 0.16;
 const skillRBareHomingMinSpeed = 11.8;
 const skillRBareHomingMaxSpeed = 17.2;
 const skillRBareHomingLifetime = 2.3;
 const skillRBareHomingTurnRate = 5.8;
-const skillRBareHomingTargetRadius = 13.5;
-const skillRBareCameraShakeMagnitude = 0.15;
+const skillRBareHomingTargetRadius = 18;
+const skillRBareCameraShakeMagnitude = 0.21;
 const skillRBareCameraShakeDurationMs = 420;
 const legTrackPattern = /shoe|leg|foot|thigh|calf|toe|hips|pelvis|ankle/i;
 const headBoneName = "Head";
@@ -76,6 +143,52 @@ type BarePrimaryAttackState = {
   chargeEndsAt: number;
   fireAt: number;
   endsAt: number;
+};
+
+type SkillEWeaponThrowState = {
+  active: boolean;
+  projectileLaunched: boolean;
+  forcedBare: boolean;
+  hasSourceSample: boolean;
+  previousSourceWorldPos: THREE.Vector3;
+};
+
+type SkillEWeaponExplosionParticle = {
+  mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  angle: number;
+  radius: number;
+  radialSpeed: number;
+  height: number;
+  heightSpeed: number;
+  swirl: number;
+  phase: number;
+};
+
+type SkillEWeaponExplosionFxEntry = {
+  root: THREE.Group;
+  core: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  coreMaterial: THREE.MeshBasicMaterial;
+  shell: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  shellMaterial: THREE.MeshBasicMaterial;
+  voidShell: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  voidShellMaterial: THREE.MeshBasicMaterial;
+  ringOuter: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
+  ringOuterMaterial: THREE.MeshBasicMaterial;
+  ringInner: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
+  ringInnerMaterial: THREE.MeshBasicMaterial;
+  pulseRing: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
+  pulseRingMaterial: THREE.MeshBasicMaterial;
+  shockDisk: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
+  shockDiskMaterial: THREE.MeshBasicMaterial;
+  particleMaterial: THREE.MeshBasicMaterial;
+  particles: SkillEWeaponExplosionParticle[];
+  startedAt: number;
+  endsAt: number;
+  shakeEndsAt: number;
+  nextDamageTickAt: number;
+  baseWorldPos: THREE.Vector3;
+  shakeOffset: THREE.Vector3;
+  spin: number;
 };
 
 type ActionBinding = {
@@ -106,8 +219,11 @@ type SkillRBareShockwave = {
 };
 
 type SkillQBareGateEntry = {
+  id: string;
   root: THREE.Object3D;
+  enemyTarget: HarperEnemyTarget;
   collider: THREE.Mesh<THREE.BoxGeometry, THREE.MeshBasicMaterial>;
+  spawnAnchor: THREE.Object3D;
   portalFxRoot: THREE.Group;
   portalCore: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
   portalAura: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
@@ -143,17 +259,44 @@ type SkillQBareGatePendingSummon = {
 type SkillQBarePurclePendingSummon = {
   worldPos: THREE.Vector3;
   directionWorld: THREE.Vector3;
+  groundY: number;
+  requestedAt: number;
 };
 
+type SkillQBarePurcleMotionState = "idle" | "walk" | "attack";
+
 type SkillQBarePurcleEntry = {
+  id: string;
   root: THREE.Object3D;
-  forwardTargetWorld: THREE.Vector3;
+  targetAnchor: THREE.Object3D;
+  enemyTarget: HarperEnemyTarget;
+  worldPos: THREE.Vector3;
+  mixer: THREE.AnimationMixer | null;
+  idleAction: THREE.AnimationAction | null;
+  walkAction: THREE.AnimationAction | null;
+  attackAction: THREE.AnimationAction | null;
+  handL: THREE.Object3D | null;
+  handR: THREE.Object3D | null;
+  groundY: number;
+  groundOffset: number;
+  verticalVelocity: number;
+  motionState: SkillQBarePurcleMotionState;
+  attackActive: boolean;
+  attackHitApplied: boolean;
+  attackHitAt: number;
+  attackEndsAt: number;
+  nextAttackAt: number;
+  attackDurationMs: number;
   speed: number;
-  stopped: boolean;
 };
 
 let harperGateTemplatePromise: Promise<THREE.Object3D | null> | null = null;
-let harperPurcleTemplatePromise: Promise<THREE.Object3D | null> | null = null;
+type HarperPurcleTemplate = {
+  root: THREE.Object3D;
+  clips: THREE.AnimationClip[];
+};
+
+let harperPurcleTemplatePromise: Promise<HarperPurcleTemplate | null> | null = null;
 
 const loadHarperGateTemplate = () => {
   if (!harperGateTemplatePromise) {
@@ -190,7 +333,10 @@ const loadHarperPurcleTemplate = () => {
           mesh.castShadow = true;
           mesh.receiveShadow = true;
         });
-        return root;
+        return {
+          root,
+          clips: gltf.animations?.map((clip) => clip.clone()) ?? [],
+        } satisfies HarperPurcleTemplate;
       })
       .catch(() => null);
   }
@@ -233,6 +379,53 @@ const findPrimaryAttackHand = (avatarModel: THREE.Object3D | null) => {
     }
   });
   return fallback;
+};
+
+const weaponThrowSourceNamePattern = /(weapon(root)?|sword)/i;
+
+const findWeaponThrowSourceNode = (avatarModel: THREE.Object3D | null) => {
+  if (!avatarModel) return null;
+  let fallback: THREE.Object3D | null = null;
+  let best: THREE.Object3D | null = null;
+  avatarModel.traverse((node) => {
+    const name = (node.name || "").trim();
+    if (!name) return;
+    if (hiddenNodePattern.test(name)) {
+      if (!best || (node as THREE.Mesh).isMesh) {
+        best = node;
+      }
+      return;
+    }
+    if (!fallback && weaponThrowSourceNamePattern.test(name)) {
+      fallback = node;
+    }
+  });
+  return best ?? fallback;
+};
+
+const cloneObjectWithClonedMaterials = (source: THREE.Object3D) => {
+  const clone = SkeletonUtils.clone(source);
+  const materials: THREE.Material[] = [];
+  let hasMesh = false;
+  clone.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    hasMesh = true;
+    if (Array.isArray(mesh.material)) {
+      mesh.material = mesh.material.map((material) => {
+        const clonedMaterial = material.clone();
+        materials.push(clonedMaterial);
+        return clonedMaterial;
+      });
+    } else if (mesh.material) {
+      const clonedMaterial = mesh.material.clone();
+      mesh.material = clonedMaterial;
+      materials.push(clonedMaterial);
+    }
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+  });
+  return { clone, materials, hasMesh };
 };
 
 const stopAction = (action: THREE.AnimationAction | null) => {
@@ -323,12 +516,264 @@ const applyLoopWeight = (
   }
 };
 
+const setActionWeight = (
+  action: THREE.AnimationAction | null,
+  weight: number,
+  timeScale = 1
+) => {
+  if (!action) return;
+  action.enabled = true;
+  action.paused = false;
+  action.setEffectiveTimeScale(timeScale);
+  action.setEffectiveWeight(THREE.MathUtils.clamp(weight, 0, 1));
+  if (!action.isRunning()) {
+    action.play();
+  }
+};
+
+const resolveClipByPatterns = (
+  clips: THREE.AnimationClip[],
+  patterns: RegExp[]
+) => {
+  for (let i = 0; i < patterns.length; i += 1) {
+    const found = clips.find((clip) => patterns[i].test(clip.name));
+    if (found) return found;
+  }
+  return null;
+};
+
+const parseTrackNodeBinding = (track: THREE.KeyframeTrack) => {
+  try {
+    const parsed = THREE.PropertyBinding.parseTrackName(track.name) as {
+      nodeName?: unknown;
+      propertyName?: unknown;
+    };
+    const nodeName =
+      typeof parsed.nodeName === "string" ? parsed.nodeName.trim() : "";
+    const propertyName =
+      typeof parsed.propertyName === "string" ? parsed.propertyName : "";
+    if (!nodeName || !propertyName) return null;
+    return { nodeName, propertyName };
+  } catch {
+    return null;
+  }
+};
+
+const scoreWeaponTrackNode = (
+  nodeName: string,
+  preferredNodeNameLower: string | null
+) => {
+  const normalizedNodeName = nodeName.toLowerCase();
+  let score = 0;
+  if (preferredNodeNameLower && normalizedNodeName === preferredNodeNameLower) {
+    score += 120;
+  }
+  if (hiddenNodePattern.test(nodeName)) {
+    score += 80;
+  } else if (weaponThrowSourceNamePattern.test(nodeName)) {
+    score += 40;
+  }
+  return score;
+};
+
+const skillEThrowInitialPos = new THREE.Vector3();
+const skillEThrowPreviousPos = new THREE.Vector3();
+const skillEThrowCurrentPos = new THREE.Vector3();
+const skillEThrowInitialQuat = new THREE.Quaternion();
+const skillEThrowPreviousQuat = new THREE.Quaternion();
+const skillEThrowCurrentQuat = new THREE.Quaternion();
+
+const resolveFirstMeaningfulPositionKeyTime = (track: THREE.KeyframeTrack) => {
+  const times = (track as unknown as { times?: ArrayLike<number> }).times;
+  const values = (track as unknown as { values?: ArrayLike<number> }).values;
+  if (!times || !values || times.length < 2 || values.length < times.length * 3) {
+    return null;
+  }
+
+  skillEThrowInitialPos.set(values[0] ?? 0, values[1] ?? 0, values[2] ?? 0);
+  skillEThrowPreviousPos.copy(skillEThrowInitialPos);
+  let maxDisplacement = 0;
+  let maxStepSpeed = 0;
+  for (let i = 1; i < times.length; i += 1) {
+    const valueIndex = i * 3;
+    skillEThrowCurrentPos.set(
+      values[valueIndex] ?? 0,
+      values[valueIndex + 1] ?? 0,
+      values[valueIndex + 2] ?? 0
+    );
+    const displacement = skillEThrowCurrentPos.distanceTo(skillEThrowInitialPos);
+    const stepDistance = skillEThrowCurrentPos.distanceTo(skillEThrowPreviousPos);
+    const deltaTime = Math.max(0.00001, (times[i] ?? 0) - (times[i - 1] ?? 0));
+    maxDisplacement = Math.max(maxDisplacement, displacement);
+    maxStepSpeed = Math.max(maxStepSpeed, stepDistance / deltaTime);
+    skillEThrowPreviousPos.copy(skillEThrowCurrentPos);
+  }
+
+  const displacementThreshold = Math.max(0.008, maxDisplacement * 0.08);
+  const speedThreshold = Math.max(0.04, maxStepSpeed * 0.18);
+  skillEThrowPreviousPos.copy(skillEThrowInitialPos);
+  for (let i = 1; i < times.length; i += 1) {
+    const valueIndex = i * 3;
+    skillEThrowCurrentPos.set(
+      values[valueIndex] ?? 0,
+      values[valueIndex + 1] ?? 0,
+      values[valueIndex + 2] ?? 0
+    );
+    const displacement = skillEThrowCurrentPos.distanceTo(skillEThrowInitialPos);
+    const stepDistance = skillEThrowCurrentPos.distanceTo(skillEThrowPreviousPos);
+    const deltaTime = Math.max(0.00001, (times[i] ?? 0) - (times[i - 1] ?? 0));
+    const stepSpeed = stepDistance / deltaTime;
+    if (displacement >= displacementThreshold && stepSpeed >= speedThreshold) {
+      return times[i] ?? null;
+    }
+    skillEThrowPreviousPos.copy(skillEThrowCurrentPos);
+  }
+
+  const fallbackDisplacementThreshold = Math.max(0.004, maxDisplacement * 0.03);
+  const fallbackSpeedThreshold = Math.max(0.02, maxStepSpeed * 0.08);
+  skillEThrowPreviousPos.copy(skillEThrowInitialPos);
+  for (let i = 1; i < times.length; i += 1) {
+    const valueIndex = i * 3;
+    skillEThrowCurrentPos.set(
+      values[valueIndex] ?? 0,
+      values[valueIndex + 1] ?? 0,
+      values[valueIndex + 2] ?? 0
+    );
+    const displacement = skillEThrowCurrentPos.distanceTo(skillEThrowInitialPos);
+    const stepDistance = skillEThrowCurrentPos.distanceTo(skillEThrowPreviousPos);
+    const deltaTime = Math.max(0.00001, (times[i] ?? 0) - (times[i - 1] ?? 0));
+    const stepSpeed = stepDistance / deltaTime;
+    if (
+      displacement >= fallbackDisplacementThreshold &&
+      stepSpeed >= fallbackSpeedThreshold
+    ) {
+      return times[i] ?? null;
+    }
+    skillEThrowPreviousPos.copy(skillEThrowCurrentPos);
+  }
+
+  return null;
+};
+
+const resolveFirstMeaningfulRotationKeyTime = (track: THREE.KeyframeTrack) => {
+  const times = (track as unknown as { times?: ArrayLike<number> }).times;
+  const values = (track as unknown as { values?: ArrayLike<number> }).values;
+  if (!times || !values || times.length < 2 || values.length < times.length * 4) {
+    return null;
+  }
+
+  skillEThrowInitialQuat
+    .set(values[0] ?? 0, values[1] ?? 0, values[2] ?? 0, values[3] ?? 1)
+    .normalize();
+  skillEThrowPreviousQuat.copy(skillEThrowInitialQuat);
+  let maxAngle = 0;
+  let maxAngularSpeed = 0;
+  for (let i = 1; i < times.length; i += 1) {
+    const valueIndex = i * 4;
+    skillEThrowCurrentQuat
+      .set(
+        values[valueIndex] ?? 0,
+        values[valueIndex + 1] ?? 0,
+        values[valueIndex + 2] ?? 0,
+        values[valueIndex + 3] ?? 1
+      )
+      .normalize();
+    const angle = skillEThrowCurrentQuat.angleTo(skillEThrowInitialQuat);
+    const deltaAngle = skillEThrowCurrentQuat.angleTo(skillEThrowPreviousQuat);
+    const deltaTime = Math.max(0.00001, (times[i] ?? 0) - (times[i - 1] ?? 0));
+    maxAngle = Math.max(maxAngle, angle);
+    maxAngularSpeed = Math.max(maxAngularSpeed, deltaAngle / deltaTime);
+    skillEThrowPreviousQuat.copy(skillEThrowCurrentQuat);
+  }
+
+  const angleThreshold = Math.max(0.06, maxAngle * 0.12);
+  const speedThreshold = Math.max(0.22, maxAngularSpeed * 0.18);
+  skillEThrowPreviousQuat.copy(skillEThrowInitialQuat);
+  for (let i = 1; i < times.length; i += 1) {
+    const valueIndex = i * 4;
+    skillEThrowCurrentQuat
+      .set(
+        values[valueIndex] ?? 0,
+        values[valueIndex + 1] ?? 0,
+        values[valueIndex + 2] ?? 0,
+        values[valueIndex + 3] ?? 1
+      )
+      .normalize();
+    const angle = skillEThrowCurrentQuat.angleTo(skillEThrowInitialQuat);
+    const deltaAngle = skillEThrowCurrentQuat.angleTo(skillEThrowPreviousQuat);
+    const deltaTime = Math.max(0.00001, (times[i] ?? 0) - (times[i - 1] ?? 0));
+    const angularSpeed = deltaAngle / deltaTime;
+    if (angle >= angleThreshold && angularSpeed >= speedThreshold) {
+      return times[i] ?? null;
+    }
+    skillEThrowPreviousQuat.copy(skillEThrowCurrentQuat);
+  }
+
+  return null;
+};
+
+const resolveSkillEWeaponThrowProgressFromClip = ({
+  clip,
+  preferredNodeName,
+}: {
+  clip: THREE.AnimationClip | null;
+  preferredNodeName?: string | null;
+}) => {
+  if (!clip || !Number.isFinite(clip.duration) || clip.duration <= 0.00001) {
+    return skillEWeaponThrowProgressFallback;
+  }
+
+  const preferredNodeNameLower =
+    typeof preferredNodeName === "string" && preferredNodeName.trim()
+      ? preferredNodeName.trim().toLowerCase()
+      : null;
+
+  let bestPositionTrack: THREE.KeyframeTrack | null = null;
+  let bestPositionScore = -Infinity;
+  let bestRotationTrack: THREE.KeyframeTrack | null = null;
+  let bestRotationScore = -Infinity;
+  for (let i = 0; i < clip.tracks.length; i += 1) {
+    const track = clip.tracks[i];
+    const parsed = parseTrackNodeBinding(track);
+    if (!parsed) continue;
+    const nodeScore = scoreWeaponTrackNode(parsed.nodeName, preferredNodeNameLower);
+    if (nodeScore <= 0) continue;
+    if (parsed.propertyName === "position" && nodeScore > bestPositionScore) {
+      bestPositionTrack = track;
+      bestPositionScore = nodeScore;
+    }
+    if (parsed.propertyName === "quaternion" && nodeScore > bestRotationScore) {
+      bestRotationTrack = track;
+      bestRotationScore = nodeScore;
+    }
+  }
+
+  const throwTime =
+    (bestPositionTrack
+      ? resolveFirstMeaningfulPositionKeyTime(bestPositionTrack)
+      : null) ??
+    (bestRotationTrack
+      ? resolveFirstMeaningfulRotationKeyTime(bestRotationTrack)
+      : null);
+  if (throwTime == null) {
+    return skillEWeaponThrowProgressFallback;
+  }
+  return THREE.MathUtils.clamp(throwTime / clip.duration, 0.02, 0.95);
+};
+
 export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
+  groundY,
+  bounds,
+  isBlocked,
   fireProjectile,
   getAttackTargets,
+  performMeleeAttack,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
+  const runtimeGroundY = Number.isFinite(groundY) ? groundY : avatar.position.y;
+  const runtimeBounds = bounds ?? null;
+  const runtimeIsBlocked = isBlocked ?? null;
   let lastAvatarModel: THREE.Object3D | null = null;
   let mixer: THREE.AnimationMixer | null = null;
   let idleBareBinding: ActionBinding | null = null;
@@ -354,6 +799,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
     fireAt: 0,
     endsAt: 0,
   };
+  const skillEWeaponThrowState: SkillEWeaponThrowState = {
+    active: false,
+    projectileLaunched: false,
+    forcedBare: false,
+    hasSourceSample: false,
+    previousSourceWorldPos: new THREE.Vector3(),
+  };
+  let skillEWeaponResolvedThrowProgress = skillEWeaponThrowProgressFallback;
+  let weaponThrowSourceNode: THREE.Object3D | null = null;
   let primaryAttackHandBone: THREE.Object3D | null = null;
   const primaryAttackChargeOrb = new THREE.Group();
   const primaryAttackChargeCore = new THREE.Mesh(
@@ -388,6 +842,44 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const primaryAttackHandQuat = new THREE.Quaternion();
   const primaryAttackProjectileDirection = new THREE.Vector3(0, 0, 1);
   const runtimeAimDirection = new THREE.Vector3(0, 0, 1);
+  const skillEWeaponThrowOriginWorld = new THREE.Vector3();
+  const skillEWeaponThrowDirection = new THREE.Vector3(0, 0, 1);
+  const skillEWeaponThrowSourceQuat = new THREE.Quaternion();
+  const skillEWeaponThrowSourceScale = new THREE.Vector3(1, 1, 1);
+  const skillEWeaponThrowSampleEndWorld = new THREE.Vector3();
+  const skillEWeaponThrowAvatarQuat = new THREE.Quaternion();
+  const skillEWeaponThrowAvatarForward = new THREE.Vector3(0, 0, 1);
+  const skillEWeaponThrowAxisWorldCandidate = new THREE.Vector3();
+  const skillEWeaponThrowSelectedLocalAxis = new THREE.Vector3(0, 0, 1);
+  const skillEWeaponThrowAxisProbe = [
+    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(0, 0, -1),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, -1, 0),
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(-1, 0, 0),
+  ] as const;
+  const skillEWeaponExplosionFxEntries: SkillEWeaponExplosionFxEntry[] = [];
+  const skillEWeaponExplosionCoreGeometry = new THREE.SphereGeometry(0.44, 18, 16);
+  const skillEWeaponExplosionShellGeometry = new THREE.SphereGeometry(0.7, 16, 14);
+  const skillEWeaponExplosionRingOuterGeometry = new THREE.TorusGeometry(
+    0.98,
+    0.09,
+    10,
+    44
+  );
+  const skillEWeaponExplosionRingInnerGeometry = new THREE.TorusGeometry(
+    0.58,
+    0.06,
+    10,
+    36
+  );
+  const skillEWeaponExplosionShockDiskGeometry = new THREE.RingGeometry(0.2, 1.22, 44);
+  const skillEWeaponExplosionParticleGeometry = new THREE.SphereGeometry(0.09, 8, 8);
+  const skillEWeaponExplosionSpawnWorldPos = new THREE.Vector3();
+  const skillEWeaponExplosionDamageCenter = new THREE.Vector3();
+  const skillEWeaponExplosionDamageDirection = new THREE.Vector3(0, 0, 1);
+  const skillEWeaponExplosionFallbackTargetPos = new THREE.Vector3();
   let primaryAttackChargePulse = 0;
   let primaryAttackHeld = false;
   let wasPrimaryAttackAnimationActive = false;
@@ -403,6 +895,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let skillRBareBurstTriggered = false;
   let skillRBareBaseAvatarY = 0;
   let skillRBareCurrentLift = 0;
+  let skillRBareExplosionSphereShakeEndsAt = 0;
+  const skillRBareExplosionSphereShakeOffset = new THREE.Vector3();
   const skillRBareCenterWorld = new THREE.Vector3();
   const skillRBareBurstDirection = new THREE.Vector3();
   const skillRBareCurrentDirection = new THREE.Vector3();
@@ -442,11 +936,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillRBareWaistRingGeometry,
     skillRBareWaistRingMaterial
   );
-  const skillRBareGroundDiskGeometry = new THREE.CircleGeometry(1, 48);
+  const skillRBareGroundDiskGeometry = new THREE.SphereGeometry(0.8, 24, 20);
   const skillRBareGroundDiskMaterial = new THREE.MeshBasicMaterial({
-    color: 0x2e1065,
+    color: 0x6d28d9,
     transparent: true,
-    opacity: 0.52,
+    opacity: 0.58,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
@@ -481,9 +975,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let skillQBareGateTemplate: THREE.Object3D | null = null;
   let skillQBareGateTemplateLoading = false;
   let skillQBarePurcleTemplate: THREE.Object3D | null = null;
+  let skillQBarePurcleTemplateClips: THREE.AnimationClip[] = [];
   let skillQBarePurcleTemplateLoading = false;
   let skillQBareGateSummonedInCast = false;
+  let skillQBareGateIdCounter = 0;
+  let skillQBarePurcleIdCounter = 0;
   const skillQBareGateActiveEntries: SkillQBareGateEntry[] = [];
+  const skillQBareGateEntryById = new Map<string, SkillQBareGateEntry>();
   const skillQBareGatePendingSummons: SkillQBareGatePendingSummon[] = [];
   const skillQBarePurclePendingSummons: SkillQBarePurclePendingSummon[] = [];
   const skillQBarePurcleEntries: SkillQBarePurcleEntry[] = [];
@@ -494,12 +992,22 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillQBareGateBounds = new THREE.Box3();
   const skillQBareGateBoundsSize = new THREE.Vector3();
   const skillQBareGateBoundsCenter = new THREE.Vector3();
+  const skillQBarePurcleBounds = new THREE.Box3();
+  const skillQBarePurcleBoundsSize = new THREE.Vector3();
+  const skillQBarePurcleBoundsCenter = new THREE.Vector3();
   const skillQBareGateCenterLocal = new THREE.Vector3();
   const skillQBarePurcleSpawnLocalPos = new THREE.Vector3();
+  const skillQBarePurcleGateWorldPos = new THREE.Vector3();
   const skillQBarePurcleWorldPos = new THREE.Vector3();
   const skillQBarePurcleTargetWorldPos = new THREE.Vector3();
-  const skillQBarePurcleMoveDirection = new THREE.Vector3();
   const skillQBarePurcleNextWorldPos = new THREE.Vector3();
+  const skillQBarePurcleAttackDirection = new THREE.Vector3();
+  const skillQBarePurcleAttackOrigin = new THREE.Vector3();
+  const skillQBarePurcleAttackTargetWorldPos = new THREE.Vector3();
+  const skillQBarePurcleFistWorldPos = new THREE.Vector3();
+  const skillQBarePurcleFallbackForward = new THREE.Vector3();
+  const skillQBarePurcleSpawnPerp = new THREE.Vector3();
+  const skillQBarePurcleSpawnSample = new THREE.Vector3();
 
   primaryAttackChargeCore.renderOrder = 6;
   primaryAttackChargeShell.renderOrder = 5;
@@ -523,10 +1031,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
   skillRBareGroundRing.renderOrder = 6;
   skillRBareShell.scale.setScalar(1.45);
   skillRBareWaistRing.rotation.x = Math.PI * 0.5;
-  skillRBareGroundDisk.rotation.x = -Math.PI * 0.5;
-  skillRBareGroundDisk.position.y = -0.96;
+  skillRBareWaistRing.position.y = skillRBareOuterRingBaseYOffset;
+  skillRBareGroundDisk.position.y = skillRBareExplosionSphereBaseYOffset;
   skillRBareGroundRing.rotation.x = Math.PI * 0.5;
-  skillRBareGroundRing.position.y = -0.94;
+  skillRBareGroundRing.position.y = skillRBareExpandingRingBaseYOffset;
   skillRBareFxRoot.add(
     skillRBareCore,
     skillRBareShell,
@@ -546,8 +1054,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       mesh: particleMesh,
       angle: Math.random() * Math.PI * 2,
       spin: THREE.MathUtils.lerp(1.5, 4.2, Math.random()),
-      baseRadius: THREE.MathUtils.lerp(0.65, 1.35, Math.random()),
-      height: THREE.MathUtils.lerp(-0.64, 0.9, Math.random()),
+      baseRadius: THREE.MathUtils.lerp(0.9, 1.95, Math.random()),
+      height: THREE.MathUtils.lerp(-0.72, 1.1, Math.random()),
       phase: Math.random() * Math.PI * 2,
       drift: THREE.MathUtils.lerp(0.05, 0.18, Math.random()),
     });
@@ -556,6 +1064,22 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const isSkillAnimationActive = () =>
     Boolean(activeSkillBinding && activeSkillBinding.action.isRunning());
+
+  const isBareSkillQCastActive = () =>
+    Boolean(
+      !weaponEquipped &&
+        skillQBareBinding &&
+        activeSkillBinding === skillQBareBinding &&
+        skillQBareBinding.action.isRunning()
+    );
+
+  const isBareSkillRCastActive = () =>
+    Boolean(
+      !weaponEquipped &&
+        skillRBareBinding &&
+        activeSkillBinding === skillRBareBinding &&
+        skillRBareBinding.action.isRunning()
+    );
 
   const setPrimaryAttackChargeVisible = (visible: boolean) => {
     primaryAttackChargeOrb.visible = visible;
@@ -631,13 +1155,21 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillRBareCore.scale.setScalar(1);
     skillRBareShell.scale.setScalar(1.45);
     skillRBareWaistRing.scale.setScalar(1);
+    skillRBareWaistRing.position.set(0, skillRBareOuterRingBaseYOffset, 0);
+    skillRBareWaistRing.rotation.set(Math.PI * 0.5, 0, 0);
     skillRBareGroundDisk.scale.setScalar(1);
+    skillRBareGroundDisk.position.set(0, skillRBareExplosionSphereBaseYOffset, 0);
+    skillRBareGroundDisk.rotation.set(0, 0, 0);
     skillRBareGroundRing.scale.setScalar(1);
+    skillRBareGroundRing.position.set(0, skillRBareExpandingRingBaseYOffset, 0);
+    skillRBareGroundRing.rotation.set(Math.PI * 0.5, 0, 0);
     skillRBareShellMaterial.opacity = 0.44;
     skillRBareCoreMaterial.emissiveIntensity = 1.8;
     skillRBareWaistRingMaterial.opacity = 0.66;
-    skillRBareGroundDiskMaterial.opacity = 0.52;
+    skillRBareGroundDiskMaterial.opacity = 0.58;
     skillRBareGroundRingMaterial.opacity = 0.68;
+    skillRBareExplosionSphereShakeEndsAt = 0;
+    skillRBareExplosionSphereShakeOffset.set(0, 0, 0);
     clearSkillRBareShockwaves();
     setSkillRBareFxVisible(false);
   };
@@ -647,6 +1179,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillRBareBurstTriggered = false;
     skillRBareBaseAvatarY = avatar.position.y;
     skillRBareCurrentLift = 0;
+    skillRBareExplosionSphereShakeEndsAt = 0;
+    skillRBareExplosionSphereShakeOffset.set(0, 0, 0);
+    skillRBareGroundDisk.position.set(0, skillRBareExplosionSphereBaseYOffset, 0);
     setSkillRBareFxVisible(true);
   };
 
@@ -835,38 +1370,51 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const triggerSkillRBareBurst = (now: number, chargeProgress: number) => {
     if (skillRBareBurstTriggered) return;
     skillRBareBurstTriggered = true;
+    skillRBareExplosionSphereShakeEndsAt =
+      now + skillRBareExplosionSphereShakeDurationMs;
     skillRBareCoreMaterial.emissiveIntensity = 4.2;
     skillRBareShellMaterial.opacity = 0.8;
     skillRBareWaistRingMaterial.opacity = 0.92;
     spawnSkillRBareShockwave({
       yOffset: -0.08,
-      life: 0.52,
+      life: 0.64,
       startScale: 0.26,
-      endScale: 3.8,
-      opacity: 0.86,
+      endScale: 5.8,
+      opacity: 0.9,
       color: 0x581c87,
       spin: 2.6,
     });
     spawnSkillRBareShockwave({
       yOffset: 0.42,
-      life: 0.46,
+      life: 0.58,
       startScale: 0.22,
-      endScale: 3.3,
-      opacity: 0.74,
+      endScale: 5.1,
+      opacity: 0.8,
       color: 0x6d28d9,
       tiltX: 0.2,
       spin: -2.2,
     });
     spawnSkillRBareShockwave({
       yOffset: 0.95,
-      life: 0.38,
+      life: 0.48,
       startScale: 0.2,
-      endScale: 2.9,
-      opacity: 0.7,
+      endScale: 4.6,
+      opacity: 0.76,
       color: 0x7e22ce,
       tiltX: -0.25,
       tiltZ: 0.5,
       spin: 2.9,
+    });
+    spawnSkillRBareShockwave({
+      yOffset: 0.18,
+      life: 0.72,
+      startScale: 0.24,
+      endScale: 6.4,
+      opacity: 0.58,
+      color: 0xc084fc,
+      tiltX: 0.08,
+      tiltZ: -0.18,
+      spin: -1.9,
     });
     triggerCameraShake(now, skillRBareCameraShakeMagnitude, skillRBareCameraShakeDurationMs);
     fireSkillRBareHomingVolley(chargeProgress);
@@ -936,10 +1484,82 @@ export const createRuntime: CharacterRuntimeFactory = ({
       THREE.MathUtils.lerp(1.1, 2.15, chargeProgress) * shellPulse
     );
     skillRBareWaistRing.scale.setScalar(THREE.MathUtils.lerp(0.86, 1.65, chargeProgress));
-    skillRBareWaistRing.rotation.z += Math.max(0, deltaSeconds) * 2.4;
-    skillRBareGroundDisk.scale.setScalar(THREE.MathUtils.lerp(1.2, 3.4, chargeProgress));
-    skillRBareGroundRing.scale.setScalar(THREE.MathUtils.lerp(1.15, 3.25, chargeProgress));
-    skillRBareGroundRing.rotation.z -= Math.max(0, deltaSeconds) * 1.8;
+    const ringOrbitRadius = THREE.MathUtils.lerp(
+      skillRBareOuterRingOrbitRadius * 0.55,
+      skillRBareOuterRingOrbitRadius,
+      chargeProgress
+    );
+    const ringVerticalOrbit = THREE.MathUtils.lerp(
+      skillRBareOuterRingVerticalOrbitRadius * 0.45,
+      skillRBareOuterRingVerticalOrbitRadius,
+      chargeProgress
+    );
+    const ringOrbitAngleA = t * skillRBareOuterRingOrbitSpeedA;
+    const ringOrbitAngleB = t * skillRBareOuterRingOrbitSpeedB + 0.7;
+    skillRBareWaistRing.position.set(
+      Math.cos(ringOrbitAngleA) * ringOrbitRadius,
+      skillRBareOuterRingBaseYOffset + Math.sin(ringOrbitAngleB) * ringVerticalOrbit,
+      Math.sin(ringOrbitAngleA * 0.73 + ringOrbitAngleB * 0.37) * ringOrbitRadius
+    );
+    const ringSpinStep = Math.max(0, deltaSeconds);
+    skillRBareWaistRing.rotation.x += ringSpinStep * skillRBareOuterRingSpinSpeedX;
+    skillRBareWaistRing.rotation.y += ringSpinStep * skillRBareOuterRingSpinSpeedY;
+    skillRBareWaistRing.rotation.z += ringSpinStep * skillRBareOuterRingSpinSpeedZ;
+    const burstEnergy = skillRBareBurstTriggered ? 1 - decayAfterBurst : 0;
+    const explosionSpherePulse = 0.9 + Math.sin(t * 7.2 + 0.45) * 0.1;
+    const explosionSphereScale =
+      THREE.MathUtils.lerp(0.96, 2.5, chargeProgress) *
+      explosionSpherePulse *
+      (1 + burstEnergy * skillRBareExplosionSphereBurstScaleBoost);
+    skillRBareGroundDisk.scale.setScalar(explosionSphereScale);
+    skillRBareGroundDisk.position.set(0, skillRBareExplosionSphereBaseYOffset, 0);
+    if (now < skillRBareExplosionSphereShakeEndsAt) {
+      const shakeRemaining = skillRBareExplosionSphereShakeEndsAt - now;
+      const shakeProgress = THREE.MathUtils.clamp(
+        shakeRemaining / skillRBareExplosionSphereShakeDurationMs,
+        0,
+        1
+      );
+      const shakeAmplitude =
+        skillRBareExplosionSphereShakeMagnitude * Math.pow(shakeProgress, 1.15);
+      skillRBareExplosionSphereShakeOffset.set(
+        (Math.sin(t * 67.3 + 0.8) + Math.sin(t * 123.7 + 1.4) * 0.5) * shakeAmplitude,
+        (Math.cos(t * 91.4 + 0.3) + Math.sin(t * 141.1 + 2.2) * 0.4) *
+          shakeAmplitude *
+          0.7,
+        (Math.sin(t * 79.8 + 1.2) + Math.cos(t * 117.5 + 0.6) * 0.45) * shakeAmplitude
+      );
+      skillRBareGroundDisk.position.add(skillRBareExplosionSphereShakeOffset);
+    } else {
+      skillRBareExplosionSphereShakeOffset.set(0, 0, 0);
+    }
+    skillRBareGroundRing.scale.setScalar(THREE.MathUtils.lerp(1.45, 5.35, chargeProgress));
+    const expandingRingOrbitRadius = THREE.MathUtils.lerp(
+      skillRBareExpandingRingOrbitRadius * 0.5,
+      skillRBareExpandingRingOrbitRadius,
+      chargeProgress
+    );
+    const expandingRingVerticalOrbit = THREE.MathUtils.lerp(
+      skillRBareExpandingRingVerticalOrbitRadius * 0.4,
+      skillRBareExpandingRingVerticalOrbitRadius,
+      chargeProgress
+    );
+    const expandingRingOrbitAngleA = t * skillRBareExpandingRingOrbitSpeedA + 0.35;
+    const expandingRingOrbitAngleB = t * skillRBareExpandingRingOrbitSpeedB + 1.2;
+    skillRBareGroundRing.position.set(
+      Math.cos(expandingRingOrbitAngleA) * expandingRingOrbitRadius,
+      skillRBareExpandingRingBaseYOffset +
+        Math.sin(expandingRingOrbitAngleB) * expandingRingVerticalOrbit,
+      Math.sin(expandingRingOrbitAngleA * 0.67 + expandingRingOrbitAngleB * 0.41) *
+        expandingRingOrbitRadius
+    );
+    const expandingRingSpinStep = Math.max(0, deltaSeconds);
+    skillRBareGroundRing.rotation.x +=
+      expandingRingSpinStep * skillRBareExpandingRingSpinSpeedX;
+    skillRBareGroundRing.rotation.y +=
+      expandingRingSpinStep * skillRBareExpandingRingSpinSpeedY;
+    skillRBareGroundRing.rotation.z -=
+      expandingRingSpinStep * skillRBareExpandingRingSpinSpeedZ;
 
     skillRBareCoreMaterial.emissiveIntensity = THREE.MathUtils.lerp(
       1.5,
@@ -949,8 +1569,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillRBareShellMaterial.opacity = THREE.MathUtils.lerp(0.24, 0.7, chargeProgress) * alpha;
     skillRBareWaistRingMaterial.opacity =
       THREE.MathUtils.lerp(0.3, 0.82, chargeProgress) * alpha;
-    skillRBareGroundDiskMaterial.opacity =
-      THREE.MathUtils.lerp(0.22, 0.62, chargeProgress) * alpha;
+    const explosionSphereOpacityBoost = 1 + burstEnergy * 0.7;
+    skillRBareGroundDiskMaterial.opacity = THREE.MathUtils.clamp(
+      THREE.MathUtils.lerp(0.28, 0.78, chargeProgress) *
+        explosionSphereOpacityBoost *
+        alpha,
+      0,
+      0.95
+    );
     skillRBareGroundRingMaterial.opacity =
       THREE.MathUtils.lerp(0.35, 0.86, chargeProgress) * alpha;
     skillRBareOrbitParticleMaterial.opacity =
@@ -962,7 +1588,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         particle.angle +
         t * particle.spin +
         Math.sin(t * 2.8 + particle.phase) * 0.25;
-      const orbitRadius = THREE.MathUtils.lerp(particle.baseRadius, 0.22, chargeProgress);
+      const orbitRadius = THREE.MathUtils.lerp(particle.baseRadius, 0.34, chargeProgress);
       const lift = THREE.MathUtils.lerp(particle.height, 0.25, chargeProgress);
       const drift = Math.sin(t * 5.8 + particle.phase) * particle.drift;
       particle.mesh.position.set(
@@ -1089,15 +1715,25 @@ export const createRuntime: CharacterRuntimeFactory = ({
     void loadHarperPurcleTemplate().then((template) => {
       skillQBarePurcleTemplateLoading = false;
       if (!template) return;
-      skillQBarePurcleTemplate = template;
+      skillQBarePurcleTemplate = template.root;
+      skillQBarePurcleTemplateClips = template.clips.slice();
     });
   };
 
   const disposeSkillQBarePurcleEntry = (entry: SkillQBarePurcleEntry) => {
+    entry.enemyTarget.active = false;
+    unregisterHarperEnemyTarget(entry.id);
+    if (entry.mixer) {
+      entry.mixer.stopAllAction();
+      entry.mixer.uncacheRoot(entry.root);
+    }
     entry.root.removeFromParent();
   };
 
   const disposeSkillQBareGateEntry = (entry: SkillQBareGateEntry) => {
+    entry.enemyTarget.active = false;
+    unregisterHarperEnemyTarget(entry.id);
+    skillQBareGateEntryById.delete(entry.id);
     entry.portalFxRoot.removeFromParent();
     entry.root.removeFromParent();
     entry.collider.geometry.dispose();
@@ -1116,6 +1752,146 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.portalSwirlBMaterial.dispose();
     entry.portalSwirlCMaterial.dispose();
     entry.portalParticleMaterial.dispose();
+  };
+
+  const isOutsideRuntimeBounds = (x: number, z: number, padding = 0) => {
+    if (!runtimeBounds) return false;
+    return (
+      x < runtimeBounds.minX + padding ||
+      x > runtimeBounds.maxX - padding ||
+      z < runtimeBounds.minZ + padding ||
+      z > runtimeBounds.maxZ - padding
+    );
+  };
+
+  const isSpawnBlockedAt = (x: number, z: number) => {
+    if (isOutsideRuntimeBounds(x, z, skillQBarePurcleSpawnBoundsPadding)) return true;
+    if (!runtimeIsBlocked) return false;
+    return runtimeIsBlocked(x, z);
+  };
+
+  const canSpawnSkillQBarePurcleAt = (
+    gateWorldPos: THREE.Vector3,
+    spawnWorldPos: THREE.Vector3,
+    forwardWorld: THREE.Vector3
+  ) => {
+    if (isSpawnBlockedAt(spawnWorldPos.x, spawnWorldPos.z)) return false;
+    skillQBarePurcleSpawnPerp.set(-forwardWorld.z, 0, forwardWorld.x);
+    if (skillQBarePurcleSpawnPerp.lengthSq() < 0.000001) {
+      skillQBarePurcleSpawnPerp.set(1, 0, 0);
+    } else {
+      skillQBarePurcleSpawnPerp.normalize();
+    }
+    const offsets = [
+      [0, 0],
+      [skillQBarePurcleSpawnCheckRadius, 0],
+      [-skillQBarePurcleSpawnCheckRadius, 0],
+      [0, skillQBarePurcleSpawnCheckRadius],
+      [0, -skillQBarePurcleSpawnCheckRadius],
+      [skillQBarePurcleSpawnCheckRadius * 0.72, skillQBarePurcleSpawnCheckRadius * 0.72],
+      [skillQBarePurcleSpawnCheckRadius * 0.72, -skillQBarePurcleSpawnCheckRadius * 0.72],
+      [-skillQBarePurcleSpawnCheckRadius * 0.72, skillQBarePurcleSpawnCheckRadius * 0.72],
+      [-skillQBarePurcleSpawnCheckRadius * 0.72, -skillQBarePurcleSpawnCheckRadius * 0.72],
+    ] as const;
+    for (let i = 0; i < offsets.length; i += 1) {
+      const [forwardOffset, sideOffset] = offsets[i];
+      skillQBarePurcleSpawnSample
+        .copy(spawnWorldPos)
+        .addScaledVector(forwardWorld, forwardOffset)
+        .addScaledVector(skillQBarePurcleSpawnPerp, sideOffset);
+      if (isSpawnBlockedAt(skillQBarePurcleSpawnSample.x, skillQBarePurcleSpawnSample.z)) {
+        return false;
+      }
+    }
+    const segmentDx = spawnWorldPos.x - gateWorldPos.x;
+    const segmentDz = spawnWorldPos.z - gateWorldPos.z;
+    const segmentDistance = Math.hypot(segmentDx, segmentDz);
+    if (segmentDistance <= 0.0001) return true;
+    const segmentSteps = Math.max(2, Math.ceil(segmentDistance / skillQBarePurcleSpawnStep));
+    for (let i = 1; i <= segmentSteps; i += 1) {
+      const alpha = i / segmentSteps;
+      const sampleX = gateWorldPos.x + segmentDx * alpha;
+      const sampleZ = gateWorldPos.z + segmentDz * alpha;
+      if (isSpawnBlockedAt(sampleX, sampleZ)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const setSkillQBarePurcleMotionState = (
+    entry: SkillQBarePurcleEntry,
+    nextState: SkillQBarePurcleMotionState
+  ) => {
+    if (entry.motionState === nextState) return;
+    entry.motionState = nextState;
+    switch (nextState) {
+      case "walk":
+        setActionWeight(entry.walkAction, 1);
+        setActionWeight(entry.idleAction, 0);
+        setActionWeight(entry.attackAction, 0);
+        break;
+      case "attack":
+        setActionWeight(entry.walkAction, 0);
+        setActionWeight(entry.idleAction, 0);
+        break;
+      default:
+        setActionWeight(entry.walkAction, 0);
+        setActionWeight(entry.idleAction, 1);
+        setActionWeight(entry.attackAction, 0);
+        break;
+    }
+  };
+
+  const syncSkillQBareObjectToWorld = (
+    object: THREE.Object3D,
+    worldPos: THREE.Vector3
+  ) => {
+    const parent = object.parent;
+    if (!parent) return;
+    skillQBarePurcleSpawnLocalPos.copy(worldPos);
+    parent.worldToLocal(skillQBarePurcleSpawnLocalPos);
+    object.position.copy(skillQBarePurcleSpawnLocalPos);
+    object.updateMatrixWorld(true);
+  };
+
+  const applySkillQBarePurcleGrounding = (
+    entry: SkillQBarePurcleEntry,
+    deltaSeconds: number
+  ) => {
+    const groundedWorldY = entry.groundY + entry.groundOffset;
+    const safeDelta = Math.max(0, deltaSeconds);
+    let currentWorldY = entry.worldPos.y;
+    if (currentWorldY > groundedWorldY + 0.0001 || entry.verticalVelocity < -0.0001) {
+      entry.verticalVelocity += skillQBarePurcleGravity * safeDelta;
+      currentWorldY += entry.verticalVelocity * safeDelta;
+      if (currentWorldY <= groundedWorldY) {
+        currentWorldY = groundedWorldY;
+        entry.verticalVelocity = 0;
+      }
+    } else {
+      currentWorldY = groundedWorldY;
+      entry.verticalVelocity = 0;
+    }
+    entry.worldPos.y = currentWorldY;
+    syncSkillQBareObjectToWorld(entry.root, entry.worldPos);
+  };
+
+  const startSkillQBarePurcleAttack = (entry: SkillQBarePurcleEntry, now: number) => {
+    entry.attackActive = true;
+    entry.attackHitApplied = false;
+    entry.attackHitAt = now + entry.attackDurationMs * skillQBarePurcleAttackHitProgress;
+    entry.attackEndsAt = now + entry.attackDurationMs;
+    entry.nextAttackAt = now + Math.max(skillQBarePurcleAttackCooldownMs, entry.attackDurationMs);
+    if (entry.attackAction) {
+      entry.attackAction.reset();
+      entry.attackAction.enabled = true;
+      entry.attackAction.paused = false;
+      entry.attackAction.setEffectiveTimeScale(1);
+      entry.attackAction.setEffectiveWeight(1);
+      entry.attackAction.play();
+    }
+    setSkillQBarePurcleMotionState(entry, "attack");
   };
 
   const createSkillQBareGateEntry = (pending: SkillQBareGatePendingSummon) => {
@@ -1244,6 +2020,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       new THREE.TorusGeometry(portalRadius * 0.24, portalRadius * 0.042, 10, 28),
       portalSwirlCMaterial
     );
+    const spawnAnchor = new THREE.Object3D();
     const portalFxRoot = new THREE.Group();
     portalFxRoot.position.copy(skillQBareGateCenterLocal);
     portalFxRoot.position.z += skillQBareGateColliderDepth * 0.6;
@@ -1290,16 +2067,32 @@ export const createRuntime: CharacterRuntimeFactory = ({
       portalFxRoot.add(particle);
       portalParticles.push(particle);
     }
-    root.add(portalFxRoot);
+    spawnAnchor.position.copy(portalFxRoot.position);
+    root.add(spawnAnchor, portalFxRoot);
     const forwardWorld = new THREE.Vector3(
       Math.sin(pending.yaw),
       0,
       Math.cos(pending.yaw)
     ).normalize();
+    const spawnedAt =
+      typeof performance !== "undefined" ? performance.now() : pending.requestedAt;
+    const id = `harper-gate-${++skillQBareGateIdCounter}`;
+    const enemyTarget = createHarperEnemyTarget({
+      id,
+      object: root,
+      spawnedAt,
+      lifetimeMs: Number.POSITIVE_INFINITY,
+      maxHealth: skillQBareGateMaxHealth,
+    });
+    collider.userData.harperGateTargetId = id;
+    registerHarperEnemyTarget(enemyTarget);
 
     return {
+      id,
       root,
+      enemyTarget,
       collider,
+      spawnAnchor,
       portalFxRoot,
       portalCore,
       portalAura,
@@ -1331,24 +2124,159 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const createSkillQBarePurcleEntry = (pending: SkillQBarePurclePendingSummon) => {
     if (!skillQBarePurcleTemplate) return null;
     const parent = avatar.parent ?? avatar;
-    const root = skillQBarePurcleTemplate.clone(true);
+    const root = SkeletonUtils.clone(skillQBarePurcleTemplate);
     root.scale.multiplyScalar(skillQBarePurcleScale);
-    skillQBarePurcleSpawnLocalPos.copy(pending.worldPos);
-    parent.worldToLocal(skillQBarePurcleSpawnLocalPos);
-    root.position.copy(skillQBarePurcleSpawnLocalPos);
+    const worldPos = pending.worldPos.clone();
+    parent.add(root);
+    syncSkillQBareObjectToWorld(root, worldPos);
     root.rotation.y = Math.atan2(
       pending.directionWorld.x,
       pending.directionWorld.z
     );
-    parent.add(root);
-    return {
+    const spawnedAt = typeof performance !== "undefined" ? performance.now() : pending.requestedAt;
+    let groundOffset = 0;
+    const targetAnchor = new THREE.Object3D();
+    targetAnchor.name = "__harperPurcleTargetAnchor";
+    root.updateMatrixWorld(true);
+    skillQBarePurcleBounds.setFromObject(root);
+    if (!skillQBarePurcleBounds.isEmpty() && skillQBarePurcleBounds.min.y < pending.groundY) {
+      worldPos.y += pending.groundY - skillQBarePurcleBounds.min.y;
+      syncSkillQBareObjectToWorld(root, worldPos);
+      skillQBarePurcleBounds.setFromObject(root);
+    }
+    if (!skillQBarePurcleBounds.isEmpty()) {
+      groundOffset = worldPos.y - skillQBarePurcleBounds.min.y;
+    }
+    if (!skillQBarePurcleBounds.isEmpty()) {
+      skillQBarePurcleBounds.getCenter(skillQBarePurcleBoundsCenter);
+      skillQBarePurcleSpawnLocalPos.set(
+        skillQBarePurcleBoundsCenter.x,
+        skillQBarePurcleBounds.min.y,
+        skillQBarePurcleBoundsCenter.z
+      );
+      root.worldToLocal(skillQBarePurcleSpawnLocalPos);
+      targetAnchor.position.copy(skillQBarePurcleSpawnLocalPos);
+    } else {
+      targetAnchor.position.set(0, 0, 0);
+    }
+    let meleeHitHeight = 1.25;
+    let meleeHitRadius = 0.72;
+    if (!skillQBarePurcleBounds.isEmpty()) {
+      skillQBarePurcleBounds.getSize(skillQBarePurcleBoundsSize);
+      meleeHitHeight = THREE.MathUtils.clamp(
+        skillQBarePurcleBoundsSize.y * 0.58,
+        skillQBarePurcleMeleeHitHeightMin,
+        skillQBarePurcleMeleeHitHeightMax
+      );
+      meleeHitRadius = THREE.MathUtils.clamp(
+        Math.max(skillQBarePurcleBoundsSize.x, skillQBarePurcleBoundsSize.z) * 0.36,
+        skillQBarePurcleMeleeHitRadiusMin,
+        skillQBarePurcleMeleeHitRadiusMax
+      );
+    }
+    const meleeHitUserData = targetAnchor.userData as {
+      mochiGeneralMeleeHitHeight?: number;
+      mochiGeneralMeleeHitRadius?: number;
+      mochiGeneralMeleeHitBottom?: number;
+      mochiGeneralMeleeHitTop?: number;
+      mochiGeneralMeleeHitBoundsSource?: THREE.Object3D;
+    };
+    meleeHitUserData.mochiGeneralMeleeHitHeight = meleeHitHeight;
+    meleeHitUserData.mochiGeneralMeleeHitRadius = meleeHitRadius;
+    meleeHitUserData.mochiGeneralMeleeHitBottom = -0.08;
+    meleeHitUserData.mochiGeneralMeleeHitTop = Math.max(
+      meleeHitHeight + 0.72,
+      1.95
+    );
+    // Use the animated purcle root as the melee bounds source so enemy melee checks
+    // track the real body volume instead of a single anchor point.
+    meleeHitUserData.mochiGeneralMeleeHitBoundsSource = root;
+    root.add(targetAnchor);
+    targetAnchor.updateMatrixWorld(true);
+    const id = `harper-purcle-${++skillQBarePurcleIdCounter}`;
+    const enemyTarget = createHarperEnemyTarget({
+      id,
+      object: targetAnchor,
+      spawnedAt,
+      lifetimeMs: skillQBarePurcleLifetimeMs,
+      maxHealth: skillQBarePurcleMaxHealth,
+    });
+    registerHarperEnemyTarget(enemyTarget);
+    let mixer: THREE.AnimationMixer | null = null;
+    let idleAction: THREE.AnimationAction | null = null;
+    let walkAction: THREE.AnimationAction | null = null;
+    let attackAction: THREE.AnimationAction | null = null;
+    let attackDurationMs = 860;
+    if (skillQBarePurcleTemplateClips.length > 0) {
+      mixer = new THREE.AnimationMixer(root);
+      const idleClip = resolveClipByPatterns(skillQBarePurcleTemplateClips, [
+        /^idlebare$/i,
+        /^idle$/i,
+        /idle/i,
+      ]);
+      const walkClip = resolveClipByPatterns(skillQBarePurcleTemplateClips, [
+        /^walk$/i,
+        /walk/i,
+      ]);
+      const attackClip = resolveClipByPatterns(skillQBarePurcleTemplateClips, [
+        /^attack$/i,
+        /normalattack/i,
+        /attack/i,
+      ]);
+      if (idleClip) {
+        idleAction = mixer.clipAction(idleClip);
+        idleAction.setLoop(THREE.LoopRepeat, Infinity);
+        idleAction.clampWhenFinished = false;
+        idleAction.enabled = true;
+        idleAction.paused = false;
+        idleAction.setEffectiveWeight(1);
+        idleAction.play();
+      }
+      if (walkClip) {
+        walkAction = mixer.clipAction(walkClip);
+        walkAction.setLoop(THREE.LoopRepeat, Infinity);
+        walkAction.clampWhenFinished = false;
+        walkAction.enabled = true;
+        walkAction.paused = false;
+        walkAction.setEffectiveWeight(0);
+        walkAction.play();
+      }
+      if (attackClip) {
+        attackAction = mixer.clipAction(attackClip);
+        attackAction.setLoop(THREE.LoopOnce, 1);
+        attackAction.clampWhenFinished = true;
+        attackAction.enabled = true;
+        attackAction.paused = true;
+        attackAction.setEffectiveWeight(0);
+        attackDurationMs = Math.max(420, attackClip.duration * 1000);
+      }
+    }
+    const entry: SkillQBarePurcleEntry = {
+      id,
       root,
-      forwardTargetWorld: pending.worldPos
-        .clone()
-        .addScaledVector(pending.directionWorld, skillQBarePurcleForwardDistance),
+      targetAnchor,
+      enemyTarget,
+      worldPos,
+      mixer,
+      idleAction,
+      walkAction,
+      attackAction,
+      handL: root.getObjectByName("HandL"),
+      handR: root.getObjectByName("HandR"),
+      groundY: pending.groundY,
+      groundOffset,
+      verticalVelocity: 0,
+      motionState: "idle",
+      attackActive: false,
+      attackHitApplied: false,
+      attackHitAt: 0,
+      attackEndsAt: 0,
+      nextAttackAt: spawnedAt + 300,
+      attackDurationMs,
       speed: skillQBarePurcleMoveSpeed,
-      stopped: false,
-    } satisfies SkillQBarePurcleEntry;
+    };
+    setSkillQBarePurcleMotionState(entry, "idle");
+    return entry;
   };
 
   const spawnPendingSkillQBareGates = () => {
@@ -1359,6 +2287,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       const entry = createSkillQBareGateEntry(pending);
       if (!entry) continue;
       skillQBareGateActiveEntries.push(entry);
+      skillQBareGateEntryById.set(entry.id, entry);
     }
   };
 
@@ -1375,12 +2304,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const queueSkillQBarePurcleSpawn = (
     worldPos: THREE.Vector3,
-    directionWorld: THREE.Vector3
+    directionWorld: THREE.Vector3,
+    groundYValue: number,
+    requestedAt: number
   ) => {
     if (directionWorld.lengthSq() < 0.000001) return;
     skillQBarePurclePendingSummons.push({
       worldPos: worldPos.clone(),
       directionWorld: directionWorld.clone().normalize(),
+      groundY: groundYValue,
+      requestedAt,
     });
     ensureSkillQBarePurcleTemplate();
     spawnPendingSkillQBarePurcles();
@@ -1395,10 +2328,51 @@ export const createRuntime: CharacterRuntimeFactory = ({
       disposeSkillQBareGateEntry(skillQBareGateActiveEntries[i]);
     }
     skillQBareGateActiveEntries.length = 0;
+    skillQBareGateEntryById.clear();
     for (let i = skillQBarePurcleEntries.length - 1; i >= 0; i -= 1) {
       disposeSkillQBarePurcleEntry(skillQBarePurcleEntries[i]);
     }
     skillQBarePurcleEntries.length = 0;
+  };
+
+  const resolveSkillQBareGateEntryFromBlocker = (
+    object: THREE.Object3D | null | undefined
+  ) => {
+    let current = object;
+    while (current) {
+      const targetId = (current.userData as { harperGateTargetId?: unknown })
+        .harperGateTargetId;
+      if (typeof targetId === "string") {
+        return skillQBareGateEntryById.get(targetId) ?? null;
+      }
+      current = current.parent;
+    }
+    return null;
+  };
+
+  const handleRuntimeProjectileBlockHit = (
+    args: Parameters<NonNullable<typeof baseRuntime.handleProjectileBlockHit>>[0]
+  ) => {
+    const gateEntry = resolveSkillQBareGateEntryFromBlocker(args.blockerHit.object);
+    if (gateEntry && isHarperEnemyTargetAlive(gateEntry.enemyTarget, args.now)) {
+      const damageValue = (args.projectile as { damage?: unknown }).damage;
+      if (typeof damageValue === "number" && Number.isFinite(damageValue) && damageValue > 0) {
+        applyDamageToHarperEnemyTarget(
+          gateEntry.enemyTarget,
+          Math.max(1, Math.round(damageValue))
+        );
+        if (!isHarperEnemyTargetAlive(gateEntry.enemyTarget, args.now)) {
+          const index = skillQBareGateActiveEntries.indexOf(gateEntry);
+          if (index >= 0) {
+            disposeSkillQBareGateEntry(gateEntry);
+            skillQBareGateActiveEntries.splice(index, 1);
+          }
+        }
+      }
+      // Treat gate collider as a real hit surface: projectile is consumed here.
+      return false;
+    }
+    return baseRuntime.handleProjectileBlockHit?.(args) ?? false;
   };
 
   const requestSkillQBareGateSummon = (now: number) => {
@@ -1441,6 +2415,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     for (let i = skillQBareGateActiveEntries.length - 1; i >= 0; i -= 1) {
       const entry = skillQBareGateActiveEntries[i];
       if (!entry.root.parent) {
+        disposeSkillQBareGateEntry(entry);
+        skillQBareGateActiveEntries.splice(i, 1);
+        continue;
+      }
+      if (!isHarperEnemyTargetAlive(entry.enemyTarget, now)) {
         disposeSkillQBareGateEntry(entry);
         skillQBareGateActiveEntries.splice(i, 1);
         continue;
@@ -1522,12 +2501,25 @@ export const createRuntime: CharacterRuntimeFactory = ({
       );
 
       if (!entry.riseActive && now >= entry.nextPurcleSpawnAt) {
-        entry.portalCore.getWorldPosition(skillQBarePurcleTargetWorldPos);
+        entry.spawnAnchor.getWorldPosition(skillQBarePurcleGateWorldPos);
+        skillQBarePurcleTargetWorldPos
+          .copy(skillQBarePurcleGateWorldPos)
+          .addScaledVector(entry.forwardWorld, skillQBarePurcleSpawnForwardOffset);
         while (now >= entry.nextPurcleSpawnAt) {
-          queueSkillQBarePurcleSpawn(
-            skillQBarePurcleTargetWorldPos,
-            entry.forwardWorld
-          );
+          if (
+            canSpawnSkillQBarePurcleAt(
+              skillQBarePurcleGateWorldPos,
+              skillQBarePurcleTargetWorldPos,
+              entry.forwardWorld
+            )
+          ) {
+            queueSkillQBarePurcleSpawn(
+              skillQBarePurcleTargetWorldPos,
+              entry.forwardWorld,
+              runtimeGroundY,
+              now
+            );
+          }
           entry.nextPurcleSpawnAt += skillQBareGatePurcleSpawnIntervalMs;
         }
       }
@@ -1545,12 +2537,20 @@ export const createRuntime: CharacterRuntimeFactory = ({
         skillQBarePurcleEntries.splice(i, 1);
         continue;
       }
-      entry.root.getWorldPosition(skillQBarePurcleWorldPos);
-      let hasTarget = false;
+      if (!isHarperEnemyTargetAlive(entry.enemyTarget, now)) {
+        disposeSkillQBarePurcleEntry(entry);
+        skillQBarePurcleEntries.splice(i, 1);
+        continue;
+      }
+      entry.mixer?.update(safeDelta);
+      entry.root.getWorldPosition(entry.worldPos);
+      skillQBarePurcleWorldPos.copy(entry.worldPos);
+      let nearestTarget: (typeof targets)[number] | null = null;
       let bestDistanceSq = searchRadiusSq;
       for (let j = 0; j < targets.length; j += 1) {
         const target = targets[j];
         if (!target?.object) continue;
+        if (!target.object.parent) continue;
         if (target.isActive && !target.isActive()) continue;
         target.object.getWorldPosition(skillQBarePurcleNextWorldPos);
         const dx = skillQBarePurcleNextWorldPos.x - skillQBarePurcleWorldPos.x;
@@ -1558,42 +2558,119 @@ export const createRuntime: CharacterRuntimeFactory = ({
         const distanceSq = dx * dx + dz * dz;
         if (distanceSq >= bestDistanceSq) continue;
         bestDistanceSq = distanceSq;
-        hasTarget = true;
-        skillQBarePurcleTargetWorldPos.copy(skillQBarePurcleNextWorldPos);
+        nearestTarget = target;
+        skillQBarePurcleAttackTargetWorldPos.copy(skillQBarePurcleNextWorldPos);
       }
-      if (!hasTarget) {
-        skillQBarePurcleTargetWorldPos.copy(entry.forwardTargetWorld);
+      if (!nearestTarget) {
+        entry.attackActive = false;
+        setSkillQBarePurcleMotionState(entry, "idle");
+        applySkillQBarePurcleGrounding(entry, safeDelta);
+        continue;
       }
-      skillQBarePurcleTargetWorldPos.y = skillQBarePurcleWorldPos.y;
-      if (!hasTarget && entry.stopped) continue;
-      skillQBarePurcleMoveDirection
-        .copy(skillQBarePurcleTargetWorldPos)
+
+      skillQBarePurcleAttackDirection
+        .copy(skillQBarePurcleAttackTargetWorldPos)
         .sub(skillQBarePurcleWorldPos);
-      const remainingDistance = skillQBarePurcleMoveDirection.length();
-      if (remainingDistance <= 0.0001) {
-        if (!hasTarget) {
-          entry.stopped = true;
+      skillQBarePurcleAttackDirection.y = 0;
+      const targetDistance = skillQBarePurcleAttackDirection.length();
+      if (targetDistance > 0.0001) {
+        skillQBarePurcleAttackDirection.multiplyScalar(1 / targetDistance);
+        entry.root.rotation.y = Math.atan2(
+          skillQBarePurcleAttackDirection.x,
+          skillQBarePurcleAttackDirection.z
+        );
+      } else {
+        skillQBarePurcleFallbackForward
+          .set(0, 0, 1)
+          .applyQuaternion(entry.root.quaternion);
+        skillQBarePurcleAttackDirection.copy(skillQBarePurcleFallbackForward).setY(0);
+        if (skillQBarePurcleAttackDirection.lengthSq() > 0.000001) {
+          skillQBarePurcleAttackDirection.normalize();
+        } else {
+          skillQBarePurcleAttackDirection.set(0, 0, 1);
         }
+      }
+
+      if (entry.attackActive) {
+        if (!entry.attackHitApplied && now >= entry.attackHitAt) {
+          const hitFromFist = (fist: THREE.Object3D | null) => {
+            if (!fist) return 0;
+            fist.getWorldPosition(skillQBarePurcleFistWorldPos);
+            skillQBarePurcleAttackOrigin
+              .copy(skillQBarePurcleFistWorldPos)
+              .addScaledVector(skillQBarePurcleAttackDirection, -0.08);
+            if (performMeleeAttack) {
+              return performMeleeAttack({
+                damage: skillQBarePurcleAttackDamage,
+                maxDistance: skillQBarePurcleAttackReach,
+                hitRadius: skillQBarePurcleAttackHitRadius,
+                maxHits: 1,
+                origin: skillQBarePurcleAttackOrigin.clone(),
+                direction: skillQBarePurcleAttackDirection.clone(),
+              });
+            }
+            nearestTarget.onHit({
+              now,
+              source: "slash",
+              damage: skillQBarePurcleAttackDamage,
+              point: skillQBarePurcleAttackOrigin.clone(),
+              direction: skillQBarePurcleAttackDirection.clone(),
+            });
+            return 1;
+          };
+          const rightHits = hitFromFist(entry.handR);
+          const leftHits = rightHits > 0 ? 0 : hitFromFist(entry.handL);
+          if (rightHits <= 0 && leftHits <= 0) {
+            skillQBarePurcleAttackOrigin
+              .copy(skillQBarePurcleWorldPos)
+              .addScaledVector(skillQBarePurcleAttackDirection, 0.66);
+            if (performMeleeAttack) {
+              performMeleeAttack({
+                damage: skillQBarePurcleAttackDamage,
+                maxDistance: skillQBarePurcleAttackReach,
+                hitRadius: skillQBarePurcleAttackHitRadius * 1.05,
+                maxHits: 1,
+                origin: skillQBarePurcleAttackOrigin.clone(),
+                direction: skillQBarePurcleAttackDirection.clone(),
+              });
+            } else {
+              nearestTarget.onHit({
+                now,
+                source: "slash",
+                damage: skillQBarePurcleAttackDamage,
+                point: skillQBarePurcleAttackOrigin.clone(),
+                direction: skillQBarePurcleAttackDirection.clone(),
+              });
+            }
+          }
+          entry.attackHitApplied = true;
+        }
+        if (now >= entry.attackEndsAt) {
+          entry.attackActive = false;
+          setSkillQBarePurcleMotionState(entry, "idle");
+        }
+        applySkillQBarePurcleGrounding(entry, safeDelta);
         continue;
       }
-      if (!hasTarget && remainingDistance <= 0.04) {
-        entry.stopped = true;
+
+      if (targetDistance <= skillQBarePurcleAttackRange && now >= entry.nextAttackAt) {
+        startSkillQBarePurcleAttack(entry, now);
+        applySkillQBarePurcleGrounding(entry, safeDelta);
         continue;
       }
-      entry.stopped = false;
-      skillQBarePurcleMoveDirection.multiplyScalar(1 / remainingDistance);
-      const moveDistance = Math.min(remainingDistance, entry.speed * safeDelta);
-      skillQBarePurcleWorldPos.addScaledVector(
-        skillQBarePurcleMoveDirection,
-        moveDistance
-      );
-      skillQBarePurcleSpawnLocalPos.copy(skillQBarePurcleWorldPos);
-      entry.root.parent.worldToLocal(skillQBarePurcleSpawnLocalPos);
-      entry.root.position.copy(skillQBarePurcleSpawnLocalPos);
-      entry.root.rotation.y = Math.atan2(
-        skillQBarePurcleMoveDirection.x,
-        skillQBarePurcleMoveDirection.z
-      );
+
+      if (targetDistance > skillQBarePurcleAttackRange) {
+        setSkillQBarePurcleMotionState(entry, "walk");
+        const moveDistance = Math.min(targetDistance, entry.speed * safeDelta);
+        entry.worldPos.addScaledVector(
+          skillQBarePurcleAttackDirection,
+          moveDistance
+        );
+        syncSkillQBareObjectToWorld(entry.root, entry.worldPos);
+      } else {
+        setSkillQBarePurcleMotionState(entry, "idle");
+      }
+      applySkillQBarePurcleGrounding(entry, safeDelta);
     }
   };
 
@@ -1743,6 +2820,725 @@ export const createRuntime: CharacterRuntimeFactory = ({
     });
   };
 
+  const disposeSkillEWeaponExplosionFxEntry = (
+    entry: SkillEWeaponExplosionFxEntry
+  ) => {
+    entry.root.removeFromParent();
+    entry.coreMaterial.dispose();
+    entry.shellMaterial.dispose();
+    entry.voidShellMaterial.dispose();
+    entry.ringOuterMaterial.dispose();
+    entry.ringInnerMaterial.dispose();
+    entry.pulseRingMaterial.dispose();
+    entry.shockDiskMaterial.dispose();
+    entry.particleMaterial.dispose();
+  };
+
+  const clearSkillEWeaponExplosionFxState = () => {
+    for (let i = skillEWeaponExplosionFxEntries.length - 1; i >= 0; i -= 1) {
+      disposeSkillEWeaponExplosionFxEntry(skillEWeaponExplosionFxEntries[i]);
+    }
+    skillEWeaponExplosionFxEntries.length = 0;
+  };
+
+  const spawnSkillEWeaponExplosionFx = (now: number, point: THREE.Vector3) => {
+    const host = avatar.parent ?? avatar;
+    if (skillEWeaponExplosionFxEntries.length >= skillEWeaponExplosionMaxActiveCount) {
+      const removed = skillEWeaponExplosionFxEntries.shift();
+      if (removed) {
+        disposeSkillEWeaponExplosionFxEntry(removed);
+      }
+    }
+
+    const root = new THREE.Group();
+    root.position.copy(point);
+    root.renderOrder = 12;
+    const coreMaterial = new THREE.MeshBasicMaterial({
+      color: 0xf3e8ff,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const shellMaterial = new THREE.MeshBasicMaterial({
+      color: 0xc084fc,
+      transparent: true,
+      opacity: 0.64,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const voidShellMaterial = new THREE.MeshBasicMaterial({
+      color: 0x120018,
+      transparent: true,
+      opacity: 0.52,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const ringOuterMaterial = new THREE.MeshBasicMaterial({
+      color: 0xa855f7,
+      transparent: true,
+      opacity: 0.84,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const ringInnerMaterial = new THREE.MeshBasicMaterial({
+      color: 0xe879f9,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const pulseRingMaterial = new THREE.MeshBasicMaterial({
+      color: 0x14001e,
+      transparent: true,
+      opacity: 0.78,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const shockDiskMaterial = new THREE.MeshBasicMaterial({
+      color: 0x581c87,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const particleMaterial = new THREE.MeshBasicMaterial({
+      color: 0xe9d5ff,
+      transparent: true,
+      opacity: 0.82,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const core = new THREE.Mesh(skillEWeaponExplosionCoreGeometry, coreMaterial);
+    const shell = new THREE.Mesh(skillEWeaponExplosionShellGeometry, shellMaterial);
+    const voidShell = new THREE.Mesh(
+      skillEWeaponExplosionShellGeometry,
+      voidShellMaterial
+    );
+    const ringOuter = new THREE.Mesh(
+      skillEWeaponExplosionRingOuterGeometry,
+      ringOuterMaterial
+    );
+    const ringInner = new THREE.Mesh(
+      skillEWeaponExplosionRingInnerGeometry,
+      ringInnerMaterial
+    );
+    const pulseRing = new THREE.Mesh(
+      skillEWeaponExplosionRingOuterGeometry,
+      pulseRingMaterial
+    );
+    const shockDisk = new THREE.Mesh(
+      skillEWeaponExplosionShockDiskGeometry,
+      shockDiskMaterial
+    );
+    core.renderOrder = 15;
+    shell.renderOrder = 14;
+    voidShell.renderOrder = 13;
+    ringOuter.renderOrder = 16;
+    ringInner.renderOrder = 17;
+    pulseRing.renderOrder = 18;
+    shockDisk.renderOrder = 13;
+    ringOuter.rotation.x = Math.PI * 0.5;
+    ringInner.rotation.y = Math.PI * 0.5;
+    pulseRing.rotation.x = Math.PI * 0.5;
+    shockDisk.rotation.x = -Math.PI * 0.5;
+    root.add(core, shell, voidShell, ringOuter, ringInner, pulseRing, shockDisk);
+
+    const particles: SkillEWeaponExplosionParticle[] = [];
+    for (let i = 0; i < skillEWeaponExplosionParticleCount; i += 1) {
+      const particleMesh = new THREE.Mesh(
+        skillEWeaponExplosionParticleGeometry,
+        particleMaterial
+      );
+      particleMesh.renderOrder = 18;
+      particleMesh.scale.setScalar(THREE.MathUtils.lerp(0.7, 1.45, Math.random()));
+      root.add(particleMesh);
+      particles.push({
+        mesh: particleMesh,
+        angle: (i / skillEWeaponExplosionParticleCount) * Math.PI * 2,
+        radius: THREE.MathUtils.lerp(0.32, 0.9, Math.random()),
+        radialSpeed: THREE.MathUtils.lerp(0.95, 3.4, Math.random()),
+        height: THREE.MathUtils.lerp(-0.12, 0.52, Math.random()),
+        heightSpeed: THREE.MathUtils.lerp(0.2, 0.88, Math.random()),
+        swirl: THREE.MathUtils.lerp(1.3, 4.6, Math.random()),
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+
+    host.add(root);
+    skillEWeaponExplosionSpawnWorldPos.copy(point);
+    skillEWeaponExplosionFxEntries.push({
+      root,
+      core,
+      coreMaterial,
+      shell,
+      shellMaterial,
+      voidShell,
+      voidShellMaterial,
+      ringOuter,
+      ringOuterMaterial,
+      ringInner,
+      ringInnerMaterial,
+      pulseRing,
+      pulseRingMaterial,
+      shockDisk,
+      shockDiskMaterial,
+      particleMaterial,
+      particles,
+      startedAt: now,
+      endsAt: now + skillEWeaponExplosionFxDurationMs,
+      shakeEndsAt: now + skillEWeaponExplosionShakeDurationMs,
+      nextDamageTickAt: now,
+      baseWorldPos: skillEWeaponExplosionSpawnWorldPos.clone(),
+      shakeOffset: new THREE.Vector3(),
+      spin: THREE.MathUtils.lerp(1.6, 4.2, Math.random()),
+    });
+    triggerCameraShake(
+      now,
+      skillEWeaponExplosionCameraShakeMagnitude,
+      skillEWeaponExplosionCameraShakeDurationMs
+    );
+  };
+
+  const applySkillEWeaponExplosionTickDamage = (
+    entry: SkillEWeaponExplosionFxEntry,
+    now: number
+  ) => {
+    const damageValue = Math.max(1, Math.round(skillEWeaponExplosionDamageTick));
+    skillEWeaponExplosionDamageCenter.copy(entry.baseWorldPos);
+
+    if (runtimeAimDirection.lengthSq() > 0.000001) {
+      skillEWeaponExplosionDamageDirection.copy(runtimeAimDirection).normalize();
+    } else {
+      avatar.getWorldQuaternion(skillEWeaponThrowAvatarQuat);
+      skillEWeaponExplosionDamageDirection
+        .set(0, 0, 1)
+        .applyQuaternion(skillEWeaponThrowAvatarQuat);
+      if (skillEWeaponExplosionDamageDirection.lengthSq() > 0.000001) {
+        skillEWeaponExplosionDamageDirection.normalize();
+      } else {
+        skillEWeaponExplosionDamageDirection.set(0, 0, 1);
+      }
+    }
+
+    if (performMeleeAttack) {
+      performMeleeAttack({
+        damage: damageValue,
+        maxDistance: skillEWeaponProjectileExplosionRadius,
+        maxHits: 24,
+        contactCenter: skillEWeaponExplosionDamageCenter.clone(),
+        contactRadius: skillEWeaponProjectileExplosionRadius,
+        direction: skillEWeaponExplosionDamageDirection.clone(),
+      });
+      return;
+    }
+
+    const targets = getAttackTargets?.() ?? [];
+    const damageRadiusSq =
+      skillEWeaponProjectileExplosionRadius * skillEWeaponProjectileExplosionRadius;
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      if (!target?.object) continue;
+      if (!target.object.parent) continue;
+      if (target.isActive && !target.isActive()) continue;
+      target.object.getWorldPosition(skillEWeaponExplosionFallbackTargetPos);
+      if (
+        skillEWeaponExplosionFallbackTargetPos.distanceToSquared(
+          skillEWeaponExplosionDamageCenter
+        ) > damageRadiusSq
+      ) {
+        continue;
+      }
+      skillEWeaponExplosionDamageDirection
+        .copy(skillEWeaponExplosionFallbackTargetPos)
+        .sub(skillEWeaponExplosionDamageCenter);
+      if (skillEWeaponExplosionDamageDirection.lengthSq() > 0.000001) {
+        skillEWeaponExplosionDamageDirection.normalize();
+      } else {
+        skillEWeaponExplosionDamageDirection.set(0, 0, 1);
+      }
+      target.onHit({
+        now,
+        source: "slash",
+        damage: damageValue,
+        point: skillEWeaponExplosionFallbackTargetPos.clone(),
+        direction: skillEWeaponExplosionDamageDirection.clone(),
+      });
+    }
+  };
+
+  const updateSkillEWeaponExplosionFx = (now: number, deltaSeconds: number) => {
+    const safeDelta = Math.max(0, deltaSeconds);
+    const timeSec = now * 0.001;
+    for (let i = skillEWeaponExplosionFxEntries.length - 1; i >= 0; i -= 1) {
+      const entry = skillEWeaponExplosionFxEntries[i];
+      const life = Math.max(1, entry.endsAt - entry.startedAt);
+      const progress = THREE.MathUtils.clamp((now - entry.startedAt) / life, 0, 1);
+      if (progress >= 1) {
+        disposeSkillEWeaponExplosionFxEntry(entry);
+        skillEWeaponExplosionFxEntries.splice(i, 1);
+        continue;
+      }
+
+      entry.root.position.copy(entry.baseWorldPos);
+      if (now < entry.shakeEndsAt) {
+        const shakeRatio = THREE.MathUtils.clamp(
+          (entry.shakeEndsAt - now) / skillEWeaponExplosionShakeDurationMs,
+          0,
+          1
+        );
+        const shakeAmp = skillEWeaponExplosionShakeMagnitude * Math.pow(shakeRatio, 1.1);
+        entry.shakeOffset.set(
+          (Math.sin(timeSec * 73.4 + entry.spin) + Math.cos(timeSec * 121.1 + 0.5) * 0.5) *
+            shakeAmp,
+          (Math.sin(timeSec * 97.2 + 1.2) + Math.cos(timeSec * 157.7 + 0.2) * 0.35) *
+            shakeAmp *
+            0.62,
+          (Math.cos(timeSec * 83.9 + 1.7) + Math.sin(timeSec * 134.8 + 0.8) * 0.45) *
+            shakeAmp
+        );
+        entry.root.position.add(entry.shakeOffset);
+      }
+
+      while (
+        now >= entry.nextDamageTickAt &&
+        entry.nextDamageTickAt < entry.endsAt
+      ) {
+        applySkillEWeaponExplosionTickDamage(entry, entry.nextDamageTickAt);
+        entry.nextDamageTickAt += skillEWeaponExplosionDamageTickIntervalMs;
+      }
+
+      const burst = 1 - Math.pow(1 - progress, 2.1);
+      const fade = Math.pow(1 - progress, 1.3);
+      const pulse = 1 + Math.sin(timeSec * 9.6 + entry.spin) * 0.08 * fade;
+      const flashDarkPhase =
+        Math.floor((now - entry.startedAt) / skillEWeaponExplosionFlashIntervalMs) % 2 ===
+        1;
+
+      const coreColor = flashDarkPhase ? 0x1a0124 : 0xf3e8ff;
+      const shellColor = flashDarkPhase ? 0x2a0140 : 0xc084fc;
+      const voidShellColor = flashDarkPhase ? 0x040006 : 0x7c3aed;
+      const ringOuterColor = flashDarkPhase ? 0x220033 : 0xa855f7;
+      const ringInnerColor = flashDarkPhase ? 0x300048 : 0xe879f9;
+      const pulseRingColor = flashDarkPhase ? 0x09000f : 0x6d28d9;
+      const shockDiskColor = flashDarkPhase ? 0x180022 : 0x581c87;
+      const particleColor = flashDarkPhase ? 0x14001e : 0xe9d5ff;
+
+      entry.coreMaterial.color.setHex(coreColor);
+      entry.shellMaterial.color.setHex(shellColor);
+      entry.voidShellMaterial.color.setHex(voidShellColor);
+      entry.ringOuterMaterial.color.setHex(ringOuterColor);
+      entry.ringInnerMaterial.color.setHex(ringInnerColor);
+      entry.pulseRingMaterial.color.setHex(pulseRingColor);
+      entry.shockDiskMaterial.color.setHex(shockDiskColor);
+      entry.particleMaterial.color.setHex(particleColor);
+
+      entry.core.scale.setScalar((0.74 + burst * 5.5) * pulse);
+      entry.shell.scale.setScalar((1.05 + burst * 7.8) * (1 + 0.09 * fade));
+      entry.voidShell.scale.setScalar((1.24 + burst * 9.4) * (1 + 0.14 * fade));
+      entry.ringOuter.scale.setScalar(1.1 + burst * 7.2);
+      entry.ringInner.scale.setScalar(1 + burst * 5.9);
+      entry.pulseRing.scale.setScalar(1.22 + burst * 9.8);
+      entry.shockDisk.scale.setScalar(0.9 + burst * 8.6);
+
+      entry.ringOuter.rotation.y += safeDelta * 2.8;
+      entry.ringOuter.rotation.z += safeDelta * 2.1;
+      entry.ringInner.rotation.x -= safeDelta * 3.2;
+      entry.ringInner.rotation.z += safeDelta * 3.8;
+      entry.pulseRing.rotation.z += safeDelta * 4.6;
+      entry.pulseRing.rotation.x -= safeDelta * 1.8;
+      entry.shockDisk.rotation.z += safeDelta * 1.75;
+
+      const flashOpacityMul = flashDarkPhase ? 0.78 : 1;
+      entry.coreMaterial.opacity = THREE.MathUtils.clamp(
+        0.98 * fade * flashOpacityMul,
+        0,
+        0.98
+      );
+      entry.shellMaterial.opacity = THREE.MathUtils.clamp(
+        0.8 * fade * flashOpacityMul,
+        0,
+        0.86
+      );
+      entry.voidShellMaterial.opacity = THREE.MathUtils.clamp(
+        0.62 * fade * (flashDarkPhase ? 1.12 : 0.92),
+        0,
+        0.74
+      );
+      entry.ringOuterMaterial.opacity = THREE.MathUtils.clamp(
+        0.94 * fade * flashOpacityMul,
+        0,
+        0.96
+      );
+      entry.ringInnerMaterial.opacity = THREE.MathUtils.clamp(
+        0.98 * fade * flashOpacityMul,
+        0,
+        0.98
+      );
+      entry.pulseRingMaterial.opacity = THREE.MathUtils.clamp(
+        0.86 * fade * (flashDarkPhase ? 0.92 : 1.06),
+        0,
+        0.94
+      );
+      entry.shockDiskMaterial.opacity = THREE.MathUtils.clamp(
+        0.88 * fade * flashOpacityMul,
+        0,
+        0.9
+      );
+      entry.particleMaterial.opacity = THREE.MathUtils.clamp(
+        0.9 * fade * (flashDarkPhase ? 0.84 : 1.08),
+        0,
+        0.95
+      );
+
+      for (let j = 0; j < entry.particles.length; j += 1) {
+        const particle = entry.particles[j];
+        const radius = particle.radius + particle.radialSpeed * burst;
+        const angle = particle.angle + timeSec * particle.swirl + particle.phase;
+        const y =
+          particle.height +
+          particle.heightSpeed * burst +
+          Math.sin(timeSec * (2.4 + particle.swirl) + particle.phase) * 0.09 * fade;
+        particle.mesh.position.set(
+          Math.cos(angle) * radius,
+          y,
+          Math.sin(angle) * radius
+        );
+        particle.mesh.scale.setScalar(
+          THREE.MathUtils.lerp(1.1, 0.3, progress) *
+            (0.65 + Math.sin(timeSec * 7.3 + particle.phase) * 0.1)
+        );
+      }
+    }
+  };
+
+  const resolveSkillEWeaponFallbackDirection = () => {
+    if (runtimeAimDirection.lengthSq() > 0.000001) {
+      skillEWeaponThrowDirection.copy(runtimeAimDirection).normalize();
+      return;
+    }
+    avatar.getWorldQuaternion(skillEWeaponThrowAvatarQuat);
+    skillEWeaponThrowAvatarForward
+      .set(0, 0, 1)
+      .applyQuaternion(skillEWeaponThrowAvatarQuat);
+    if (skillEWeaponThrowAvatarForward.lengthSq() > 0.000001) {
+      skillEWeaponThrowAvatarForward.normalize();
+      skillEWeaponThrowDirection.copy(skillEWeaponThrowAvatarForward);
+      return;
+    }
+    skillEWeaponThrowDirection.set(0, 0, 1);
+  };
+
+  const resetSkillEWeaponThrowState = () => {
+    skillEWeaponThrowState.active = false;
+    skillEWeaponThrowState.projectileLaunched = false;
+    skillEWeaponThrowState.forcedBare = false;
+    skillEWeaponThrowState.hasSourceSample = false;
+    skillEWeaponThrowState.previousSourceWorldPos.set(0, 0, 0);
+  };
+
+  const startSkillEWeaponThrowState = () => {
+    skillEWeaponThrowState.active = true;
+    skillEWeaponThrowState.projectileLaunched = false;
+    skillEWeaponThrowState.forcedBare = false;
+    skillEWeaponThrowState.hasSourceSample = false;
+    skillEWeaponThrowState.previousSourceWorldPos.set(0, 0, 0);
+  };
+
+  const refreshSkillEWeaponThrowProgress = () => {
+    skillEWeaponResolvedThrowProgress = resolveSkillEWeaponThrowProgressFromClip({
+      clip: skillEWeaponBinding?.clip ?? null,
+      preferredNodeName: weaponThrowSourceNode?.name ?? null,
+    });
+  };
+
+  const launchSkillEWeaponProjectile = (
+    resolvedSourceNodeHint?: THREE.Object3D | null
+  ) => {
+    if (!fireProjectile) return false;
+
+    avatar.updateMatrixWorld(true);
+    const resolvedSourceNode =
+      (resolvedSourceNodeHint && resolvedSourceNodeHint.parent
+        ? resolvedSourceNodeHint
+        : weaponThrowSourceNode && weaponThrowSourceNode.parent
+        ? weaponThrowSourceNode
+        : findWeaponThrowSourceNode(lastAvatarModel)) ?? null;
+
+    if (resolvedSourceNode && resolvedSourceNode.parent) {
+      weaponThrowSourceNode = resolvedSourceNode;
+      resolvedSourceNode.updateWorldMatrix(true, true);
+      resolvedSourceNode.getWorldPosition(skillEWeaponThrowOriginWorld);
+      resolvedSourceNode.getWorldQuaternion(skillEWeaponThrowSourceQuat);
+      resolvedSourceNode.getWorldScale(skillEWeaponThrowSourceScale);
+    } else {
+      avatar.getWorldPosition(skillEWeaponThrowOriginWorld);
+      skillEWeaponThrowOriginWorld.y += 1.12;
+      skillEWeaponThrowSourceQuat.copy(avatar.quaternion);
+      skillEWeaponThrowSourceScale.set(1, 1, 1);
+    }
+
+    resolveSkillEWeaponFallbackDirection();
+
+    const origin = skillEWeaponThrowOriginWorld
+      .clone()
+      .addScaledVector(
+        skillEWeaponThrowDirection,
+        skillEWeaponProjectileForwardOffset
+      );
+    origin.y += skillEWeaponProjectileUpwardOffset;
+
+    const projectileRootGeometry = new THREE.SphereGeometry(0.01, 8, 8);
+    const projectileRootMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false,
+    });
+    const projectileRoot = new THREE.Mesh(
+      projectileRootGeometry,
+      projectileRootMaterial
+    );
+    projectileRoot.castShadow = false;
+    projectileRoot.receiveShadow = false;
+    projectileRoot.frustumCulled = false;
+
+    const ownedGeometries: THREE.BufferGeometry[] = [projectileRootGeometry];
+    const ownedMaterials: THREE.Material[] = [projectileRootMaterial];
+    let swordVisual: THREE.Object3D | null = null;
+
+    if (resolvedSourceNode) {
+      const clonedWeapon = cloneObjectWithClonedMaterials(resolvedSourceNode);
+      if (clonedWeapon.hasMesh) {
+        swordVisual = clonedWeapon.clone;
+        for (let i = 0; i < clonedWeapon.materials.length; i += 1) {
+          ownedMaterials.push(clonedWeapon.materials[i]);
+        }
+      }
+    }
+
+    if (!swordVisual) {
+      const fallbackRoot = new THREE.Group();
+      const bladeGeometry = new THREE.BoxGeometry(0.08, 0.08, 1.1);
+      const bladeMaterial = new THREE.MeshStandardMaterial({
+        color: 0x6d28d9,
+        emissive: 0x4c1d95,
+        emissiveIntensity: 1.4,
+        roughness: 0.22,
+        metalness: 0.42,
+      });
+      const guardGeometry = new THREE.CylinderGeometry(0.22, 0.22, 0.06, 10);
+      const guardMaterial = new THREE.MeshStandardMaterial({
+        color: 0x581c87,
+        emissive: 0x581c87,
+        emissiveIntensity: 0.8,
+        roughness: 0.3,
+        metalness: 0.4,
+      });
+      const hiltGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.34, 10);
+      const hiltMaterial = new THREE.MeshStandardMaterial({
+        color: 0x7c3aed,
+        emissive: 0x581c87,
+        emissiveIntensity: 0.7,
+        roughness: 0.35,
+        metalness: 0.2,
+      });
+      const pommelGeometry = new THREE.SphereGeometry(0.08, 10, 10);
+      const pommelMaterial = new THREE.MeshStandardMaterial({
+        color: 0xc4b5fd,
+        emissive: 0xa855f7,
+        emissiveIntensity: 1.8,
+        roughness: 0.18,
+        metalness: 0.35,
+      });
+      const bladeMesh = new THREE.Mesh(bladeGeometry, bladeMaterial);
+      const guardMesh = new THREE.Mesh(guardGeometry, guardMaterial);
+      const hiltMesh = new THREE.Mesh(hiltGeometry, hiltMaterial);
+      const pommelMesh = new THREE.Mesh(pommelGeometry, pommelMaterial);
+      bladeMesh.position.z = 0.44;
+      guardMesh.rotation.x = Math.PI * 0.5;
+      hiltMesh.rotation.x = Math.PI * 0.5;
+      hiltMesh.position.z = -0.2;
+      pommelMesh.position.z = -0.38;
+      fallbackRoot.add(bladeMesh, guardMesh, hiltMesh, pommelMesh);
+      fallbackRoot.traverse((node) => {
+        const mesh = node as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      });
+      ownedGeometries.push(bladeGeometry, guardGeometry, hiltGeometry, pommelGeometry);
+      ownedMaterials.push(bladeMaterial, guardMaterial, hiltMaterial, pommelMaterial);
+      swordVisual = fallbackRoot;
+    }
+
+    swordVisual.position.set(0, 0, 0);
+    swordVisual.quaternion.identity();
+    swordVisual.scale.copy(skillEWeaponThrowSourceScale);
+    projectileRoot.add(swordVisual);
+
+    const flightDirection = skillEWeaponThrowDirection.clone();
+    let bestAxisDot = -Infinity;
+    for (let i = 0; i < skillEWeaponThrowAxisProbe.length; i += 1) {
+      skillEWeaponThrowAxisWorldCandidate
+        .copy(skillEWeaponThrowAxisProbe[i])
+        .applyQuaternion(skillEWeaponThrowSourceQuat);
+      if (skillEWeaponThrowAxisWorldCandidate.lengthSq() <= 0.000001) continue;
+      skillEWeaponThrowAxisWorldCandidate.normalize();
+      const dot = skillEWeaponThrowAxisWorldCandidate.dot(flightDirection);
+      if (dot > bestAxisDot) {
+        bestAxisDot = dot;
+        skillEWeaponThrowSelectedLocalAxis.copy(skillEWeaponThrowAxisProbe[i]);
+      }
+    }
+    const projectileAimQuat = new THREE.Quaternion().setFromUnitVectors(
+      skillEWeaponThrowSelectedLocalAxis,
+      flightDirection
+    );
+    let impactFxSpawned = false;
+    const spawnImpactFx = (impactNow: number, impactPoint: THREE.Vector3) => {
+      if (impactFxSpawned) return;
+      impactFxSpawned = true;
+      spawnSkillEWeaponExplosionFx(impactNow, impactPoint);
+    };
+
+    projectileRoot.quaternion.copy(projectileAimQuat);
+
+    fireProjectile({
+      projectileType: "abilityOrb",
+      mesh: projectileRoot,
+      origin,
+      direction: skillEWeaponThrowDirection.clone(),
+      speed: skillEWeaponProjectileSpeed,
+      lifetime: skillEWeaponProjectileLifetime,
+      radius: skillEWeaponProjectileRadius,
+      targetHitRadius: skillEWeaponProjectileTargetHitRadius,
+      damage: skillEWeaponProjectileDamage,
+      gravity: 0,
+      splitOnImpact: true,
+      explosionRadius: skillEWeaponProjectileExplosionRadius,
+      explosionDamage: skillEWeaponProjectileExplosionDamage,
+      explosionMinDamage: skillEWeaponProjectileExplosionMinDamage,
+      color: 0xf5d0fe,
+      emissive: 0x7e22ce,
+      emissiveIntensity: 1.7,
+      explosionColor: 0xe9d5ff,
+      explosionEmissive: 0x86198f,
+      explosionEmissiveIntensity: 2.4,
+      explodeOnTargetHit: false,
+      explodeOnWorldHit: false,
+      explodeOnExpire: false,
+      removeOnTargetHit: true,
+      removeOnWorldHit: true,
+      lifecycle: {
+        onTargetHit: ({ now, point, triggerExplosion }) => {
+          spawnImpactFx(now, point);
+          triggerExplosion(null);
+        },
+        onWorldHit: ({ now, point, triggerExplosion }) => {
+          spawnImpactFx(now, point);
+          triggerExplosion(null);
+        },
+        applyForces: ({ velocity }) => {
+          velocity.copy(flightDirection).multiplyScalar(skillEWeaponProjectileSpeed);
+          projectileRoot.quaternion.copy(projectileAimQuat);
+        },
+        onRemove: ({ reason, now, position, triggerExplosion }) => {
+          if (!impactFxSpawned && reason === "expired") {
+            spawnImpactFx(now, position);
+            triggerExplosion();
+          }
+          for (let i = 0; i < ownedGeometries.length; i += 1) {
+            ownedGeometries[i].dispose();
+          }
+          for (let i = 0; i < ownedMaterials.length; i += 1) {
+            ownedMaterials[i].dispose();
+          }
+        },
+      },
+    });
+
+    return true;
+  };
+
+  const updateSkillEWeaponThrowState = () => {
+    const isWeaponSkillERunning = Boolean(
+      skillEWeaponBinding &&
+        activeSkillBinding === skillEWeaponBinding &&
+        skillEWeaponBinding.action.isRunning()
+    );
+    if (!isWeaponSkillERunning) {
+      if (skillEWeaponThrowState.active) {
+        if (!skillEWeaponThrowState.forcedBare && weaponEquipped) {
+          setWeaponEquipped(false);
+        }
+        resetSkillEWeaponThrowState();
+      }
+      return;
+    }
+
+    if (!skillEWeaponThrowState.active) {
+      startSkillEWeaponThrowState();
+    }
+
+    const resolvedSourceNode =
+      (weaponThrowSourceNode && weaponThrowSourceNode.parent
+        ? weaponThrowSourceNode
+        : findWeaponThrowSourceNode(lastAvatarModel)) ?? null;
+    if (resolvedSourceNode && resolvedSourceNode.parent) {
+      weaponThrowSourceNode = resolvedSourceNode;
+      resolvedSourceNode.updateWorldMatrix(true, true);
+      resolvedSourceNode.getWorldPosition(skillEWeaponThrowSampleEndWorld);
+      if (!skillEWeaponThrowState.hasSourceSample) {
+        skillEWeaponThrowState.previousSourceWorldPos.copy(
+          skillEWeaponThrowSampleEndWorld
+        );
+        skillEWeaponThrowState.hasSourceSample = true;
+      }
+    } else {
+      skillEWeaponThrowState.hasSourceSample = false;
+    }
+
+    const duration = Math.max(0.001, skillEWeaponBinding?.clip.duration ?? 0.001);
+    const progress = THREE.MathUtils.clamp(
+      (skillEWeaponBinding?.action.time ?? 0) / duration,
+      0,
+      1
+    );
+    const throwProgress = THREE.MathUtils.clamp(
+      skillEWeaponResolvedThrowProgress,
+      0.02,
+      0.95
+    );
+
+    if (
+      !skillEWeaponThrowState.projectileLaunched &&
+      progress >= throwProgress
+    ) {
+      launchSkillEWeaponProjectile(resolvedSourceNode);
+      skillEWeaponThrowState.projectileLaunched = true;
+    }
+
+    const shouldForceBare =
+      progress >= throwProgress || skillEWeaponThrowState.projectileLaunched;
+    if (!skillEWeaponThrowState.forcedBare && shouldForceBare) {
+      setWeaponEquipped(false);
+      skillEWeaponThrowState.forcedBare = true;
+    }
+
+    if (resolvedSourceNode && resolvedSourceNode.parent) {
+      skillEWeaponThrowState.previousSourceWorldPos.copy(
+        skillEWeaponThrowSampleEndWorld
+      );
+      skillEWeaponThrowState.hasSourceSample = true;
+    }
+  };
+
   const tryPlaySkill = (binding: ActionBinding | null) => {
     if (!mixer || !binding) return false;
     if (isSkillAnimationActive()) return false;
@@ -1793,6 +3589,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillRWeaponBinding = null;
     normalAttackBareBinding = null;
     normalAttackWeaponBinding = null;
+    resetSkillEWeaponThrowState();
+    clearSkillEWeaponExplosionFxState();
+    weaponThrowSourceNode = null;
+    skillEWeaponResolvedThrowProgress = skillEWeaponThrowProgressFallback;
     primaryAttackHandBone = null;
     setPrimaryAttackChargeVisible(false);
     clearSkillQBareGateState(true);
@@ -1931,6 +3731,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       if (skillRBareActive) {
         resetSkillRBareState(true);
       }
+      updateSkillEWeaponExplosionFx(now, 0);
       updateSkillQBareGates(now, 0);
       updateCameraShake(now);
       lastAnimationUpdateAt = now;
@@ -2097,6 +3898,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (deltaSeconds > 0) {
       mixer.update(deltaSeconds);
     }
+    updateSkillEWeaponThrowState();
+    updateSkillEWeaponExplosionFx(now, deltaSeconds);
     updateSkillQBareGates(now, deltaSeconds);
     updateCameraShake(now);
   };
@@ -2111,6 +3914,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     bindEyeAnchor(avatarModel);
     bindAnimations(avatarModel);
     primaryAttackHandBone = findPrimaryAttackHand(avatarModel);
+    weaponThrowSourceNode = findWeaponThrowSourceNode(avatarModel);
+    refreshSkillEWeaponThrowProgress();
   };
 
   const setWeaponEquipped = (equipped: boolean) => {
@@ -2186,7 +3991,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const handleSkillE = () => {
     if (weaponEquipped) {
       const skillEBinding = skillEWeaponBinding ?? skillEBareBinding;
-      if (tryPlaySkill(skillEBinding)) return true;
+      if (tryPlaySkill(skillEBinding)) {
+        if (skillEBinding === skillEWeaponBinding) {
+          startSkillEWeaponThrowState();
+        } else {
+          setWeaponEquipped(false);
+        }
+        return true;
+      }
       return baseRuntime.handleSkillE?.() ?? false;
     }
 
@@ -2224,6 +4036,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     stopActionBinding(skillRWeaponBinding);
     stopActionBinding(normalAttackBareBinding);
     stopActionBinding(normalAttackWeaponBinding);
+    resetSkillEWeaponThrowState();
+    clearSkillEWeaponExplosionFxState();
     activeSkillBinding = null;
     barePrimaryAttackState.active = false;
     barePrimaryAttackState.projectileFired = false;
@@ -2246,6 +4060,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
     weaponEquipped = false;
     setHarperWeaponNodesVisible(lastAvatarModel, false);
+    weaponThrowSourceNode =
+      lastAvatarModel ? findWeaponThrowSourceNode(lastAvatarModel) : null;
   };
 
   const getRuntimeProjectileBlockers = () => {
@@ -2277,12 +4093,21 @@ export const createRuntime: CharacterRuntimeFactory = ({
     handleSkillE,
     handleSkillR,
     getProjectileBlockers: getRuntimeProjectileBlockers,
-    handleProjectileBlockHit: baseRuntime.handleProjectileBlockHit,
-    getMovementSpeedMultiplier: baseRuntime.getMovementSpeedMultiplier,
+    handleProjectileBlockHit: handleRuntimeProjectileBlockHit,
+    getMovementSpeedMultiplier: () => {
+      const baseMultiplier = baseRuntime.getMovementSpeedMultiplier?.() ?? 1;
+      if (isBareSkillRCastActive()) {
+        return baseMultiplier * 0.3;
+      }
+      return baseMultiplier;
+    },
     getCameraScaleMultiplier: baseRuntime.getCameraScaleMultiplier,
     getCameraFollowTarget: () => eyeAnchor,
     isBasicAttackLocked: baseRuntime.isBasicAttackLocked,
-    isMovementLocked: baseRuntime.isMovementLocked,
+    isMovementLocked: () => {
+      if (isBareSkillQCastActive()) return true;
+      return baseRuntime.isMovementLocked?.() ?? false;
+    },
     getSkillCooldownRemainingMs: baseRuntime.getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs: baseRuntime.getSkillCooldownDurationMs,
     getSkillHudIndicators: baseRuntime.getSkillHudIndicators,
@@ -2331,8 +4156,17 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillRBareOrbitParticleGeometry.dispose();
       skillRBareOrbitParticleMaterial.dispose();
       skillRBareShockwaveGeometry.dispose();
+      skillEWeaponExplosionCoreGeometry.dispose();
+      skillEWeaponExplosionShellGeometry.dispose();
+      skillEWeaponExplosionRingOuterGeometry.dispose();
+      skillEWeaponExplosionRingInnerGeometry.dispose();
+      skillEWeaponExplosionShockDiskGeometry.dispose();
+      skillEWeaponExplosionParticleGeometry.dispose();
       baseRuntime.dispose();
     },
-    isFacingLocked: baseRuntime.isFacingLocked,
+    isFacingLocked: () => {
+      if (isBareSkillQCastActive()) return true;
+      return baseRuntime.isFacingLocked();
+    },
   });
 };

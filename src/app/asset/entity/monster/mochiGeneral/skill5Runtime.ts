@@ -24,8 +24,7 @@ export type MochiGeneralSkill5Runtime = {
   update: (args: {
     now: number;
     delta: number;
-    player: THREE.Object3D;
-    applyDamage: (amount: number) => number;
+    applyDamageToTarget: (target: THREE.Object3D, amount: number) => number;
     gameEnded: boolean;
     projectileBlockers: THREE.Object3D[];
     handleProjectileBlockHit?: ProjectileBlockHitHandler;
@@ -54,18 +53,18 @@ export const createMochiGeneralSkill5Runtime = (
 
   const spawnSingleShot = ({
     entry,
-    player,
+    target,
     gameEnded,
   }: {
     entry: MochiGeneralCombatEntry;
-    player: THREE.Object3D;
+    target: THREE.Object3D;
     gameEnded: boolean;
   }) => {
     if (gameEnded || !entry.monster.isAlive) return;
     resolveSkill5Origin(entry, skill5OriginWorld);
     projectileRuntime.spawnProjectile({
       origin: skill5OriginWorld,
-      target: player,
+      target,
       gameEnded,
     });
   };
@@ -98,7 +97,7 @@ export const createMochiGeneralSkill5Runtime = (
       if (nowMs < pending.fireAtMs) continue;
       spawnSingleShot({
         entry: pending.entry,
-        player: pending.target,
+        target: pending.target,
         gameEnded,
       });
       pendingShots.splice(i, 1);
@@ -144,8 +143,7 @@ export const createMochiGeneralSkill5Runtime = (
     update: ({
       now,
       delta,
-      player,
-      applyDamage,
+      applyDamageToTarget,
       gameEnded,
       projectileBlockers,
       handleProjectileBlockHit,
@@ -155,8 +153,7 @@ export const createMochiGeneralSkill5Runtime = (
       projectileRuntime.update({
         now,
         delta,
-        player,
-        applyDamage,
+        applyDamageToTarget,
         projectileBlockers,
         handleProjectileBlockHit,
       });

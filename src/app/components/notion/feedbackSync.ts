@@ -4,6 +4,7 @@ const NOTION_API_BASE_URL = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_RICH_TEXT_LENGTH = 1_900;
+const MAX_QUERY_PAGES = 200;
 
 type NotionConfig = {
   apiKey: string;
@@ -25,8 +26,22 @@ type NotionDatabaseResponse = {
   properties: Record<string, NotionDatabaseProperty>;
 };
 
+type NotionPagePropertyValue = {
+  type?: string;
+  number?: number | null;
+  title?: Array<{ plain_text?: string }>;
+  rich_text?: Array<{ plain_text?: string }>;
+};
+
+type NotionPageObject = {
+  id?: string;
+  properties?: Record<string, NotionPagePropertyValue>;
+};
+
 type NotionQueryResponse = {
-  results?: Array<{ id?: string }>;
+  results?: NotionPageObject[];
+  has_more?: boolean;
+  next_cursor?: string | null;
 };
 
 type NamedNotionProperty = NotionDatabaseProperty & {
@@ -51,6 +66,14 @@ export type FeedbackSyncResult = {
 
 export type NotionProbeResult = {
   ok: boolean;
+  reason: string | null;
+};
+
+export type NotionFeedbackPruneResult = {
+  pruned: boolean;
+  archivedCount: number;
+  duplicateArchivedCount: number;
+  orphanArchivedCount: number;
   reason: string | null;
 };
 
@@ -99,13 +122,26 @@ const findProperty = (
   allowedTypes: Set<string>,
   aliases: string[]
 ): NamedNotionProperty | null => {
-  const aliasSet = new Set(aliases.map(normalizeToken));
-  return (
-    properties.find(
-      (property) =>
-        allowedTypes.has(property.type) && aliasSet.has(normalizeToken(property.name))
-    ) ?? null
-  );
+  const normalizedAliases = aliases
+    .map(normalizeToken)
+    .filter((token) => token.length > 0);
+
+  let matched: NamedNotionProperty | null = null;
+  let bestRank = Number.POSITIVE_INFINITY;
+
+  for (const property of properties) {
+    if (!allowedTypes.has(property.type)) continue;
+    const token = normalizeToken(property.name);
+    const rank = normalizedAliases.indexOf(token);
+    if (rank === -1) continue;
+    if (rank < bestRank) {
+      matched = property;
+      bestRank = rank;
+      if (rank === 0) break;
+    }
+  }
+
+  return matched;
 };
 
 const buildRichTextPayload = (value: string) => [
@@ -116,6 +152,29 @@ const buildRichTextPayload = (value: string) => [
     },
   },
 ];
+
+const buildOptionalRichTextPayload = (value: string | null | undefined) => {
+  const trimmed = typeof value === "string" ? trimRichText(value) : "";
+  if (!trimmed) return [];
+  return buildRichTextPayload(trimmed);
+};
+
+const parseIntegerFromUnknown = (value: unknown): number | null => {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+};
+
+const getPlainText = (chunks: Array<{ plain_text?: string }> | undefined) =>
+  (chunks ?? [])
+    .map((chunk) => String(chunk?.plain_text ?? ""))
+    .join("")
+    .trim();
+
+const extractFeedbackIdFromTitle = (title: string): number | null => {
+  const matched = /feedback\s*#\s*(\d+)/i.exec(title);
+  return matched ? parseIntegerFromUnknown(matched[1]) : null;
+};
 
 const normalizeStatusCandidates = (status: string) => {
   const normalized = normalizeToken(status);
@@ -168,20 +227,26 @@ const buildNotionProperties = (
 
   const feedbackIdProperty = findProperty(
     properties,
-    new Set(["number"]),
+    new Set(["number", "rich_text"]),
     ["feedback_id", "feedback id", "id", "report_id", "report id"]
   );
   if (feedbackIdProperty) {
-    notionProperties[feedbackIdProperty.name] = { number: feedback.id };
+    notionProperties[feedbackIdProperty.name] =
+      feedbackIdProperty.type === "number"
+        ? { number: feedback.id }
+        : { rich_text: buildRichTextPayload(String(feedback.id)) };
   }
 
   const userIdProperty = findProperty(
     properties,
-    new Set(["number"]),
+    new Set(["number", "rich_text"]),
     ["user_id", "user id", "player_id", "player id"]
   );
   if (userIdProperty) {
-    notionProperties[userIdProperty.name] = { number: feedback.userId };
+    notionProperties[userIdProperty.name] =
+      userIdProperty.type === "number"
+        ? { number: feedback.userId }
+        : { rich_text: buildRichTextPayload(String(feedback.userId)) };
   }
 
   const usernameProperty = findProperty(
@@ -189,9 +254,9 @@ const buildNotionProperties = (
     new Set(["rich_text"]),
     ["username", "user", "player", "player_name", "player name"]
   );
-  if (usernameProperty && feedback.username.trim()) {
+  if (usernameProperty) {
     notionProperties[usernameProperty.name] = {
-      rich_text: buildRichTextPayload(feedback.username),
+      rich_text: buildOptionalRichTextPayload(feedback.username),
     };
   }
 
@@ -200,9 +265,9 @@ const buildNotionProperties = (
     new Set(["rich_text"]),
     ["description", "details", "feedback", "report"]
   );
-  if (descriptionProperty && feedback.description?.trim()) {
+  if (descriptionProperty) {
     notionProperties[descriptionProperty.name] = {
-      rich_text: buildRichTextPayload(feedback.description),
+      rich_text: buildOptionalRichTextPayload(feedback.description),
     };
   }
 
@@ -211,13 +276,17 @@ const buildNotionProperties = (
     new Set(["status", "select", "rich_text"]),
     ["status", "state"]
   );
-  if (statusProperty && feedback.status.trim()) {
+  if (statusProperty) {
     if (statusProperty.type === "rich_text") {
       notionProperties[statusProperty.name] = {
-        rich_text: buildRichTextPayload(feedback.status),
+        rich_text: buildOptionalRichTextPayload(feedback.status),
       };
     } else {
-      const candidates = normalizeStatusCandidates(feedback.status);
+      const rawStatus = feedback.status.trim();
+      if (!rawStatus) {
+        throw new Error("Feedback status is empty.");
+      }
+      const candidates = normalizeStatusCandidates(rawStatus);
       const optionName =
         statusProperty.type === "status"
           ? pickStatusOption(statusProperty.status?.options, candidates)
@@ -227,36 +296,80 @@ const buildNotionProperties = (
           statusProperty.type === "status"
             ? { status: { name: optionName } }
             : { select: { name: optionName } };
+      } else {
+        notionProperties[statusProperty.name] =
+          statusProperty.type === "status"
+            ? { status: { name: rawStatus } }
+            : { select: { name: rawStatus } };
       }
     }
   }
 
   const reportDateProperty = findProperty(
     properties,
-    new Set(["date"]),
-    ["report_date", "report date", "created_at", "created at", "date"]
+    new Set(["date", "rich_text"]),
+    [
+      "report_date",
+      "report date",
+      "reported_date",
+      "reported date",
+      "report_time",
+      "report time",
+      "reported_at",
+      "reported at",
+      "reported_on",
+      "reported on",
+      "created_at",
+      "created at",
+      "date",
+    ]
   );
-  const reportDateIso = toIsoString(feedback.reportDate);
-  if (reportDateProperty && reportDateIso) {
-    notionProperties[reportDateProperty.name] = {
-      date: {
-        start: reportDateIso,
-      },
-    };
+  if (!reportDateProperty) {
+    throw new Error(
+      "Notion Reported Date property not found. Expected aliases: report_date/reported_date/created_at."
+    );
   }
+  const reportDateIso = toIsoString(feedback.reportDate);
+  if (!reportDateIso) {
+    throw new Error("Feedback report date is invalid.");
+  }
+  notionProperties[reportDateProperty.name] =
+    reportDateProperty.type === "date"
+      ? {
+          date: {
+            start: reportDateIso,
+          },
+        }
+      : {
+          rich_text: buildRichTextPayload(reportDateIso),
+        };
 
   const settleDateProperty = findProperty(
     properties,
-    new Set(["date"]),
-    ["settle_date", "settle date", "resolved_at", "resolved at"]
+    new Set(["date", "rich_text"]),
+    [
+      "settle_date",
+      "settle date",
+      "settled_date",
+      "settled date",
+      "resolved_at",
+      "resolved at",
+    ]
   );
   const settleDateIso = toIsoString(feedback.settleDate);
-  if (settleDateProperty && settleDateIso) {
-    notionProperties[settleDateProperty.name] = {
-      date: {
-        start: settleDateIso,
-      },
-    };
+  if (settleDateProperty) {
+    notionProperties[settleDateProperty.name] =
+      settleDateProperty.type === "date"
+        ? {
+            date: settleDateIso
+              ? {
+                  start: settleDateIso,
+                }
+              : null,
+          }
+        : {
+            rich_text: buildOptionalRichTextPayload(settleDateIso),
+          };
   }
 
   return notionProperties;
@@ -339,17 +452,24 @@ const findExistingPageId = async (
 
   const feedbackIdProperty = findProperty(
     properties,
-    new Set(["number"]),
+    new Set(["number", "rich_text"]),
     ["feedback_id", "feedback id", "id", "report_id", "report id"]
   );
 
   const filter = feedbackIdProperty
-    ? {
-        property: feedbackIdProperty.name,
-        number: {
-          equals: feedback.id,
-        },
-      }
+    ? feedbackIdProperty.type === "number"
+      ? {
+          property: feedbackIdProperty.name,
+          number: {
+            equals: feedback.id,
+          },
+        }
+      : {
+          property: feedbackIdProperty.name,
+          rich_text: {
+            equals: String(feedback.id),
+          },
+        }
     : {
         property: titleProperty.name,
         title: {
@@ -371,6 +491,162 @@ const findExistingPageId = async (
 
   const pageId = queryResult.results?.[0]?.id;
   return typeof pageId === "string" && pageId ? pageId : null;
+};
+
+const listAllDatabasePages = async (config: NotionConfig) => {
+  const pages: NotionPageObject[] = [];
+  let cursor: string | null = null;
+
+  for (let pageIndex = 0; pageIndex < MAX_QUERY_PAGES; pageIndex += 1) {
+    const queryResult = await notionRequest<NotionQueryResponse>(
+      config,
+      `/databases/${encodeURIComponent(config.databaseId)}/query`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          page_size: 100,
+          ...(cursor ? { start_cursor: cursor } : {}),
+        }),
+      }
+    );
+
+    if (Array.isArray(queryResult.results) && queryResult.results.length > 0) {
+      pages.push(...queryResult.results);
+    }
+
+    if (!queryResult.has_more || !queryResult.next_cursor) {
+      return pages;
+    }
+
+    cursor = queryResult.next_cursor;
+  }
+
+  throw new Error("Notion feedback page query exceeded pagination safety limit.");
+};
+
+const extractFeedbackIdFromPage = (
+  page: NotionPageObject,
+  feedbackIdProperty: NamedNotionProperty | null,
+  titleProperty: NamedNotionProperty
+) => {
+  if (feedbackIdProperty) {
+    const value = page.properties?.[feedbackIdProperty.name];
+    if (feedbackIdProperty.type === "number") {
+      const parsed = parseIntegerFromUnknown(value?.number);
+      if (parsed != null) return parsed;
+    }
+    if (feedbackIdProperty.type === "rich_text") {
+      const parsed = parseIntegerFromUnknown(getPlainText(value?.rich_text));
+      if (parsed != null) return parsed;
+    }
+  }
+
+  const titleValue = page.properties?.[titleProperty.name];
+  const titleText = getPlainText(titleValue?.title);
+  return extractFeedbackIdFromTitle(titleText);
+};
+
+const archiveNotionPage = async (config: NotionConfig, pageId: string) => {
+  await notionRequest(config, `/pages/${encodeURIComponent(pageId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      archived: true,
+    }),
+  });
+};
+
+export const pruneFeedbackPagesInNotion = async (
+  feedbackIds: number[]
+): Promise<NotionFeedbackPruneResult> => {
+  const config = getNotionConfig();
+  if (!config) {
+    return {
+      pruned: false,
+      archivedCount: 0,
+      duplicateArchivedCount: 0,
+      orphanArchivedCount: 0,
+      reason: "NOTION_API_KEY or NOTION_DATABASE_ID is not configured.",
+    };
+  }
+
+  try {
+    const keepFeedbackIds = new Set(
+      feedbackIds
+        .map((id) => parseIntegerFromUnknown(id))
+        .filter((id): id is number => id != null)
+    );
+
+    const database = await notionRequest<NotionDatabaseResponse>(
+      config,
+      `/databases/${encodeURIComponent(config.databaseId)}`,
+      { method: "GET" }
+    );
+
+    const properties = getNamedProperties(database.properties);
+    const titleProperty = properties.find((property) => property.type === "title");
+    if (!titleProperty) {
+      throw new Error("Notion database has no title property.");
+    }
+
+    const feedbackIdProperty = findProperty(
+      properties,
+      new Set(["number", "rich_text"]),
+      ["feedback_id", "feedback id", "id", "report_id", "report id"]
+    );
+
+    const allPages = await listAllDatabasePages(config);
+    const deduplicatedFeedbackIds = new Set<number>();
+
+    const duplicatePageIds: string[] = [];
+    const orphanPageIds: string[] = [];
+
+    for (const page of allPages) {
+      const pageId = typeof page.id === "string" ? page.id : "";
+      if (!pageId) continue;
+
+      const feedbackId = extractFeedbackIdFromPage(
+        page,
+        feedbackIdProperty,
+        titleProperty
+      );
+
+      if (feedbackId == null || !keepFeedbackIds.has(feedbackId)) {
+        orphanPageIds.push(pageId);
+        continue;
+      }
+
+      if (deduplicatedFeedbackIds.has(feedbackId)) {
+        duplicatePageIds.push(pageId);
+        continue;
+      }
+
+      deduplicatedFeedbackIds.add(feedbackId);
+    }
+
+    for (const pageId of duplicatePageIds) {
+      await archiveNotionPage(config, pageId);
+    }
+    for (const pageId of orphanPageIds) {
+      await archiveNotionPage(config, pageId);
+    }
+
+    return {
+      pruned: true,
+      archivedCount: duplicatePageIds.length + orphanPageIds.length,
+      duplicateArchivedCount: duplicatePageIds.length,
+      orphanArchivedCount: orphanPageIds.length,
+      reason: null,
+    };
+  } catch (error) {
+    console.error("[notion/feedbackSync] Failed to prune feedback pages:", error);
+    return {
+      pruned: false,
+      archivedCount: 0,
+      duplicateArchivedCount: 0,
+      orphanArchivedCount: 0,
+      reason: error instanceof Error ? error.message : "Unknown prune error",
+    };
+  }
 };
 
 export const upsertFeedbackToNotion = async (

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import pool from "@/database/client";
 import { adminAccessCookieName, hasAdminAccess } from "@/app/admin/adminAuth";
-import { upsertFeedbackToNotion } from "@/app/components/notion/feedbackSync";
+import { syncFeedbackByIdToNotion } from "@/app/api/feedback/syncFromDatabase";
 
 type RequestContext = {
   params: Promise<{ id: string }>;
@@ -31,51 +30,17 @@ export async function POST(_request: Request, context: RequestContext) {
   }
 
   try {
-    const result = await pool.query(
-      `
-        SELECT
-          uf.id,
-          uf.user_id,
-          uf.status,
-          uf.report_date,
-          uf.settle_date,
-          uf.description,
-          u.username
-        FROM user_feedback uf
-        INNER JOIN users u ON u.id = uf.user_id
-        WHERE uf.id = $1
-      `,
-      [feedbackId]
-    );
-
-    if (result.rows.length === 0) {
+    const syncResult = await syncFeedbackByIdToNotion(feedbackId);
+    if (syncResult.attempts === 0) {
       return NextResponse.json({ error: "Feedback not found" }, { status: 404 });
     }
-
-    const row = result.rows[0];
-    const syncResult = await upsertFeedbackToNotion({
-      id: Number(row.id),
-      userId: Number(row.user_id),
-      username: String(row.username ?? ""),
-      status: String(row.status ?? ""),
-      reportDate:
-        row.report_date instanceof Date
-          ? row.report_date.toISOString()
-          : String(row.report_date ?? ""),
-      settleDate:
-        row.settle_date instanceof Date
-          ? row.settle_date.toISOString()
-          : row.settle_date
-            ? String(row.settle_date)
-            : null,
-      description: typeof row.description === "string" ? row.description : null,
-    });
 
     if (!syncResult.synced) {
       return NextResponse.json(
         {
           error: "Failed to sync feedback to Notion.",
           reason: syncResult.reason,
+          syncAttempts: syncResult.attempts,
         },
         { status: 502 }
       );

@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import pool from "@/database/client";
 import { adminAccessCookieName, hasAdminAccess } from "@/app/admin/adminAuth";
 import { normalizeRewardKey } from "@/app/components/email/rewardUtils";
-import { upsertFeedbackToNotion } from "@/app/components/notion/feedbackSync";
+import { syncFeedbackByIdToNotion } from "@/app/api/feedback/syncFromDatabase";
 
 type RequestContext = {
   params: Promise<{ id: string }>;
@@ -244,30 +244,43 @@ export async function PATCH(request: Request, context: RequestContext) {
     await client.query("COMMIT");
 
     const updated = updatedResult.rows[0];
-    const notionSync = await upsertFeedbackToNotion({
-      id: Number(updated.id),
-      userId: Number(updated.user_id),
-      username: String(feedbackRowResult.rows[0].username ?? ""),
-      status: String(updated.status ?? ""),
-      reportDate:
-        updated.report_date instanceof Date
-          ? updated.report_date.toISOString()
-          : String(updated.report_date ?? ""),
-      settleDate:
-        updated.settle_date instanceof Date
-          ? updated.settle_date.toISOString()
-          : updated.settle_date
-            ? String(updated.settle_date)
-            : null,
-      description:
-        typeof updated.description === "string" ? updated.description : null,
-    });
+    const notionSync = await syncFeedbackByIdToNotion(feedbackId);
 
     if (!notionSync.synced) {
-      console.warn(
-        `[api/admin/feedback/[id]] Notion sync skipped/failed for feedback ${String(
-          updated.id
-        )}: ${notionSync.reason ?? "unknown reason"}`
+      console.error(
+        `[api/admin/feedback/[id]] Notion sync failed for feedback ${String(
+          feedbackId
+        )} after ${String(notionSync.attempts)} attempts: ${
+          notionSync.reason ?? "unknown reason"
+        }`
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Feedback status updated in database but failed to sync to Notion. Please retry sync from admin panel.",
+          notionSynced: false,
+          syncAttempts: notionSync.attempts,
+          reason: notionSync.reason,
+          feedback: {
+            id: Number(updated.id),
+            user_id: Number(updated.user_id),
+            username: String(feedbackRowResult.rows[0].username ?? ""),
+            status: String(updated.status ?? ""),
+            report_date:
+              updated.report_date instanceof Date
+                ? updated.report_date.toISOString()
+                : String(updated.report_date ?? ""),
+            settle_date:
+              updated.settle_date instanceof Date
+                ? updated.settle_date.toISOString()
+                : updated.settle_date
+                  ? String(updated.settle_date)
+                  : null,
+            description:
+              typeof updated.description === "string" ? updated.description : null,
+          },
+        },
+        { status: 502 }
       );
     }
 

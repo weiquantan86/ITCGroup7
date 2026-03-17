@@ -21,19 +21,20 @@ type BossSkillChargeParticle = {
 export type MochiGeneralSkill1Runtime = {
   onBossTick: (
     entry: MochiGeneralCombatEntry,
+    target: THREE.Object3D,
     delta: number,
     gameEnded: boolean
   ) => void;
   spawnSingleBurst: (args: {
     entry: MochiGeneralCombatEntry;
+    target: THREE.Object3D;
     origin?: THREE.Vector3;
     gameEnded: boolean;
   }) => void;
   update: (args: {
     now: number;
     delta: number;
-    player: THREE.Object3D;
-    applyDamage: (amount: number) => number;
+    applyDamageToTarget: (target: THREE.Object3D, amount: number) => number;
     projectileBlockers: THREE.Object3D[];
     handleProjectileBlockHit?: ProjectileBlockHitHandler;
   }) => void;
@@ -246,10 +247,12 @@ export const createMochiGeneralSkill1Runtime = (
 
   const spawnSingleBurst = ({
     entry,
+    target,
     origin,
     gameEnded,
   }: {
     entry: MochiGeneralCombatEntry;
+    target: THREE.Object3D;
     origin?: THREE.Vector3;
     gameEnded: boolean;
   }) => {
@@ -261,13 +264,14 @@ export const createMochiGeneralSkill1Runtime = (
     }
     projectileRuntime.spawnBurst({
       origin: bossSkillBurstOrigin,
+      target,
       gameEnded,
       rageActive: entry.rageActive,
     });
   };
 
   return {
-    onBossTick: (entry, delta, gameEnded) => {
+    onBossTick: (entry, target, delta, gameEnded) => {
       const pendingBurstCount = Math.max(
         entry.skill1ProjectileBurstPendingCount,
         entry.skill1ProjectileBurstRequested ? 1 : 0
@@ -278,6 +282,7 @@ export const createMochiGeneralSkill1Runtime = (
         for (let i = 0; i < pendingBurstCount; i += 1) {
           spawnSingleBurst({
             entry,
+            target,
             gameEnded,
           });
         }
@@ -320,16 +325,14 @@ export const createMochiGeneralSkill1Runtime = (
     update: ({
       now,
       delta,
-      player,
-      applyDamage,
+      applyDamageToTarget,
       projectileBlockers,
       handleProjectileBlockHit,
     }) => {
       projectileRuntime.update({
         now,
         delta,
-        player,
-        applyDamage,
+        applyDamageToTarget,
         projectileBlockers,
         handleProjectileBlockHit,
       });

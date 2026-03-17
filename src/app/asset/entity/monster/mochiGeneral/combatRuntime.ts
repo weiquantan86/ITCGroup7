@@ -11,7 +11,10 @@ import type { StatusEffectApplication } from "../../character/general/types";
 
 type SwordThrustState = {
   active: boolean;
-  hitPlayer: boolean;
+  hitTarget: boolean;
+  hasPreviousBladeSample: boolean;
+  previousBladeBase: THREE.Vector3;
+  previousBladeTip: THREE.Vector3;
 };
 
 type RageTransitionSmokeParticle = {
@@ -44,6 +47,7 @@ export type MochiGeneralCombatRuntime = {
     delta: number;
     player: THREE.Object3D;
     applyDamage: (amount: number) => number;
+    applyDamageToTarget: (target: THREE.Object3D, amount: number) => number;
     applyStatusEffect: (effect: StatusEffectApplication) => boolean;
     gameEnded: boolean;
     projectileBlockers: THREE.Object3D[];
@@ -57,9 +61,15 @@ const BOSS_SWORD_THRUST_DAMAGE = 30;
 const BOSS_SWORD_THRUST_ATTACK_WEIGHT_THRESHOLD = 0.2;
 const BOSS_SWORD_THRUST_SWING_THRESHOLD = 0.02;
 const BOSS_SWORD_THRUST_BLADE_RADIUS = 0.5;
-const BOSS_SWORD_THRUST_PLAYER_RADIUS = 0.55;
-const BOSS_SWORD_THRUST_PLAYER_HEIGHT_OFFSET = 0.95;
+const BOSS_SWORD_THRUST_TARGET_RADIUS = 0.55;
+const BOSS_SWORD_THRUST_TARGET_HEIGHT_OFFSET = 0.95;
 const BOSS_SWORD_THRUST_RANGE_MULTIPLIER = 1.5;
+const BOSS_SWORD_THRUST_CLOSE_COMBAT_RADIUS = 1.12;
+const BOSS_SWORD_THRUST_CLOSE_COMBAT_BASE_Y = 0.14;
+const BOSS_SWORD_THRUST_CLOSE_COMBAT_TOP_Y = 2.28;
+const BOSS_SWORD_THRUST_CLOSE_COMBAT_FORWARD_MIN = 0.52;
+const BOSS_SWORD_THRUST_CLOSE_COMBAT_FORWARD_EXTRA = 0.92;
+const BOSS_SWORD_THRUST_CLOSE_COMBAT_MIN_FORWARD_DOT = -0.42;
 const BOSS_RAGE_SMOKE_SPAWN_RATE = 132;
 const BOSS_RAGE_SMOKE_PARTICLE_LIFE_MIN = 1.9;
 const BOSS_RAGE_SMOKE_PARTICLE_LIFE_MAX = 3.1;
@@ -80,10 +90,227 @@ const BOSS_RAGE_SMOKE_SPIN_SPEED = 3.2;
 const swordBaseWorld = new THREE.Vector3();
 const swordTipWorld = new THREE.Vector3();
 const swordClosestPoint = new THREE.Vector3();
-const playerHitProbeWorld = new THREE.Vector3();
-const swordBladeSegment = new THREE.Line3();
+const swordTargetClosestPoint = new THREE.Vector3();
+const targetCapsuleStartWorld = new THREE.Vector3();
+const targetCapsuleEndWorld = new THREE.Vector3();
+const targetAnchorWorld = new THREE.Vector3();
+const targetCapsuleCenterWorld = new THREE.Vector3();
+const targetDirectionFromBoss = new THREE.Vector3();
+const targetBounds = new THREE.Box3();
+const targetBoundsSize = new THREE.Vector3();
+const targetBoundsCenter = new THREE.Vector3();
+const bossAnchorWorld = new THREE.Vector3();
+const bossForwardWorld = new THREE.Vector3();
+const bossCloseCombatCapsuleStartWorld = new THREE.Vector3();
+const bossCloseCombatCapsuleEndWorld = new THREE.Vector3();
+const bossAnchorWorldRotation = new THREE.Quaternion();
+const segmentDelta = new THREE.Vector3();
+const capsuleDelta = new THREE.Vector3();
+const segmentOffset = new THREE.Vector3();
 const rageSmokeCenterWorld = new THREE.Vector3();
 const rageSmokeSpawnWorld = new THREE.Vector3();
+
+type MochiGeneralMeleeHitHintUserData = {
+  mochiGeneralMeleeHitHeight?: unknown;
+  mochiGeneralMeleeHitRadius?: unknown;
+  mochiGeneralMeleeHitBottom?: unknown;
+  mochiGeneralMeleeHitTop?: unknown;
+  mochiGeneralMeleeHitBoundsSource?: unknown;
+};
+
+type MochiGeneralMeleeHitCapsule = {
+  start: THREE.Vector3;
+  end: THREE.Vector3;
+  radius: number;
+};
+
+const resolveFiniteNumber = (value: unknown) =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
+
+const resolveMochiGeneralSegmentDistanceSq = (
+  segmentStartA: THREE.Vector3,
+  segmentEndA: THREE.Vector3,
+  segmentStartB: THREE.Vector3,
+  segmentEndB: THREE.Vector3
+) => {
+  const epsilon = 0.000001;
+  segmentDelta.copy(segmentEndA).sub(segmentStartA);
+  capsuleDelta.copy(segmentEndB).sub(segmentStartB);
+  segmentOffset.copy(segmentStartA).sub(segmentStartB);
+
+  const a = segmentDelta.lengthSq();
+  const e = capsuleDelta.lengthSq();
+  const f = capsuleDelta.dot(segmentOffset);
+
+  let s = 0;
+  let t = 0;
+
+  if (a <= epsilon && e <= epsilon) {
+    swordClosestPoint.copy(segmentStartA);
+    swordTargetClosestPoint.copy(segmentStartB);
+    return swordClosestPoint.distanceToSquared(swordTargetClosestPoint);
+  }
+
+  if (a <= epsilon) {
+    s = 0;
+    t = THREE.MathUtils.clamp(f / e, 0, 1);
+  } else {
+    const c = segmentDelta.dot(segmentOffset);
+    if (e <= epsilon) {
+      t = 0;
+      s = THREE.MathUtils.clamp(-c / a, 0, 1);
+    } else {
+      const b = segmentDelta.dot(capsuleDelta);
+      const denominator = a * e - b * b;
+      if (Math.abs(denominator) > epsilon) {
+        s = THREE.MathUtils.clamp((b * f - c * e) / denominator, 0, 1);
+      } else {
+        s = 0;
+      }
+
+      t = (b * s + f) / e;
+      if (t < 0) {
+        t = 0;
+        s = THREE.MathUtils.clamp(-c / a, 0, 1);
+      } else if (t > 1) {
+        t = 1;
+        s = THREE.MathUtils.clamp((b - c) / a, 0, 1);
+      }
+    }
+  }
+
+  swordClosestPoint.copy(segmentDelta).multiplyScalar(s).add(segmentStartA);
+  swordTargetClosestPoint.copy(capsuleDelta).multiplyScalar(t).add(segmentStartB);
+  return swordClosestPoint.distanceToSquared(swordTargetClosestPoint);
+};
+
+const resolveMochiGeneralMeleeHitCapsule = (target: THREE.Object3D) => {
+  const userData = target.userData as MochiGeneralMeleeHitHintUserData;
+  target.updateMatrixWorld(true);
+  target.getWorldPosition(targetAnchorWorld);
+
+  let centerX = targetAnchorWorld.x;
+  let centerZ = targetAnchorWorld.z;
+  let bottomY = targetAnchorWorld.y;
+  let topY = bottomY + BOSS_SWORD_THRUST_TARGET_HEIGHT_OFFSET;
+  let radius = BOSS_SWORD_THRUST_TARGET_RADIUS;
+
+  const hintedHeight = resolveFiniteNumber(userData.mochiGeneralMeleeHitHeight);
+  if (hintedHeight !== null && hintedHeight > 0) {
+    topY = bottomY + hintedHeight;
+  }
+  const hintedRadius = resolveFiniteNumber(userData.mochiGeneralMeleeHitRadius);
+  if (hintedRadius !== null && hintedRadius > 0) {
+    radius = hintedRadius;
+  }
+  const hintedBottom = resolveFiniteNumber(userData.mochiGeneralMeleeHitBottom);
+  if (hintedBottom !== null) {
+    bottomY = targetAnchorWorld.y + hintedBottom;
+  }
+  const hintedTop = resolveFiniteNumber(userData.mochiGeneralMeleeHitTop);
+  if (hintedTop !== null) {
+    topY = targetAnchorWorld.y + hintedTop;
+  }
+
+  const hintedBoundsSource = userData.mochiGeneralMeleeHitBoundsSource;
+  const boundsSource =
+    hintedBoundsSource instanceof THREE.Object3D ? hintedBoundsSource : target;
+  boundsSource.updateMatrixWorld(true);
+  targetBounds.setFromObject(boundsSource);
+  if (!targetBounds.isEmpty()) {
+    targetBounds.getCenter(targetBoundsCenter);
+    targetBounds.getSize(targetBoundsSize);
+    centerX = targetBoundsCenter.x;
+    centerZ = targetBoundsCenter.z;
+    bottomY = Math.min(bottomY, targetBounds.min.y);
+    topY = Math.max(topY, targetBounds.max.y);
+    const boundsRadius = Math.max(targetBoundsSize.x, targetBoundsSize.z) * 0.42;
+    if (boundsRadius > 0.0001) {
+      radius = Math.max(radius, boundsRadius);
+    }
+  }
+
+  radius = Math.max(0.05, radius);
+  const minCombatHeight = Math.max(
+    BOSS_SWORD_THRUST_TARGET_HEIGHT_OFFSET,
+    radius * 2.35
+  );
+  if (topY - bottomY < minCombatHeight) {
+    topY = bottomY + minCombatHeight;
+  }
+  bottomY -= radius * 0.18;
+  topY += radius * 0.22;
+  if (!Number.isFinite(topY) || topY <= bottomY + 0.01) {
+    topY = bottomY + Math.max(0.05, hintedHeight ?? BOSS_SWORD_THRUST_TARGET_HEIGHT_OFFSET);
+  }
+  targetCapsuleStartWorld.set(centerX, bottomY, centerZ);
+  targetCapsuleEndWorld.set(centerX, topY, centerZ);
+  return {
+    start: targetCapsuleStartWorld,
+    end: targetCapsuleEndWorld,
+    radius,
+  };
+};
+
+const resolveMochiGeneralCloseCombatDistanceSq = ({
+  entry,
+  targetCapsule,
+}: {
+  entry: MochiGeneralCombatEntry;
+  targetCapsule: MochiGeneralMeleeHitCapsule;
+}) => {
+  entry.anchor.updateMatrixWorld(true);
+  entry.anchor.getWorldPosition(bossAnchorWorld);
+  entry.anchor.getWorldQuaternion(bossAnchorWorldRotation);
+  bossForwardWorld.set(0, 0, 1).applyQuaternion(bossAnchorWorldRotation).setY(0);
+  if (bossForwardWorld.lengthSq() <= 0.000001) {
+    bossForwardWorld.set(0, 0, 1);
+  } else {
+    bossForwardWorld.normalize();
+  }
+
+  targetCapsuleCenterWorld
+    .copy(targetCapsule.start)
+    .add(targetCapsule.end)
+    .multiplyScalar(0.5);
+  targetDirectionFromBoss
+    .copy(targetCapsuleCenterWorld)
+    .sub(bossAnchorWorld)
+    .setY(0);
+  const horizontalDistance = targetDirectionFromBoss.length();
+  if (horizontalDistance > 0.0001) {
+    targetDirectionFromBoss.multiplyScalar(1 / horizontalDistance);
+    if (
+      targetDirectionFromBoss.dot(bossForwardWorld) <
+      BOSS_SWORD_THRUST_CLOSE_COMBAT_MIN_FORWARD_DOT
+    ) {
+      return Number.POSITIVE_INFINITY;
+    }
+  }
+
+  const attackRange = Math.max(0.5, entry.monster.stats.attackRange);
+  const forwardDistance = THREE.MathUtils.clamp(
+    attackRange * 0.55 + targetCapsule.radius * 0.45,
+    BOSS_SWORD_THRUST_CLOSE_COMBAT_FORWARD_MIN,
+    attackRange + BOSS_SWORD_THRUST_CLOSE_COMBAT_FORWARD_EXTRA
+  );
+
+  bossCloseCombatCapsuleStartWorld
+    .copy(bossAnchorWorld)
+    .addScaledVector(bossForwardWorld, forwardDistance * 0.18);
+  bossCloseCombatCapsuleStartWorld.y += BOSS_SWORD_THRUST_CLOSE_COMBAT_BASE_Y;
+  bossCloseCombatCapsuleEndWorld
+    .copy(bossAnchorWorld)
+    .addScaledVector(bossForwardWorld, forwardDistance);
+  bossCloseCombatCapsuleEndWorld.y += BOSS_SWORD_THRUST_CLOSE_COMBAT_TOP_Y;
+
+  return resolveMochiGeneralSegmentDistanceSq(
+    bossCloseCombatCapsuleStartWorld,
+    bossCloseCombatCapsuleEndWorld,
+    targetCapsule.start,
+    targetCapsule.end
+  );
+};
 
 export const createMochiGeneralCombatRuntime = (
   scene: THREE.Scene
@@ -117,7 +344,13 @@ export const createMochiGeneralCombatRuntime = (
   ): SwordThrustState => {
     let state = swordThrustStateByEntry.get(entry);
     if (state) return state;
-    state = { active: false, hitPlayer: false };
+    state = {
+      active: false,
+      hitTarget: false,
+      hasPreviousBladeSample: false,
+      previousBladeBase: new THREE.Vector3(),
+      previousBladeTip: new THREE.Vector3(),
+    };
     swordThrustStateByEntry.set(entry, state);
     return state;
   };
@@ -273,11 +506,11 @@ export const createMochiGeneralCombatRuntime = (
 
   const updateSwordThrustCollision = ({
     entry,
-    player,
+    target,
     applyDamage,
   }: {
     entry: MochiGeneralCombatEntry;
-    player: THREE.Object3D;
+    target: THREE.Object3D;
     applyDamage: (amount: number) => number;
   }) => {
     const thrustActive =
@@ -291,15 +524,17 @@ export const createMochiGeneralCombatRuntime = (
 
     if (!thrustActive) {
       state.active = false;
+      state.hasPreviousBladeSample = false;
       return;
     }
 
     if (!state.active) {
       state.active = true;
-      state.hitPlayer = false;
+      state.hitTarget = false;
+      state.hasPreviousBladeSample = false;
     }
 
-    if (state.hitPlayer) return;
+    if (state.hitTarget) return;
 
     const sword = entry.rig?.sword;
     const swordTip = entry.rig?.swordTip;
@@ -307,29 +542,63 @@ export const createMochiGeneralCombatRuntime = (
 
     sword.getWorldPosition(swordBaseWorld);
     swordTip.getWorldPosition(swordTipWorld);
-    if (swordBaseWorld.distanceToSquared(swordTipWorld) <= 0.00001) return;
-
-    player.getWorldPosition(playerHitProbeWorld);
-    playerHitProbeWorld.y += BOSS_SWORD_THRUST_PLAYER_HEIGHT_OFFSET;
-
-    swordBladeSegment.set(swordBaseWorld, swordTipWorld);
-    swordBladeSegment.closestPointToPoint(
-      playerHitProbeWorld,
-      true,
-      swordClosestPoint
-    );
-
-    const collisionDistance =
-      (BOSS_SWORD_THRUST_BLADE_RADIUS + BOSS_SWORD_THRUST_PLAYER_RADIUS) *
-      BOSS_SWORD_THRUST_RANGE_MULTIPLIER;
-    if (
-      swordClosestPoint.distanceToSquared(playerHitProbeWorld) >
-      collisionDistance * collisionDistance
-    ) {
+    if (swordBaseWorld.distanceToSquared(swordTipWorld) <= 0.00001) {
+      state.hasPreviousBladeSample = false;
       return;
     }
 
-    state.hitPlayer = true;
+    const targetCapsule = resolveMochiGeneralMeleeHitCapsule(target);
+    let distanceSq = resolveMochiGeneralSegmentDistanceSq(
+      swordBaseWorld,
+      swordTipWorld,
+      targetCapsule.start,
+      targetCapsule.end
+    );
+    if (state.hasPreviousBladeSample) {
+      distanceSq = Math.min(
+        distanceSq,
+        resolveMochiGeneralSegmentDistanceSq(
+          state.previousBladeBase,
+          state.previousBladeTip,
+          targetCapsule.start,
+          targetCapsule.end
+        ),
+        resolveMochiGeneralSegmentDistanceSq(
+          state.previousBladeBase,
+          swordBaseWorld,
+          targetCapsule.start,
+          targetCapsule.end
+        ),
+        resolveMochiGeneralSegmentDistanceSq(
+          state.previousBladeTip,
+          swordTipWorld,
+          targetCapsule.start,
+          targetCapsule.end
+        )
+      );
+    }
+    state.previousBladeBase.copy(swordBaseWorld);
+    state.previousBladeTip.copy(swordTipWorld);
+    state.hasPreviousBladeSample = true;
+
+    const collisionDistance =
+      (BOSS_SWORD_THRUST_BLADE_RADIUS + targetCapsule.radius) *
+      BOSS_SWORD_THRUST_RANGE_MULTIPLIER;
+    const closeCombatDistanceSq = resolveMochiGeneralCloseCombatDistanceSq({
+      entry,
+      targetCapsule,
+    });
+    const closeCombatCollisionDistance =
+      BOSS_SWORD_THRUST_CLOSE_COMBAT_RADIUS + targetCapsule.radius;
+    const swordHit = distanceSq <= collisionDistance * collisionDistance;
+    const closeCombatHit =
+      closeCombatDistanceSq <=
+      closeCombatCollisionDistance * closeCombatCollisionDistance;
+    if (!swordHit && !closeCombatHit) {
+      return;
+    }
+
+    state.hitTarget = true;
     applyDamage(BOSS_SWORD_THRUST_DAMAGE);
   };
 
@@ -350,7 +619,7 @@ export const createMochiGeneralCombatRuntime = (
         gameEnded,
         isBlocked,
       });
-      skill1Runtime.onBossTick(entry, delta, gameEnded);
+      skill1Runtime.onBossTick(entry, player, delta, gameEnded);
       skill2Runtime.onBossTick({
         entry,
         delta,
@@ -374,7 +643,7 @@ export const createMochiGeneralCombatRuntime = (
       });
       updateSwordThrustCollision({
         entry,
-        player,
+        target: player,
         applyDamage,
       });
       emitRageSmoke(entry, delta);
@@ -384,6 +653,7 @@ export const createMochiGeneralCombatRuntime = (
       delta,
       player,
       applyDamage,
+      applyDamageToTarget,
       applyStatusEffect,
       gameEnded,
       projectileBlockers,
@@ -392,8 +662,7 @@ export const createMochiGeneralCombatRuntime = (
       skill1Runtime.update({
         now,
         delta,
-        player,
-        applyDamage,
+        applyDamageToTarget,
         projectileBlockers,
         handleProjectileBlockHit,
       });
@@ -406,6 +675,7 @@ export const createMochiGeneralCombatRuntime = (
         spawnSkill1SingleBurst: ({ entry, origin, gameEnded: burstGameEnded }) => {
           skill1Runtime.spawnSingleBurst({
             entry,
+            target: player,
             origin,
             gameEnded: burstGameEnded,
           });
@@ -420,8 +690,7 @@ export const createMochiGeneralCombatRuntime = (
       skill5Runtime.update({
         now,
         delta,
-        player,
-        applyDamage,
+        applyDamageToTarget,
         gameEnded,
         projectileBlockers,
         handleProjectileBlockHit,

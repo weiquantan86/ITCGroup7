@@ -560,6 +560,12 @@ export const createMochiGeneralBossLifecycle = ({
             amount,
             applyPlayerDamage: applyDamage,
           }),
+        applyDamageToTarget: (target, amount) =>
+          applyDamageToSlimluThreatOrPlayer({
+            target,
+            amount,
+            applyPlayerDamage: applyDamage,
+          }),
         applyStatusEffect,
         gameEnded: isGameEnded(),
         projectileBlockers,

@@ -1262,16 +1262,12 @@ const faceBossTowardPlayer = (
   const dx = moveTargetPosition.x - entry.anchor.position.x;
   const dz = moveTargetPosition.z - entry.anchor.position.z;
   const horizontalDistance = Math.hypot(dx, dz);
-  if (horizontalDistance <= 0.00001) {
-    entry.swordFeintTimer = 0;
-    entry.swordFeintLocked = false;
-    entry.swordFeintLockWeight = 0;
-    entry.swordAttackPoseWeight = 0;
-    entry.swordHandSwing = 0;
-    return;
-  }
-
-  const baseYaw = Math.atan2(dx, dz);
+  const hasHorizontalTarget = horizontalDistance > 0.00001;
+  // Keep melee pose logic active even when target overlaps the boss center.
+  // Otherwise tiny summons directly under the boss never trigger sword swings.
+  const baseYaw = hasHorizontalTarget
+    ? Math.atan2(dx, dz)
+    : entry.anchor.rotation.y;
   if (entry.skill1Casting) {
     entry.swordFeintTimer = 0;
     entry.swordFeintLocked = false;

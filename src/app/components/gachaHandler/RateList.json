@@ -132,12 +132,12 @@
       "chance": 1,
       "reward": {
         "type": "character",
-        "characterId": "harper",
-        "name": "Harper",
+        "characterId": "baron",
+        "name": "Baron",
         "count": 1,
         "icon": "CHAR"
       }
     }
   ],
-  "updatedAt": "2026-03-15T16:09:58.673Z"
+  "updatedAt": "2026-03-17T06:54:08.095Z"
 }

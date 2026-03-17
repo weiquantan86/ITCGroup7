@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import pool from "../../../../database/client";
-import { upsertFeedbackToNotion } from "@/app/components/notion/feedbackSync";
+import { syncFeedbackByIdToNotion } from "@/app/api/feedback/syncFromDatabase";
 
 const STATUS_NOT_STARTED = "not_started";
 
@@ -62,46 +62,39 @@ export async function POST(request: Request) {
       [userId, STATUS_NOT_STARTED, description]
     );
 
-    const usernameResult = await pool.query(
-      `
-        SELECT username
-        FROM users
-        WHERE id = $1
-      `,
-      [userId]
-    );
-
     const inserted = result.rows[0];
-    const username =
-      typeof usernameResult.rows[0]?.username === "string"
-        ? String(usernameResult.rows[0].username)
-        : `user_${userId}`;
+    const feedbackId = Number.parseInt(String(inserted.id), 10);
+    if (!Number.isFinite(feedbackId) || feedbackId <= 0) {
+      throw new Error("Inserted feedback id is invalid.");
+    }
 
-    const notionSync = await upsertFeedbackToNotion({
-      id: Number(inserted.id),
-      userId,
-      username,
-      status: String(inserted.status ?? STATUS_NOT_STARTED),
-      reportDate:
-        inserted.report_date instanceof Date
-          ? inserted.report_date.toISOString()
-          : String(inserted.report_date ?? ""),
-      settleDate: null,
-      description: typeof inserted.description === "string" ? inserted.description : null,
-    });
+    const notionSync = await syncFeedbackByIdToNotion(feedbackId);
 
     if (!notionSync.synced) {
-      console.warn(
-        `[api/community/bug-report] Notion sync skipped/failed for feedback ${String(
-          inserted.id
-        )}: ${notionSync.reason ?? "unknown reason"}`
+      console.error(
+        `[api/community/bug-report] Notion sync failed for feedback ${String(
+          feedbackId
+        )} after ${String(notionSync.attempts)} attempts: ${
+          notionSync.reason ?? "unknown reason"
+        }`
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Feedback saved in database but failed to sync to Notion. Please retry sync from admin panel.",
+          report: inserted,
+          notionSynced: false,
+          reason: notionSync.reason,
+          syncAttempts: notionSync.attempts,
+        },
+        { status: 502 }
       );
     }
 
     return NextResponse.json({
       success: true,
       report: inserted,
-      notionSynced: notionSync.synced,
+      notionSynced: true,
     });
   } catch (error) {
     console.error("[api/community/bug-report] Failed to submit report:", error);

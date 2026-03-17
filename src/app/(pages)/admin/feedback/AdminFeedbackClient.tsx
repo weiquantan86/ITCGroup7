@@ -34,6 +34,10 @@ type NotionSyncResponse = {
   notionSynced?: boolean;
   syncedCount?: number;
   totalCount?: number;
+  fullReplace?: boolean;
+  archivedCount?: number;
+  duplicateArchivedCount?: number;
+  orphanArchivedCount?: number;
   failedRows?: Array<{ id?: number; reason?: string }>;
   error?: string;
   reason?: string;
@@ -223,6 +227,7 @@ export default function AdminFeedbackClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           feedbackIds: feedbackRows.map((item) => item.id),
+          fullReplace: true,
         }),
       });
       const data = (await response.json()) as NotionSyncResponse;
@@ -246,7 +251,15 @@ export default function AdminFeedbackClient({
         Number.isFinite(data.syncedCount) && data.syncedCount != null
           ? data.syncedCount
           : feedbackRows.length;
-      setStatusMessage(`Synced ${syncedCount} feedback rows to Notion.`);
+      const archivedCount =
+        Number.isFinite(data.archivedCount) && data.archivedCount != null
+          ? data.archivedCount
+          : 0;
+      setStatusMessage(
+        data.fullReplace
+          ? `Synced ${syncedCount} rows and archived ${archivedCount} stale Notion rows.`
+          : `Synced ${syncedCount} feedback rows to Notion.`
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error

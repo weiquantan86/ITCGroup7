@@ -7,8 +7,10 @@ import { LinearProjectileUpdater } from "../../linearUpdater";
 
 type MochiGeneralSkill5Projectile = {
   mesh: THREE.Mesh;
+  target: THREE.Object3D;
   velocity: THREE.Vector3;
   radius: number;
+  damage: number;
   life: number;
   maxLife: number;
 };
@@ -22,8 +24,7 @@ export type MochiGeneralSkill5VolleyRuntime = {
   update: (args: {
     now: number;
     delta: number;
-    player: THREE.Object3D;
-    applyDamage: (amount: number) => number;
+    applyDamageToTarget: (target: THREE.Object3D, amount: number) => number;
     projectileBlockers: THREE.Object3D[];
     handleProjectileBlockHit?: ProjectileBlockHitHandler;
   }) => void;
@@ -116,8 +117,10 @@ export const createMochiGeneralSkill5VolleyRuntime = (
       scene.add(projectileMesh);
       projectiles.push({
         mesh: projectileMesh,
+        target,
         velocity: projectileDirectionWorld.clone().multiplyScalar(speed),
         radius: SKILL5_PROJECTILE_RADIUS * projectileScale,
+        damage: SKILL5_PROJECTILE_DAMAGE,
         life: 0,
         maxLife: SKILL5_PROJECTILE_LIFETIME,
       });
@@ -125,17 +128,13 @@ export const createMochiGeneralSkill5VolleyRuntime = (
     update: ({
       now,
       delta,
-      player,
-      applyDamage,
+      applyDamageToTarget,
       projectileBlockers,
       handleProjectileBlockHit,
     }) => {
       for (let i = 0; i < projectileBlockers.length; i += 1) {
         projectileBlockers[i].updateMatrixWorld(true);
       }
-
-      player.getWorldPosition(playerProbeWorld);
-      playerProbeWorld.y += SKILL5_PROJECTILE_PLAYER_HEIGHT_OFFSET;
 
       projectileUpdater.update(projectiles, now, delta, {
         getObject: (projectile) => projectile.mesh,
@@ -166,6 +165,12 @@ export const createMochiGeneralSkill5VolleyRuntime = (
           }
         },
         onAfterMove: (projectile, _stepNow, _stepDelta, remove) => {
+          if (!projectile.target.parent) {
+            remove();
+            return;
+          }
+          projectile.target.getWorldPosition(playerProbeWorld);
+          playerProbeWorld.y += SKILL5_PROJECTILE_PLAYER_HEIGHT_OFFSET;
           projectile.velocity.multiplyScalar(0.998);
           const collisionDistance =
             projectile.radius + SKILL5_PROJECTILE_PLAYER_RADIUS;
@@ -173,7 +178,7 @@ export const createMochiGeneralSkill5VolleyRuntime = (
             projectile.mesh.position.distanceToSquared(playerProbeWorld) <=
             collisionDistance * collisionDistance
           ) {
-            applyDamage(SKILL5_PROJECTILE_DAMAGE);
+            applyDamageToTarget(projectile.target, projectile.damage);
             remove();
           }
         },

@@ -7,8 +7,10 @@ import { LinearProjectileUpdater } from "../../linearUpdater";
 
 type MochiGeneralSkill1Projectile = {
   mesh: THREE.Mesh;
+  target: THREE.Object3D;
   velocity: THREE.Vector3;
   radius: number;
+  damage: number;
   life: number;
   maxLife: number;
 };
@@ -16,14 +18,14 @@ type MochiGeneralSkill1Projectile = {
 export type MochiGeneralSkill1BurstRuntime = {
   spawnBurst: (args: {
     origin: THREE.Vector3;
+    target: THREE.Object3D;
     gameEnded: boolean;
     rageActive?: boolean;
   }) => void;
   update: (args: {
     now: number;
     delta: number;
-    player: THREE.Object3D;
-    applyDamage: (amount: number) => number;
+    applyDamageToTarget: (target: THREE.Object3D, amount: number) => number;
     projectileBlockers: THREE.Object3D[];
     handleProjectileBlockHit?: ProjectileBlockHitHandler;
   }) => void;
@@ -78,10 +80,12 @@ export const createMochiGeneralSkill1BurstRuntime = (
 
   const spawnBurst = ({
     origin,
+    target,
     gameEnded,
     rageActive = false,
   }: {
     origin: THREE.Vector3;
+    target: THREE.Object3D;
     gameEnded: boolean;
     rageActive?: boolean;
   }) => {
@@ -134,8 +138,10 @@ export const createMochiGeneralSkill1BurstRuntime = (
       scene.add(projectileMesh);
       projectiles.push({
         mesh: projectileMesh,
+        target,
         velocity: projectileDirectionWorld.clone().multiplyScalar(speed),
         radius: BOSS_SKILL1_PROJECTILE_RADIUS * projectileScale,
+        damage: BOSS_SKILL1_PROJECTILE_DAMAGE,
         life: 0,
         maxLife: BOSS_SKILL1_PROJECTILE_LIFETIME,
       });
@@ -145,24 +151,19 @@ export const createMochiGeneralSkill1BurstRuntime = (
   const update = ({
     now,
     delta,
-    player,
-    applyDamage,
+    applyDamageToTarget,
     projectileBlockers,
     handleProjectileBlockHit,
   }: {
     now: number;
     delta: number;
-    player: THREE.Object3D;
-    applyDamage: (amount: number) => number;
+    applyDamageToTarget: (target: THREE.Object3D, amount: number) => number;
     projectileBlockers: THREE.Object3D[];
     handleProjectileBlockHit?: ProjectileBlockHitHandler;
   }) => {
     for (let i = 0; i < projectileBlockers.length; i += 1) {
       projectileBlockers[i].updateMatrixWorld(true);
     }
-
-    player.getWorldPosition(playerProbeWorld);
-    playerProbeWorld.y += BOSS_SKILL1_PROJECTILE_PLAYER_HEIGHT_OFFSET;
 
     projectileUpdater.update(projectiles, now, delta, {
       getObject: (projectile) => projectile.mesh,
@@ -193,13 +194,19 @@ export const createMochiGeneralSkill1BurstRuntime = (
         }
       },
       onAfterMove: (projectile, _stepNow, _stepDelta, remove) => {
+        if (!projectile.target.parent) {
+          remove();
+          return;
+        }
+        projectile.target.getWorldPosition(playerProbeWorld);
+        playerProbeWorld.y += BOSS_SKILL1_PROJECTILE_PLAYER_HEIGHT_OFFSET;
         projectile.velocity.multiplyScalar(0.997);
         const collisionDistance = projectile.radius + BOSS_SKILL1_PROJECTILE_PLAYER_RADIUS;
         if (
           projectile.mesh.position.distanceToSquared(playerProbeWorld) <=
           collisionDistance * collisionDistance
         ) {
-          applyDamage(BOSS_SKILL1_PROJECTILE_DAMAGE);
+          applyDamageToTarget(projectile.target, projectile.damage);
           remove();
         }
       },
