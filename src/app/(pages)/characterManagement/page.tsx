@@ -34,16 +34,47 @@ export default async function CharacterManagementPage() {
   noStore();
 
   const characters: CharacterManagementCharacter[] = characterProfiles.map(
-    (profile) => ({
-      id: profile.id,
-      name: profile.label,
-      path: `/assets/characters${profile.pathToken}${profile.id}.glb`,
-      skills: {
-        q: profile.kit?.skills?.q?.description ?? "No description yet.",
-        e: profile.kit?.skills?.e?.description ?? "No description yet.",
-        r: profile.kit?.skills?.r?.description ?? "No description yet.",
-      },
-    })
+    (profile) => {
+      const buildSkillInfoForProfile = (key: "n" | "e" | "r" | "q") => {
+        if (key === "n") {
+          const basicAttack = profile.kit?.basicAttack;
+          return {
+            description: basicAttack?.description ?? "No description yet.",
+            cooldownMs: null,
+            manaCost: null,
+          } as const;
+        }
+
+        const skill = profile.kit?.skills?.[key];
+        const cooldownMs =
+          typeof skill?.cooldownMs === "number" && Number.isFinite(skill.cooldownMs)
+            ? Math.max(0, skill.cooldownMs)
+            : null;
+        const manaCost =
+          skill?.cost === "all"
+            ? "all"
+            : typeof skill?.cost === "number" && Number.isFinite(skill.cost)
+            ? Math.max(0, skill.cost)
+            : null;
+        return {
+          description: skill?.description ?? "No description yet.",
+          cooldownMs,
+          manaCost,
+        } as const;
+      };
+
+      return {
+        id: profile.id,
+        name: profile.label,
+        path: `/assets/characters${profile.pathToken}${profile.id}.glb`,
+        skills: {
+          n: buildSkillInfoForProfile("n"),
+          e: buildSkillInfoForProfile("e"),
+          r: buildSkillInfoForProfile("r"),
+          q: buildSkillInfoForProfile("q"),
+        },
+      };
+    }
   );
 
   const cookieStore = await cookies();

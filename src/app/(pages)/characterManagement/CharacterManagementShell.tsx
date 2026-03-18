@@ -24,7 +24,7 @@ export default function CharacterManagementShell({
     );
   }, [characters, ownedSet]);
   const [selectedId, setSelectedId] = useState(fallbackSelectedId);
-  const [activeSkill, setActiveSkill] = useState<"q" | "e" | "r">("q");
+  const [activeSkill, setActiveSkill] = useState<"n" | "e" | "r" | "q">("n");
 
   const selectedProfile = useMemo(() => {
     if (!selectedId) return characters[0];
@@ -32,7 +32,27 @@ export default function CharacterManagementShell({
   }, [characters, selectedId]);
   const [isTryingCharacter, setIsTryingCharacter] = useState(false);
 
-  const skillDescription = selectedProfile?.skills?.[activeSkill] ?? "No description yet.";
+  const selectedSkill = selectedProfile?.skills?.[activeSkill] ?? {
+    description: "No description yet.",
+    cooldownMs: null,
+    manaCost: null,
+  };
+  const skillDescription = selectedSkill.description;
+  const cooldownText =
+    typeof selectedSkill.cooldownMs === "number" && selectedSkill.cooldownMs > 0
+      ? `${(selectedSkill.cooldownMs / 1000).toFixed(
+          selectedSkill.cooldownMs % 1000 === 0 ? 0 : 1
+        )}s`
+      : "None";
+  const manaCostText =
+    selectedSkill.manaCost === "all"
+      ? "ALL"
+      : typeof selectedSkill.manaCost === "number"
+      ? `${Math.round(selectedSkill.manaCost)}`
+      : "--";
+  const panelTitle = activeSkill === "n" ? "Basic Attack" : "Skill Description";
+  const detailTitle =
+    activeSkill === "n" ? "Basic Attack Info & Traits" : "Detailed Description";
   const handleTryCharacter = async () => {
     if (isTryingCharacter) return;
     setIsTryingCharacter(true);
@@ -64,7 +84,7 @@ export default function CharacterManagementShell({
             >
               <aside className="flex h-full min-h-0 flex-col gap-6">
                 <div className="flex items-center justify-center gap-5">
-                  {(["q", "e", "r"] as const).map((key) => {
+                  {(["n", "e", "r", "q"] as const).map((key) => {
                     const isActive = activeSkill === key;
                     return (
                       <button
@@ -84,12 +104,44 @@ export default function CharacterManagementShell({
                   })}
                 </div>
 
-                <div className="flex-1 rounded-[20px] border border-slate-200/20 bg-[#0f151f]/90 p-5 shadow-[0_0_20px_rgba(90,140,220,0.12)]">
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                    Skill Description
-                  </p>
-                  <div className="mt-4 rounded-[14px] border border-slate-200/10 bg-[#05070a] px-4 py-3 text-sm leading-relaxed text-slate-100/80 shadow-[inset_0_0_18px_rgba(0,0,0,0.65)]">
-                    {skillDescription}
+                <div className="flex-1 rounded-[20px] border border-slate-200/20 bg-[#0f151f]/90 p-5 font-sans shadow-[0_0_20px_rgba(90,140,220,0.12)]">
+                  <div className="flex h-full min-h-0 flex-col">
+                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
+                      {panelTitle}
+                    </p>
+                    <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3">
+                      <div className="shrink-0 rounded-[14px] border border-slate-200/12 bg-[#05070a]/85 p-4 shadow-[inset_0_0_18px_rgba(0,0,0,0.6)]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-200/75">
+                        Regular State
+                      </p>
+                      <div className="mt-3 grid grid-cols-2 gap-3">
+                        <div className="rounded-[10px] border border-slate-200/10 bg-[#0b1119]/90 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.15em] text-slate-400">
+                            Cooldown
+                          </p>
+                          <p className="mt-1 font-mono text-[22px] font-semibold leading-none text-slate-100">
+                            {cooldownText}
+                          </p>
+                        </div>
+                        <div className="rounded-[10px] border border-slate-200/10 bg-[#0b1119]/90 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.15em] text-slate-400">
+                            Mana Cost
+                          </p>
+                          <p className="mt-1 font-mono text-[22px] font-semibold leading-none text-slate-100">
+                            {manaCostText}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                      <div className="min-h-0 flex-1 rounded-[14px] border border-slate-200/10 bg-[#05070a] p-4 shadow-[inset_0_0_18px_rgba(0,0,0,0.65)]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300/85">
+                          {detailTitle}
+                        </p>
+                        <div className="mt-3 h-[calc(100%-1.8rem)] overflow-y-auto pr-1 text-[14px] font-medium leading-7 tracking-[0.01em] whitespace-pre-line text-slate-100/90 font-sans">
+                          {skillDescription}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -118,4 +170,3 @@ export default function CharacterManagementShell({
     </main>
   );
 }
-

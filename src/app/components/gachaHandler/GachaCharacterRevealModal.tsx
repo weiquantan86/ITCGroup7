@@ -43,9 +43,9 @@ export default function GachaCharacterRevealModal({
     <div className="fixed inset-0 z-[340] flex items-center justify-center px-4 py-6">
       <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" />
 
-      <div className="relative w-full max-w-3xl overflow-hidden rounded-[28px] border border-cyan-200/25 bg-[#080c17] shadow-[0_0_100px_rgba(56,189,248,0.25)]">
+      <div className="relative w-full max-w-[1200px] overflow-hidden rounded-[32px] border border-cyan-200/25 bg-[#080c17] shadow-[0_0_120px_rgba(56,189,248,0.25)]">
         {!ready ? (
-          <div className="relative h-[520px] overflow-hidden bg-black">
+          <div className="relative h-[620px] overflow-hidden bg-black">
             <div className="absolute inset-0 animate-tv-screen bg-[radial-gradient(circle,rgba(210,235,255,0.2)_0%,rgba(60,120,180,0.18)_36%,rgba(8,12,22,0.88)_72%)]" />
             <div className="absolute inset-0 animate-tv-noise bg-[repeating-linear-gradient(0deg,rgba(255,255,255,0.12)_0px,rgba(255,255,255,0.12)_1px,rgba(255,255,255,0)_2px,rgba(255,255,255,0)_4px)] opacity-55 mix-blend-screen" />
             <div className="absolute inset-0 animate-tv-bars bg-[linear-gradient(90deg,rgba(255,0,60,0.2)_0%,rgba(0,255,255,0.2)_35%,rgba(255,255,255,0)_70%)]" />
@@ -59,33 +59,33 @@ export default function GachaCharacterRevealModal({
             </div>
           </div>
         ) : (
-          <div className="relative px-6 pb-6 pt-7">
-            <h3 className="text-center text-3xl font-black text-white">
+          <div className="relative px-8 pb-8 pt-8 md:px-10 md:pb-10 md:pt-9">
+            <h3 className="text-center text-4xl font-black leading-tight text-transparent md:text-5xl bg-gradient-to-r from-orange-400 via-pink-500 via-violet-400 to-cyan-300 bg-clip-text drop-shadow-[0_0_24px_rgba(236,72,153,0.35)]">
               Congratulations! You got: {reveal.characterName}
             </h3>
 
-            <div className="relative mt-5 h-[320px] w-full overflow-hidden rounded-2xl border border-cyan-300/30 bg-[#070b12]">
+            <div className="relative mt-6 h-[420px] w-full overflow-hidden rounded-2xl border border-cyan-300/30 bg-[#070b12] md:h-[500px]">
               <CharacterScene characterPath={reveal.modelPath} />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(251,146,60,0.26),transparent_42%),radial-gradient(circle_at_82%_18%,rgba(96,165,250,0.26),transparent_40%),radial-gradient(circle_at_15%_82%,rgba(236,72,153,0.2),transparent_45%),radial-gradient(circle_at_84%_80%,rgba(52,211,153,0.2),transparent_44%)] opacity-65 mix-blend-screen" />
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0)_35%,rgba(255,255,255,0.08)_100%)]" />
             </div>
 
             {reveal.isDuplicate ? (
-              <p className="mt-5 rounded-xl border border-amber-300/35 bg-amber-500/10 px-4 py-3 text-center text-base font-semibold text-amber-100">
+              <p className="mt-6 rounded-xl border border-amber-300/35 bg-amber-500/10 px-5 py-4 text-center text-lg font-semibold text-amber-100">
                 You already own this character, so it has been converted into{" "}
                 {reveal.convertedStarCoin} Star Coin.
               </p>
             ) : (
-              <p className="mt-5 rounded-xl border border-emerald-300/35 bg-emerald-500/10 px-4 py-3 text-center text-base font-semibold text-emerald-100">
+              <p className="mt-6 rounded-xl border border-emerald-300/35 bg-emerald-500/10 px-5 py-4 text-center text-lg font-semibold text-emerald-100">
                 This character has been added to your collection.
               </p>
             )}
 
-            <div className="mt-6 flex justify-center">
+            <div className="mt-7 flex justify-center">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full border border-cyan-300/45 bg-cyan-500/20 px-10 py-3 text-base font-black tracking-[0.18em] text-cyan-50 transition hover:brightness-110 active:scale-95"
+                className="rounded-full border border-cyan-300/45 bg-cyan-500/20 px-12 py-4 text-lg font-black tracking-[0.18em] text-cyan-50 transition hover:brightness-110 active:scale-95"
               >
                 CONTINUE
               </button>

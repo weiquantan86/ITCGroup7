@@ -28,10 +28,10 @@ type RuleReport = {
   id: string;
   name: string;
   rewardLabel: string;
-  eligible: boolean;
+  triggerAttempts: number;
   conditionText: string;
   chance: number;
-  triggerChance: number;
+  atLeastOneTriggerChance: number;
   expectedRewardCount: number;
 };
 
@@ -99,6 +99,9 @@ const buildReport = (
 ): TestReport => {
   const selected: SnackInventory = { ...selection };
   const totalSelected = sumInventory(selected);
+  const rewardPacks = Math.floor(
+    totalSelected / DEFAULT_SNACK_RATE_CONFIG.snacksPerReward
+  );
   const ratios = Object.fromEntries(
     SNACK_KEYS.map((key) => [
       key,
@@ -106,44 +109,58 @@ const buildReport = (
     ])
   ) as Record<SnackKey, number>;
 
+  const getRuleTriggerAttempts = (requirements: SnackInventory) => {
+    const requiredKeys = SNACK_KEYS.filter((key) => requirements[key] > 0);
+    if (requiredKeys.length === 0) return rewardPacks;
+    return requiredKeys.reduce((minAttempts, key) => {
+      const requiredCount = requirements[key];
+      if (requiredCount <= 0) return minAttempts;
+      const attempts = Math.floor(selected[key] / requiredCount);
+      return Math.min(minAttempts, attempts);
+    }, Number.POSITIVE_INFINITY);
+  };
+
   const rules: RuleReport[] = rateList.specialRates.map((rule) => {
     const requirementParts = SNACK_DEFINITIONS.filter(
       (snack) => rule.requirements[snack.key] > 0
     ).map((snack) => `${snack.label} x${rule.requirements[snack.key]}`);
-    const conditionText =
-      requirementParts.length > 0 ? requirementParts.join(", ") : "No requirement";
-    const eligible = SNACK_KEYS.every(
-      (key) => selected[key] >= rule.requirements[key]
-    );
+    const conditionText = requirementParts.length > 0
+      ? requirementParts.join(", ")
+      : "No requirement (rolled once per 5-snack pack)";
     const safeChance = Math.min(1, Math.max(0, rule.chance));
-    const triggerChance = eligible ? safeChance : 0;
-    const expectedRewardCount = triggerChance * rule.reward.count;
+    const triggerAttempts = getRuleTriggerAttempts(rule.requirements);
+    const atLeastOneTriggerChance =
+      triggerAttempts > 0 ? 1 - Math.pow(1 - safeChance, triggerAttempts) : 0;
+    const expectedRewardCount =
+      triggerAttempts > 0
+        ? triggerAttempts * safeChance * rule.reward.count
+        : 0;
 
     return {
       id: rule.id,
       name: rule.name,
       rewardLabel: getRewardLabel(rule),
-      eligible,
+      triggerAttempts,
       conditionText,
       chance: safeChance,
-      triggerChance,
+      atLeastOneTriggerChance,
       expectedRewardCount,
     };
   });
 
-  const eligibleSpecialRuleCount = rules.filter((rule) => rule.eligible).length;
+  const eligibleSpecialRuleCount = rules.filter(
+    (rule) => rule.triggerAttempts > 0
+  ).length;
   const anySpecialRewardChance =
     eligibleSpecialRuleCount > 0
       ? 1 -
         rules.reduce(
-          (none, rule) => none * (1 - (rule.eligible ? rule.chance : 0)),
+          (none, rule) =>
+            none * Math.pow(1 - rule.chance, Math.max(0, rule.triggerAttempts)),
           1
         )
       : 0;
 
-  const rewardPacks = Math.floor(
-    totalSelected / DEFAULT_SNACK_RATE_CONFIG.snacksPerReward
-  );
   const baseRollCount =
     rewardPacks *
     DEFAULT_SNACK_RATE_CONFIG.rewardCount *
@@ -200,7 +217,7 @@ const buildReport = (
     addCharacterMeta(rule.reward.characterId, rule.reward.name || rule.reward.characterId);
   });
 
-  const perCharacterLuckyChance =
+  const perCharacterLuckyChancePerPack =
     characterNormalizedIdsInOrder.length > 0
       ? LUCKY_CHARACTER_BONUS_CHANCE / characterNormalizedIdsInOrder.length
       : 0;
@@ -214,16 +231,21 @@ const buildReport = (
         ) {
           return none;
         }
-        const eligible = SNACK_KEYS.every(
-          (key) => selected[key] >= rule.requirements[key]
-        );
-        if (!eligible) return none;
+        const triggerAttempts = getRuleTriggerAttempts(rule.requirements);
+        if (!Number.isFinite(triggerAttempts) || triggerAttempts <= 0) return none;
         const chance = Math.min(1, Math.max(0, rule.chance));
-        return none * (1 - chance);
+        return none * Math.pow(1 - chance, triggerAttempts);
       }, 1);
 
       const specialChance = 1 - specialChanceNone;
-      const luckyChance = perCharacterLuckyChance;
+      const luckyChance =
+        rewardPacks > 0
+          ? 1 -
+            Math.pow(
+              1 - perCharacterLuckyChancePerPack,
+              rewardPacks
+            )
+          : 0;
       const totalChance = 1 - (1 - specialChance) * (1 - luckyChance);
       const meta = characterMetaByNormalizedId.get(normalizedCharacterId);
       return {
@@ -238,15 +260,15 @@ const buildReport = (
 
   const anyCharacterFromSpecialNone = rateList.specialRates.reduce((none, rule) => {
     if (rule.reward.type !== "character") return none;
-    const eligible = SNACK_KEYS.every(
-      (key) => selected[key] >= rule.requirements[key]
-    );
-    if (!eligible) return none;
+    const triggerAttempts = getRuleTriggerAttempts(rule.requirements);
+    if (!Number.isFinite(triggerAttempts) || triggerAttempts <= 0) return none;
     const chance = Math.min(1, Math.max(0, rule.chance));
-    return none * (1 - chance);
+    return none * Math.pow(1 - chance, triggerAttempts);
   }, 1);
   const luckyAnyCharacterChance =
-    characterNormalizedIdsInOrder.length > 0 ? LUCKY_CHARACTER_BONUS_CHANCE : 0;
+    characterNormalizedIdsInOrder.length > 0 && rewardPacks > 0
+      ? 1 - Math.pow(1 - LUCKY_CHARACTER_BONUS_CHANCE, rewardPacks)
+      : 0;
   const anyCharacterChance =
     1 - anyCharacterFromSpecialNone * (1 - luckyAnyCharacterChance);
 
@@ -329,11 +351,12 @@ export default function GachaTest() {
           {DEFAULT_SNACK_RATE_CONFIG.snacksPerReward} snacks guarantees 1 snack.
         </p>
         <p className="text-xs text-slate-400">
-          Special rules are checked independently in order, once per MAKE.
+          Special rules are independent, and each rule can be checked multiple times
+          in one OPEN based on full requirement-set matches.
         </p>
         <p className="text-xs text-slate-400">
           Includes lucky random character chance: {formatPercent(LUCKY_CHARACTER_BONUS_CHANCE, 3)}
-          {" "}per MAKE.
+          {" "}per 5-snack pack.
         </p>
       </div>
 
@@ -476,9 +499,9 @@ export default function GachaTest() {
                       <th className="px-3 py-2 text-left font-semibold">Rule</th>
                       <th className="px-3 py-2 text-left font-semibold">Reward</th>
                       <th className="px-3 py-2 text-left font-semibold">Condition</th>
-                      <th className="px-3 py-2 text-left font-semibold">Eligible This Make</th>
+                      <th className="px-3 py-2 text-left font-semibold">Trigger Attempts This Open</th>
                       <th className="px-3 py-2 text-left font-semibold">Configured Chance</th>
-                      <th className="px-3 py-2 text-left font-semibold">Trigger Chance This Make</th>
+                      <th className="px-3 py-2 text-left font-semibold">At Least One Trigger Chance This Open</th>
                       <th className="px-3 py-2 text-left font-semibold">Expected Reward Count</th>
                     </tr>
                   </thead>
@@ -488,9 +511,11 @@ export default function GachaTest() {
                         <td className="px-3 py-2">{rule.name}</td>
                         <td className="px-3 py-2">{rule.rewardLabel}</td>
                         <td className="px-3 py-2">{rule.conditionText}</td>
-                        <td className="px-3 py-2">{rule.eligible ? "Yes" : "No"}</td>
+                        <td className="px-3 py-2">{rule.triggerAttempts}</td>
                         <td className="px-3 py-2">{formatPercent(rule.chance)}</td>
-                        <td className="px-3 py-2">{formatPercent(rule.triggerChance)}</td>
+                        <td className="px-3 py-2">
+                          {formatPercent(rule.atLeastOneTriggerChance)}
+                        </td>
                         <td className="px-3 py-2">
                           {formatExpected(rule.expectedRewardCount)}
                         </td>
@@ -560,7 +585,7 @@ export default function GachaTest() {
                 <tbody className="divide-y divide-slate-700">
                   <tr>
                     <th className="w-64 bg-slate-900/70 px-3 py-2 text-left font-semibold text-slate-100">
-                      Any Character This Make
+                      Any Character This Open
                     </th>
                     <td className="px-3 py-2">{formatPercent(report.anyCharacterChance, 4)}</td>
                   </tr>
@@ -580,7 +605,7 @@ export default function GachaTest() {
                       <th className="px-3 py-2 text-left font-semibold">Character</th>
                       <th className="px-3 py-2 text-left font-semibold">From Special Rules</th>
                       <th className="px-3 py-2 text-left font-semibold">From Lucky Random</th>
-                      <th className="px-3 py-2 text-left font-semibold">Total This Make</th>
+                      <th className="px-3 py-2 text-left font-semibold">Total This Open</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">

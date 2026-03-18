@@ -20,7 +20,9 @@ export const profile: CharacterProfile = {
   },
   animateArms: ({ arms, isMoving, now, THREE }) => {
     const basePose = isMoving ? 0.62 : 0.52;
-    const sway = isMoving ? Math.sin(now * 0.01) * 0.08 : Math.sin(now * 0.004) * 0.02;
+    const sway = isMoving
+      ? Math.sin(now * 0.01) * 0.08
+      : Math.sin(now * 0.004) * 0.02;
     for (let i = 0; i < arms.length; i += 1) {
       const arm = arms[i];
       arm.rotation.x = THREE.MathUtils.lerp(
@@ -35,7 +37,7 @@ export const profile: CharacterProfile = {
       id: "basic",
       label: "Basic",
       description:
-        "Three-hit combo using normalAttack1, normalAttack2, and normalAttack3. Weapon collision deals damage on contact.",
+        "Three-hit weapon combo with weapon sweep collision. Holding Basic enters a spinning hold attack that deals periodic fire damage, drains stamina, and can reflect incoming projectiles.",
     },
     skills: {
       q: {
@@ -44,7 +46,7 @@ export const profile: CharacterProfile = {
         cost: 0,
         cooldownMs: 15000,
         description:
-          "Play skillQ and enter Burning Mode for 20s. While active, a flame effect burns above Flare's head.",
+          "Requires full EN and consumes all EN to cast. Enter Burning Mode for 20s and maintain the flame aura state used by enhanced E and R interactions.",
       },
       e: {
         id: "e",
@@ -52,7 +54,7 @@ export const profile: CharacterProfile = {
         cost: 30,
         cooldownMs: 5000,
         description:
-          "Play skillE. When the weapon lands, ignite the weapon tip and enter Secondary Burn for 10s.",
+          "Normal cast plays Skill E and ignites Secondary Burn (weapon fire state). If Burning Mode is active, E upgrades to Q_E, ignites immediately, and enables Super Burn attacks.",
       },
       r: {
         id: "r",
@@ -60,7 +62,7 @@ export const profile: CharacterProfile = {
         cost: 70,
         cooldownMs: 10000,
         description:
-          "Play skillR and thrust forward with the staff. In Super Burn, switch to skillQ_E_R and spray flames in a forward fan.",
+          "Normal cast is a forward strike. With Secondary Burn active, R throws a burn projectile that applies layered burn and explosion effects. In Super Burn, R switches to Q_E_R fan-flame mode with repeated cone damage ticks.",
       },
     },
   },

@@ -77,11 +77,11 @@
       },
       "chance": 0.003,
       "reward": {
-        "type": "resource",
-        "resourceKey": "star_coin",
-        "name": "Star Coin",
+        "type": "character",
+        "characterId": "dakota",
+        "name": "Dakota",
         "count": 1,
-        "icon": "STAR"
+        "icon": "CHAR"
       }
     },
     {
@@ -111,7 +111,7 @@
         "core_crunch_seed": 20,
         "star_gel_essence": 20
       },
-      "chance": 0.05,
+      "chance": 0.02,
       "reward": {
         "type": "character",
         "characterId": "flare",
@@ -121,23 +121,23 @@
       }
     },
     {
-      "id": "special-4e06ab4d-7371-4bc1-98b6-a1326e72d186",
-      "name": "Test1",
+      "id": "special-3c5043af-930c-4dd9-8b57-131ceced3a29",
+      "name": "Gokkun!",
       "requirements": {
-        "energy_sugar": 1,
-        "dream_fruit_dust": 0,
-        "core_crunch_seed": 0,
-        "star_gel_essence": 0
+        "energy_sugar": 40,
+        "dream_fruit_dust": 40,
+        "core_crunch_seed": 40,
+        "star_gel_essence": 40
       },
-      "chance": 1,
+      "chance": 0.01,
       "reward": {
         "type": "character",
-        "characterId": "baron",
-        "name": "Baron",
+        "characterId": "slimlu",
+        "name": "Slimlu",
         "count": 1,
         "icon": "CHAR"
       }
     }
   ],
-  "updatedAt": "2026-03-17T06:54:08.095Z"
+  "updatedAt": "2026-03-18T09:24:37.329Z"
 }

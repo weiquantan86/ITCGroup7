@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_GACHA_RATE_LIST,
   DEFAULT_SNACK_RATE_CONFIG,
+  LUCKY_CHARACTER_BONUS_CHANCE,
   SNACK_DEFINITIONS,
   SNACK_KEYS,
   type GachaRateList,
@@ -131,7 +132,7 @@ const buildRequirementText = (rule: SpecialRateEntry) => {
   ).map((snack) => `${snack.label} x${rule.requirements[snack.key]}`);
   return parts.length > 0
     ? parts.join(" + ")
-    : "No snack requirement (rolled every MAKE)";
+    : "No snack requirement (rolled once per 5-snack pack)";
 };
 
 const buildRewardText = (rule: SpecialRateEntry) => {
@@ -678,8 +679,12 @@ export default function RateManager() {
           Base rule is fixed: every {DEFAULT_SNACK_RATE_CONFIG.snacksPerReward} snacks guarantees 1 snack reward.
         </p>
         <p className="mt-2">
-          Special rules are rolled independently in listed order once per MAKE. If one selection
-          matches multiple rules, each rule is checked separately.
+          Special rules are rolled independently. A single rule can be rolled multiple times
+          in one OPEN according to how many full requirement sets match the selected snacks.
+        </p>
+        <p className="mt-2">
+          Fixed lucky rule: every {DEFAULT_SNACK_RATE_CONFIG.snacksPerReward} snacks gives
+          one independent {(LUCKY_CHARACTER_BONUS_CHANCE * 100).toFixed(1)}% random character roll.
         </p>
         <p className="mt-2">
           Current minimum snacks to trigger at least one rule: {minComboRequirement}

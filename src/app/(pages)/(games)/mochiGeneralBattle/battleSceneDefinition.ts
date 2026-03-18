@@ -323,6 +323,7 @@ export const createMochiGeneralBattleScene = (
   const bossSpawnDelayMs = 4000;
   const bossSpawnAt = performance.now() + bossSpawnDelayMs;
   const bossSpawnPosition = new THREE.Vector3(0, groundY, 0);
+  const bossProjectileBlockers: THREE.Object3D[] = [];
   let bossSpawned = false;
 
   const worldTick = ({
@@ -350,6 +351,21 @@ export const createMochiGeneralBattleScene = (
       bossSpawned = bossLifecycle.spawn(bossSpawnPosition);
     }
 
+    bossProjectileBlockers.length = 0;
+    if (Array.isArray(factoryWorld.projectileColliders)) {
+      for (let i = 0; i < factoryWorld.projectileColliders.length; i += 1) {
+        const collider = factoryWorld.projectileColliders[i];
+        if (!collider) continue;
+        bossProjectileBlockers.push(collider);
+      }
+    }
+    for (let i = 0; i < projectileBlockers.length; i += 1) {
+      const blocker = projectileBlockers[i];
+      if (!blocker) continue;
+      if (bossProjectileBlockers.includes(blocker)) continue;
+      bossProjectileBlockers.push(blocker);
+    }
+
     bossLifecycle.tick({
       now,
       delta,
@@ -363,7 +379,7 @@ export const createMochiGeneralBattleScene = (
         return applied;
       },
       applyStatusEffect,
-      projectileBlockers,
+      projectileBlockers: bossProjectileBlockers,
       handleProjectileBlockHit,
     });
     soldierLifecycle.tick({

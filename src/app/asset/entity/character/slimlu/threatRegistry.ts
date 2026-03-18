@@ -104,3 +104,14 @@ export const applyDamageToSlimluThreatOrPlayer = ({
   }
   return entry.applyDamage(amount);
 };
+
+export const collectActiveSlimluThreatTargets = (
+  out: THREE.Object3D[] = []
+) => {
+  out.length = 0;
+  for (const entry of threatEntries.values()) {
+    if (!isEntryActive(entry)) continue;
+    out.push(entry.object);
+  }
+  return out;
+};

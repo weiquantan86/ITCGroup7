@@ -53,6 +53,23 @@ const parseSelection = (payload: RollPayload): SnackInventory | null => {
 const sumInventory = (inventory: SnackInventory) =>
   SNACK_KEYS.reduce((sum, key) => sum + inventory[key], 0);
 
+const getSpecialRuleTriggerAttempts = (
+  selected: SnackInventory,
+  requirements: SnackInventory,
+  rewardPacks: number
+) => {
+  const requiredKeys = SNACK_KEYS.filter((key) => requirements[key] > 0);
+  if (requiredKeys.length === 0) {
+    return rewardPacks;
+  }
+  return requiredKeys.reduce((minAttempts, key) => {
+    const requiredCount = requirements[key];
+    if (requiredCount <= 0) return minAttempts;
+    const attempts = Math.floor(selected[key] / requiredCount);
+    return Math.min(minAttempts, attempts);
+  }, Number.POSITIVE_INFINITY);
+};
+
 const parseResourceRow = (row?: Record<string, unknown>): SnackInventory => {
   const parsed = { ...ZERO_SNACK_INVENTORY };
   if (!row) return parsed;
@@ -227,73 +244,64 @@ export async function POST(request: Request) {
     const pendingCharacterDrops: PendingCharacterDrop[] = [];
     const characterReveals: CharacterRevealPayload[] = [];
 
-    let hasEligibleSpecialRule = false;
-    // Special rules are evaluated independently in configured order (once per MAKE).
-    for (const rule of rateList.specialRates) {
-      const requirementsSatisfied = SNACK_KEYS.every(
-        (key) => selected[key] >= rule.requirements[key]
-      );
-      if (!requirementsSatisfied) continue;
-
-      hasEligibleSpecialRule = true;
-      if (Math.random() > rule.chance) continue;
-
-      if (rule.reward.type === "resource") {
-        if (rule.reward.resourceKey in SNACK_BY_KEY) {
-          const snackKey = rule.reward.resourceKey as SnackKey;
-          snackGains[snackKey] += rule.reward.count;
-          addReward({
-            id: `special:${rule.id}:snack:${snackKey}`,
-            name: rule.reward.name,
-            count: rule.reward.count,
-            imagePath: rule.reward.imagePath || SNACK_BY_KEY[snackKey].imagePath,
-            subtitle: `Rate Rule: ${rule.name}`,
-          });
-        } else if (rule.reward.resourceKey === "star_coin") {
-          starCoinGain += rule.reward.count;
-          addReward({
-            id: `special:${rule.id}:resource:star_coin`,
-            name: rule.reward.name,
-            count: rule.reward.count,
-            icon: rule.reward.icon || "STAR",
-            subtitle: `Rate Rule: ${rule.name}`,
-          });
-        } else if (rule.reward.resourceKey === "point") {
-          pointGain += rule.reward.count;
-          addReward({
-            id: `special:${rule.id}:resource:point`,
-            name: rule.reward.name,
-            count: rule.reward.count,
-            icon: rule.reward.icon || "PTS",
-            subtitle: `Rate Rule: ${rule.name}`,
-          });
-        }
-        continue;
-      }
-
-      for (let count = 0; count < rule.reward.count; count += 1) {
-        pendingCharacterDrops.push({
-          characterId: rule.reward.characterId,
-          fallbackName: rule.reward.name || rule.reward.characterId,
-          source: `Rate Rule: ${rule.name}`,
-        });
-      }
-    }
-
-    const totalForBase = totalSelected;
     const rewardPacks = Math.floor(
-      totalForBase / DEFAULT_SNACK_RATE_CONFIG.snacksPerReward
+      totalSelected / DEFAULT_SNACK_RATE_CONFIG.snacksPerReward
     );
 
-    if (!hasEligibleSpecialRule && rewardPacks <= 0) {
-      await client.query("ROLLBACK");
-      return NextResponse.json(
-        {
-          error:
-            "Selection does not match any configured rate rule. Please check gacha manager settings.",
-        },
-        { status: 400 }
+    // Special rules are independent, and each rule can be checked multiple times
+    // in one OPEN based on how many requirement sets fit in the current selection.
+    for (const rule of rateList.specialRates) {
+      const triggerAttempts = getSpecialRuleTriggerAttempts(
+        selected,
+        rule.requirements,
+        rewardPacks
       );
+      if (!Number.isFinite(triggerAttempts) || triggerAttempts <= 0) continue;
+
+      for (let attempt = 0; attempt < triggerAttempts; attempt += 1) {
+        if (Math.random() > rule.chance) continue;
+
+        if (rule.reward.type === "resource") {
+          if (rule.reward.resourceKey in SNACK_BY_KEY) {
+            const snackKey = rule.reward.resourceKey as SnackKey;
+            snackGains[snackKey] += rule.reward.count;
+            addReward({
+              id: `special:${rule.id}:snack:${snackKey}`,
+              name: rule.reward.name,
+              count: rule.reward.count,
+              imagePath: rule.reward.imagePath || SNACK_BY_KEY[snackKey].imagePath,
+              subtitle: `Rate Rule: ${rule.name}`,
+            });
+          } else if (rule.reward.resourceKey === "star_coin") {
+            starCoinGain += rule.reward.count;
+            addReward({
+              id: `special:${rule.id}:resource:star_coin`,
+              name: rule.reward.name,
+              count: rule.reward.count,
+              icon: rule.reward.icon || "STAR",
+              subtitle: `Rate Rule: ${rule.name}`,
+            });
+          } else if (rule.reward.resourceKey === "point") {
+            pointGain += rule.reward.count;
+            addReward({
+              id: `special:${rule.id}:resource:point`,
+              name: rule.reward.name,
+              count: rule.reward.count,
+              icon: rule.reward.icon || "PTS",
+              subtitle: `Rate Rule: ${rule.name}`,
+            });
+          }
+          continue;
+        }
+
+        for (let count = 0; count < rule.reward.count; count += 1) {
+          pendingCharacterDrops.push({
+            characterId: rule.reward.characterId,
+            fallbackName: rule.reward.name || rule.reward.characterId,
+            source: `Rate Rule: ${rule.name}`,
+          });
+        }
+      }
     }
 
     for (let i = 0; i < rewardPacks; i += 1) {
@@ -312,7 +320,9 @@ export async function POST(request: Request) {
       }
     }
 
-    if (Math.random() < LUCKY_CHARACTER_BONUS_CHANCE && allCharacters.length > 0) {
+    for (let i = 0; i < rewardPacks; i += 1) {
+      if (Math.random() >= LUCKY_CHARACTER_BONUS_CHANCE) continue;
+      if (allCharacters.length <= 0) continue;
       const randomIndex = Math.floor(Math.random() * allCharacters.length);
       const randomCharacter = allCharacters[randomIndex];
       const profile = profileByLabel.get(randomCharacter.name.toLowerCase());
@@ -321,7 +331,7 @@ export async function POST(request: Request) {
           profile?.id ??
           randomCharacter.name.trim().toLowerCase().replace(/\s+/g, "_"),
         fallbackName: profile?.label ?? randomCharacter.name,
-        source: "Lucky Character Bonus (0.4%)",
+        source: "Lucky Character Bonus (0.1% per 5 snacks)",
         characterDbId: randomCharacter.id,
       });
     }

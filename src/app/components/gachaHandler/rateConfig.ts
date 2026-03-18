@@ -110,7 +110,7 @@ export const ZERO_SNACK_INVENTORY: SnackInventory = {
 export const FIXED_BASE_SNACKS_PER_REWARD = 5;
 export const FIXED_BASE_DROP_CHANCE = 1;
 export const FIXED_BASE_REWARD_COUNT = 1;
-export const LUCKY_CHARACTER_BONUS_CHANCE = 0.004;
+export const LUCKY_CHARACTER_BONUS_CHANCE = 0.0005;
 export const FIXED_BASE_WEIGHTS: Record<SnackKey, number> = {
   energy_sugar: 1,
   dream_fruit_dust: 1,

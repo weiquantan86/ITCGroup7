@@ -68,6 +68,20 @@ export const bindPlayerInput = ({
   const maxPitchStepPerEvent = 0.2;
   let isPointerLockRequested = false;
   let ignoreMouseMoveCount = 0;
+  let primaryPressed = false;
+
+  const releasePrimary = (cancel = false) => {
+    if (!primaryPressed && cancel) {
+      onPrimaryCancel();
+      return;
+    }
+    primaryPressed = false;
+    if (cancel) {
+      onPrimaryCancel();
+    } else {
+      onPrimaryUp();
+    }
+  };
 
   const handlePointerDown = (event: PointerEvent) => {
     if (isInputLocked()) return;
@@ -87,6 +101,7 @@ export const bindPlayerInput = ({
           }
         }
       }
+      primaryPressed = true;
       onPrimaryDown();
       return;
     }
@@ -94,7 +109,17 @@ export const bindPlayerInput = ({
 
   const handlePointerUp = (event: PointerEvent) => {
     if (event.button !== 0) return;
-    onPrimaryUp();
+    releasePrimary(false);
+  };
+
+  const handleMouseUp = (event: MouseEvent) => {
+    if (event.button !== 0) return;
+    releasePrimary(false);
+  };
+
+  const handlePointerCancel = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    releasePrimary(true);
   };
 
   const handlePointerLockChange = () => {
@@ -105,7 +130,7 @@ export const bindPlayerInput = ({
       ignoreMouseMoveCount = 0;
       lookState.pendingYawDelta = 0;
       lookState.pendingPitchDelta = 0;
-      onPrimaryCancel();
+      releasePrimary(true);
     } else {
       // Ignore the first mouse delta after lock to avoid occasional jump spikes.
       ignoreMouseMoveCount = 1;
@@ -119,6 +144,9 @@ export const bindPlayerInput = ({
 
   const handleMouseMove = (event: MouseEvent) => {
     if (document.pointerLockElement !== mount || isInputLocked()) return;
+    if (primaryPressed && (event.buttons & 1) === 0) {
+      releasePrimary(true);
+    }
     if (ignoreMouseMoveCount > 0) {
       ignoreMouseMoveCount -= 1;
       return;
@@ -165,14 +193,25 @@ export const bindPlayerInput = ({
     pressedKeys.clear();
     lookState.pendingYawDelta = 0;
     lookState.pendingPitchDelta = 0;
-    onPrimaryCancel();
+    releasePrimary(true);
+  };
+
+  const handleVisibilityChange = () => {
+    if (document.visibilityState !== "hidden") return;
+    pressedKeys.clear();
+    lookState.pendingYawDelta = 0;
+    lookState.pendingPitchDelta = 0;
+    releasePrimary(true);
   };
 
   mount.addEventListener("pointerdown", handlePointerDown);
   window.addEventListener("pointerup", handlePointerUp);
+  window.addEventListener("mouseup", handleMouseUp);
+  window.addEventListener("pointercancel", handlePointerCancel);
   document.addEventListener("pointerlockchange", handlePointerLockChange);
   document.addEventListener("pointerlockerror", handlePointerLockError);
   document.addEventListener("mousemove", handleMouseMove);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
   window.addEventListener("blur", handleBlur);
@@ -181,7 +220,7 @@ export const bindPlayerInput = ({
     syncLockState: () => {
       if (!isInputLocked()) return;
       pressedKeys.clear();
-      onPrimaryCancel();
+      releasePrimary(true);
       if (document.pointerLockElement === mount && document.exitPointerLock) {
         document.exitPointerLock();
       }
@@ -191,7 +230,10 @@ export const bindPlayerInput = ({
       document.removeEventListener("pointerlockchange", handlePointerLockChange);
       document.removeEventListener("pointerlockerror", handlePointerLockError);
       document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);

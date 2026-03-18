@@ -16,32 +16,34 @@ export const profile: CharacterProfile = {
     miniLookUpOffset: 0.32,
   },
   kit: {
-    basicAttack: { id: "basic", label: "Basic", description: "..." },
+    basicAttack: {
+      id: "basic",
+      label: "Basic",
+      description:
+        "Normal form: hold to charge a long-reach phantom punch with charge-scaled damage. Demon form: Basic no longer punches and instead fires demon projectiles.",
+    },
     skills: {
       q: {
         id: "q",
         label: "Q",
-        description: `CD：30s
-Mana：All EN
-Description：Consume all EN to transform into Demon Lord form for 10s. In this form, basic attacks fire energy orbs, E/R become their deep-phantom variants, incoming damage is reduced to one-third, and when the form ends recover 25 HP.`,
+        description:
+          "Consume all EN to enter Demon Lord form for 10s. In this form Catron scales up, takes reduced damage, upgrades Basic and E or R behavior, and heals when the demon form ends.",
         cost: "all",
         cooldownMs: 30000,
       },
       e: {
         id: "e",
         label: "E",
-        description: `CD：7s
-Mana：20 Mana
-Description：Enter a 0.075s phasing state; getting hit triggers a 3s deep phase with full damage immunity. Recast during deep phase to summon 5 large violet orbs above the head and launch them left-to-right; deep phase ends when the third orb is fired. If deep phase ends naturally, recover 15 HP and 20 EN.`,
+        description:
+          "Normal form: enter shallow phantom briefly; if hit, transition into deep phantom with full damage immunity. Recast during deep phantom to launch a 5-orb deep volley. In demon form, E directly triggers the demon deep-volley variant.",
         cost: 20,
         cooldownMs: 7000,
       },
       r: {
         id: "r",
         label: "R",
-        description: `CD：12s
-Mana：30 Mana
-Description：Release a massive tornado forward that detonates on impact. While in deep phantom, cast R to summon three larger purple tornadoes.`,
+        description:
+          "Cast tornado attack. Normal cast fires one exploding tornado forward. In deep phantom or demon form, R fires 3 larger swaying tornadoes across lanes.",
         cost: 30,
         cooldownMs: 12000,
       },
@@ -73,4 +75,3 @@ Description：Release a massive tornado forward that detonates on impact. While 
     );
   },
 };
-

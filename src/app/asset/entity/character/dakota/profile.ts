@@ -13,34 +13,36 @@ export const profile: CharacterProfile = {
     passivePerSecond: 0,
   },
   kit: {
-    basicAttack: { id: "basic", label: "Basic", description: "..." },
+    basicAttack: {
+      id: "basic",
+      label: "Basic",
+      description:
+        "Hold to charge. Projectile only fires at full charge. Base mode fires a single shot; Q and E states change this into a 2-shot burst; R state fires one heavy gravity shell and then exits R.",
+    },
     skills: {
       q: {
         id: "q",
         label: "Q",
         cooldownMs: 10000,
         cost: 0,
-        description: `CD: 10s
-Mana: 0 EN
-Description: Enter Mech-Electric state. Requires at least 70 EN to activate, drains 5 EN per second, grants 1.2x move speed, and charged basic attack fires 2 explosive shots.`,
+        description:
+          "Toggle Mech-Electric mode. Requires at least 70 EN to activate, drains EN over time, grants move speed, and changes charged Basic into explosive 2-shot shells.",
       },
       e: {
         id: "e",
         label: "E",
         cooldownMs: 15000,
         cost: 60,
-        description: `CD: 15s
-Mana: 60
-Description: Enter Light-Jump state for 10s. Gain 1.2x move speed, feet emit gray particles, and charged basic attack fires a 2-shot burst.`,
+        description:
+          "Enter Light-Jump mode for 10s. Gain move speed and convert charged Basic into a 2-shot burst with improved on-hit sustain.",
       },
       r: {
         id: "r",
         label: "R",
         cooldownMs: 20000,
         cost: 40,
-        description: `CD: 20s
-Mana: 40
-Description: Enter Gravity state. Move speed is halved. During this state, basic attack charges for 1.8s and fires one explosive shell, then immediately exits the state.`,
+        description:
+          "Enter Gravity mode for 10s with reduced move speed. Charged Basic becomes a crimson explosive gravity shell; its first hit restores HP and Energy, and firing it ends Gravity mode.",
       },
     },
   },

@@ -11,7 +11,7 @@ import type { StatusEffectApplication } from "../../character/general/types";
 
 type SwordThrustState = {
   active: boolean;
-  hitTarget: boolean;
+  hitTargetIds: Set<string>;
   hasPreviousBladeSample: boolean;
   previousBladeBase: THREE.Vector3;
   previousBladeTip: THREE.Vector3;
@@ -34,9 +34,11 @@ export type MochiGeneralCombatRuntime = {
     entry: MochiGeneralCombatEntry;
     delta: number;
     player: THREE.Object3D;
+    meleeTargets: THREE.Object3D[];
     gameEnded: boolean;
     isBlocked: (x: number, z: number) => boolean;
     applyDamage: (amount: number) => number;
+    applyDamageToTarget: (target: THREE.Object3D, amount: number) => number;
     summonSkill3Soldier: (args: {
       entry: MochiGeneralCombatEntry;
       position: THREE.Vector3;
@@ -62,6 +64,7 @@ const BOSS_SWORD_THRUST_ATTACK_WEIGHT_THRESHOLD = 0.2;
 const BOSS_SWORD_THRUST_SWING_THRESHOLD = 0.02;
 const BOSS_SWORD_THRUST_BLADE_RADIUS = 0.5;
 const BOSS_SWORD_THRUST_TARGET_RADIUS = 0.55;
+const BOSS_SWORD_THRUST_TARGET_RADIUS_MAX = 1.2;
 const BOSS_SWORD_THRUST_TARGET_HEIGHT_OFFSET = 0.95;
 const BOSS_SWORD_THRUST_RANGE_MULTIPLIER = 1.5;
 const BOSS_SWORD_THRUST_CLOSE_COMBAT_RADIUS = 1.12;
@@ -212,25 +215,34 @@ const resolveMochiGeneralMeleeHitCapsule = (target: THREE.Object3D) => {
     topY = targetAnchorWorld.y + hintedTop;
   }
 
+  // Do not blindly use target root bounds: player roots include transient FX children
+  // that can expand bounds and produce unrealistic melee reach.
   const hintedBoundsSource = userData.mochiGeneralMeleeHitBoundsSource;
+  const meshTarget = target as THREE.Mesh;
   const boundsSource =
-    hintedBoundsSource instanceof THREE.Object3D ? hintedBoundsSource : target;
-  boundsSource.updateMatrixWorld(true);
-  targetBounds.setFromObject(boundsSource);
-  if (!targetBounds.isEmpty()) {
-    targetBounds.getCenter(targetBoundsCenter);
-    targetBounds.getSize(targetBoundsSize);
-    centerX = targetBoundsCenter.x;
-    centerZ = targetBoundsCenter.z;
-    bottomY = Math.min(bottomY, targetBounds.min.y);
-    topY = Math.max(topY, targetBounds.max.y);
-    const boundsRadius = Math.max(targetBoundsSize.x, targetBoundsSize.z) * 0.42;
-    if (boundsRadius > 0.0001) {
-      radius = Math.max(radius, boundsRadius);
+    hintedBoundsSource instanceof THREE.Object3D
+      ? hintedBoundsSource
+      : meshTarget.isMesh
+      ? target
+      : null;
+  if (boundsSource) {
+    boundsSource.updateMatrixWorld(true);
+    targetBounds.setFromObject(boundsSource);
+    if (!targetBounds.isEmpty()) {
+      targetBounds.getCenter(targetBoundsCenter);
+      targetBounds.getSize(targetBoundsSize);
+      centerX = targetBoundsCenter.x;
+      centerZ = targetBoundsCenter.z;
+      bottomY = Math.min(bottomY, targetBounds.min.y);
+      topY = Math.max(topY, targetBounds.max.y);
+      const boundsRadius = Math.max(targetBoundsSize.x, targetBoundsSize.z) * 0.42;
+      if (boundsRadius > 0.0001) {
+        radius = Math.max(radius, boundsRadius);
+      }
     }
   }
 
-  radius = Math.max(0.05, radius);
+  radius = THREE.MathUtils.clamp(radius, 0.05, BOSS_SWORD_THRUST_TARGET_RADIUS_MAX);
   const minCombatHeight = Math.max(
     BOSS_SWORD_THRUST_TARGET_HEIGHT_OFFSET,
     radius * 2.35
@@ -346,7 +358,7 @@ export const createMochiGeneralCombatRuntime = (
     if (state) return state;
     state = {
       active: false,
-      hitTarget: false,
+      hitTargetIds: new Set<string>(),
       hasPreviousBladeSample: false,
       previousBladeBase: new THREE.Vector3(),
       previousBladeTip: new THREE.Vector3(),
@@ -506,12 +518,12 @@ export const createMochiGeneralCombatRuntime = (
 
   const updateSwordThrustCollision = ({
     entry,
-    target,
-    applyDamage,
+    targets,
+    applyDamageToTarget,
   }: {
     entry: MochiGeneralCombatEntry;
-    target: THREE.Object3D;
-    applyDamage: (amount: number) => number;
+    targets: THREE.Object3D[];
+    applyDamageToTarget: (target: THREE.Object3D, amount: number) => number;
   }) => {
     const thrustActive =
       entry.swordAttackPoseWeight >= BOSS_SWORD_THRUST_ATTACK_WEIGHT_THRESHOLD &&
@@ -524,17 +536,16 @@ export const createMochiGeneralCombatRuntime = (
 
     if (!thrustActive) {
       state.active = false;
+      state.hitTargetIds.clear();
       state.hasPreviousBladeSample = false;
       return;
     }
 
     if (!state.active) {
       state.active = true;
-      state.hitTarget = false;
+      state.hitTargetIds.clear();
       state.hasPreviousBladeSample = false;
     }
-
-    if (state.hitTarget) return;
 
     const sword = entry.rig?.sword;
     const swordTip = entry.rig?.swordTip;
@@ -547,59 +558,68 @@ export const createMochiGeneralCombatRuntime = (
       return;
     }
 
-    const targetCapsule = resolveMochiGeneralMeleeHitCapsule(target);
-    let distanceSq = resolveMochiGeneralSegmentDistanceSq(
-      swordBaseWorld,
-      swordTipWorld,
-      targetCapsule.start,
-      targetCapsule.end
-    );
-    if (state.hasPreviousBladeSample) {
-      distanceSq = Math.min(
-        distanceSq,
-        resolveMochiGeneralSegmentDistanceSq(
-          state.previousBladeBase,
-          state.previousBladeTip,
-          targetCapsule.start,
-          targetCapsule.end
-        ),
-        resolveMochiGeneralSegmentDistanceSq(
-          state.previousBladeBase,
-          swordBaseWorld,
-          targetCapsule.start,
-          targetCapsule.end
-        ),
-        resolveMochiGeneralSegmentDistanceSq(
-          state.previousBladeTip,
-          swordTipWorld,
-          targetCapsule.start,
-          targetCapsule.end
-        )
-      );
-    }
+    const hadPreviousSample = state.hasPreviousBladeSample;
     state.previousBladeBase.copy(swordBaseWorld);
     state.previousBladeTip.copy(swordTipWorld);
     state.hasPreviousBladeSample = true;
 
-    const collisionDistance =
-      (BOSS_SWORD_THRUST_BLADE_RADIUS + targetCapsule.radius) *
-      BOSS_SWORD_THRUST_RANGE_MULTIPLIER;
-    const closeCombatDistanceSq = resolveMochiGeneralCloseCombatDistanceSq({
-      entry,
-      targetCapsule,
-    });
-    const closeCombatCollisionDistance =
-      BOSS_SWORD_THRUST_CLOSE_COMBAT_RADIUS + targetCapsule.radius;
-    const swordHit = distanceSq <= collisionDistance * collisionDistance;
-    const closeCombatHit =
-      closeCombatDistanceSq <=
-      closeCombatCollisionDistance * closeCombatCollisionDistance;
-    if (!swordHit && !closeCombatHit) {
-      return;
-    }
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      if (!target?.parent) continue;
+      const targetId = target.uuid;
+      if (state.hitTargetIds.has(targetId)) continue;
 
-    state.hitTarget = true;
-    applyDamage(BOSS_SWORD_THRUST_DAMAGE);
+      const targetCapsule = resolveMochiGeneralMeleeHitCapsule(target);
+      let distanceSq = resolveMochiGeneralSegmentDistanceSq(
+        swordBaseWorld,
+        swordTipWorld,
+        targetCapsule.start,
+        targetCapsule.end
+      );
+      if (hadPreviousSample) {
+        distanceSq = Math.min(
+          distanceSq,
+          resolveMochiGeneralSegmentDistanceSq(
+            state.previousBladeBase,
+            state.previousBladeTip,
+            targetCapsule.start,
+            targetCapsule.end
+          ),
+          resolveMochiGeneralSegmentDistanceSq(
+            state.previousBladeBase,
+            swordBaseWorld,
+            targetCapsule.start,
+            targetCapsule.end
+          ),
+          resolveMochiGeneralSegmentDistanceSq(
+            state.previousBladeTip,
+            swordTipWorld,
+            targetCapsule.start,
+            targetCapsule.end
+          )
+        );
+      }
+
+      const collisionDistance =
+        (BOSS_SWORD_THRUST_BLADE_RADIUS + targetCapsule.radius) *
+        BOSS_SWORD_THRUST_RANGE_MULTIPLIER;
+      const closeCombatDistanceSq = resolveMochiGeneralCloseCombatDistanceSq({
+        entry,
+        targetCapsule,
+      });
+      const closeCombatCollisionDistance =
+        BOSS_SWORD_THRUST_CLOSE_COMBAT_RADIUS + targetCapsule.radius;
+      const swordHit = distanceSq <= collisionDistance * collisionDistance;
+      const closeCombatHit =
+        closeCombatDistanceSq <=
+        closeCombatCollisionDistance * closeCombatCollisionDistance;
+      if (!swordHit && !closeCombatHit) {
+        continue;
+      }
+
+      state.hitTargetIds.add(targetId);
+      applyDamageToTarget(target, BOSS_SWORD_THRUST_DAMAGE);
+    }
   };
 
   return {
@@ -607,9 +627,11 @@ export const createMochiGeneralCombatRuntime = (
       entry,
       delta,
       player,
+      meleeTargets,
       gameEnded,
       isBlocked,
       applyDamage,
+      applyDamageToTarget,
       summonSkill3Soldier,
     }) => {
       tickMochiGeneralCombat({
@@ -643,8 +665,8 @@ export const createMochiGeneralCombatRuntime = (
       });
       updateSwordThrustCollision({
         entry,
-        target: player,
-        applyDamage,
+        targets: meleeTargets,
+        applyDamageToTarget,
       });
       emitRageSmoke(entry, delta);
     },

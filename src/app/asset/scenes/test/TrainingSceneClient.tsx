@@ -143,15 +143,9 @@ export default function TrainingScenePage({
 
             <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
-                    Infinite Fire
-                  </p>
-                  <p className="mt-2 text-[11px] text-slate-400">
-                    Toggle to remove cooldown and mana/energy cost for Q/E/R in
-                    test scene.
-                  </p>
-                </div>
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
+                  Infinite Fire
+                </p>
                 <button
                   type="button"
                   onClick={() => setInfiniteFire((prev) => !prev)}

@@ -112,7 +112,9 @@ function buildRequirementText(rule: GachaRateList["specialRates"][number]) {
   const parts = SNACK_DEFINITIONS.filter(
     (snack) => rule.requirements[snack.key] > 0
   ).map((snack) => `${snack.label} x${rule.requirements[snack.key]}`);
-  return parts.length > 0 ? parts.join(" + ") : "No requirement";
+  return parts.length > 0
+    ? parts.join(" + ")
+    : "No requirement (rolled once per 5-snack pack)";
 }
 
 function buildRewardText(rule: GachaRateList["specialRates"][number]) {
@@ -194,11 +196,13 @@ function SnackSlot({
   count,
   max,
   onAdjust,
+  onSetCount,
 }: {
   snack: (typeof SNACK_DEFINITIONS)[number];
   count: number;
   max: number;
   onAdjust: (delta: number) => void;
+  onSetCount: (next: number) => void;
 }) {
   const active = count > 0;
   return (
@@ -247,9 +251,26 @@ function SnackSlot({
         >
           -
         </button>
-        <span className="w-6 text-center text-xl font-black tabular-nums text-white">
-          {count}
-        </span>
+        <input
+          type="number"
+          min={0}
+          max={max}
+          step={1}
+          inputMode="numeric"
+          value={count}
+          onChange={(event) => {
+            const nextText = event.target.value.trim();
+            if (!nextText) {
+              onSetCount(0);
+              return;
+            }
+            const parsed = Number.parseInt(nextText, 10);
+            if (!Number.isFinite(parsed)) return;
+            onSetCount(parsed);
+          }}
+          className="h-10 w-14 rounded-full border border-white/20 bg-white/5 text-center text-xl font-black tabular-nums text-white outline-none transition focus:border-white/45 focus:bg-white/10"
+          aria-label={`${snack.label} quantity`}
+        />
         <button
           type="button"
           onClick={() => onAdjust(1)}
@@ -488,6 +509,15 @@ export default function SnackMixer({
     }));
   };
 
+  const setCount = (key: SnackKey, next: number) => {
+    if (isSealing) return;
+    const normalized = Number.isFinite(next) ? Math.floor(next) : 0;
+    setSelected((prev) => ({
+      ...prev,
+      [key]: Math.max(0, Math.min(currentInventory[key], normalized)),
+    }));
+  };
+
   const settleSnackRoll = async (selection: Selected) => {
     const response = await fetch("/api/gacha/snack-roll", {
       method: "POST",
@@ -675,6 +705,7 @@ export default function SnackMixer({
           count={selected.energy_sugar}
           max={currentInventory.energy_sugar}
           onAdjust={(delta) => adjust("energy_sugar", delta)}
+          onSetCount={(next) => setCount("energy_sugar", next)}
         />
       </div>
 
@@ -707,6 +738,7 @@ export default function SnackMixer({
           count={selected.dream_fruit_dust}
           max={currentInventory.dream_fruit_dust}
           onAdjust={(delta) => adjust("dream_fruit_dust", delta)}
+          onSetCount={(next) => setCount("dream_fruit_dust", next)}
         />
       </div>
 
@@ -802,6 +834,7 @@ export default function SnackMixer({
           count={selected.core_crunch_seed}
           max={currentInventory.core_crunch_seed}
           onAdjust={(delta) => adjust("core_crunch_seed", delta)}
+          onSetCount={(next) => setCount("core_crunch_seed", next)}
         />
       </div>
 
@@ -849,6 +882,7 @@ export default function SnackMixer({
           count={selected.star_gel_essence}
           max={currentInventory.star_gel_essence}
           onAdjust={(delta) => adjust("star_gel_essence", delta)}
+          onSetCount={(next) => setCount("star_gel_essence", next)}
         />
       </div>
 
@@ -923,7 +957,6 @@ export default function SnackMixer({
         <GachaManual
           onClose={() => setManualOpen(false)}
           snacksPerReward={snacksPerReward}
-          specialRates={rateList.specialRates}
         />
       ) : null}
 
@@ -949,6 +982,11 @@ export default function SnackMixer({
                 Close
               </button>
             </div>
+            <p className="mb-4 rounded-xl border border-cyan-300/25 bg-cyan-400/5 px-4 py-3 text-sm leading-relaxed text-cyan-100">
+              Each event is checked independently. In one OPEN, a single event can be
+              checked multiple times based on how many full requirement sets your selected
+              snacks contain.
+            </p>
 
             {rateList.specialRates.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-10 text-center text-xl font-semibold text-slate-300">

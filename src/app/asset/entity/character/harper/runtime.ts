@@ -30,12 +30,50 @@ const normalAttackBareClipName = "normalAttackBare";
 const normalAttackWeaponClipName = "normalAttackWeapon";
 const normalAttackBareChargeEndProgress = 0.56;
 const normalAttackBareProjectileFireProgress = 0.6;
+const normalAttackBareRecoveryDurationScale = 0.5;
+const normalAttackBareRecoveryEndBufferMs = 40;
 const normalAttackBareMinProjectileSpeed = 16;
 const normalAttackBareMaxProjectileSpeed = 22;
 const normalAttackBareProjectileLifetime = 1.4;
 const normalAttackBareProjectileRadius = 0.34;
 const normalAttackBareProjectileScale = 2.25;
 const normalAttackBareProjectileForwardOffset = 0.62;
+const normalAttackWeaponMoveSpeedMultiplier = 0.2;
+const normalAttackWeaponThirdBackstepDistance = 2;
+const normalAttackWeaponBackstepStepDistance = 0.08;
+const normalAttackWeaponThirdBackstepProgress = 0.69;
+const normalAttackWeaponThirdBackstepAdvanceSeconds = 0.2;
+const normalAttackWeaponThirdBackstepDurationMs = 390;
+const normalAttackWeaponStageDamage = [20, 24, 34] as const;
+const normalAttackWeaponStageManaGain = [2, 4, 8] as const;
+const normalAttackWeaponStageEnergyGain = [1, 2, 4] as const;
+const normalAttackWeaponAoEMaxHits = 12;
+const normalAttackWeaponContactRadius = [0.72, 0.8, 0.92] as const;
+const normalAttackWeaponContactForwardOffset = [0.18, 0.26, 0.56] as const;
+const normalAttackBareHitManaGain = 4;
+const skillEBareToWeaponLocomotionBlendMs = 220;
+const skillEBareAutoFinishProgress = 0.84;
+const harperSkillEBareManaCost = 70;
+const harperSkillECooldownMs = 20_000;
+const harperSkillRManaCost = 50;
+const harperSkillRCooldownMs = 13_000;
+const normalAttackWeaponComboStages = [
+  {
+    startProgress: 0.11,
+    hitProgress: 0.151,
+    endProgress: 0.24,
+  },
+  {
+    startProgress: 0.3,
+    hitProgress: 0.354,
+    endProgress: 0.45,
+  },
+  {
+    startProgress: 0.51,
+    hitProgress: 0.575,
+    endProgress: 0.66,
+  },
+] as const;
 const skillEWeaponThrowProgressFallback = 0.45;
 const skillEWeaponProjectileSpeed = 23.5;
 const skillEWeaponProjectileLifetime = 2.2;
@@ -46,7 +84,16 @@ const skillEWeaponProjectileExplosionRadius = 5.8;
 const skillEWeaponProjectileExplosionDamage = 62;
 const skillEWeaponProjectileExplosionMinDamage = 24;
 const skillEWeaponProjectileForwardOffset = 0.52;
+const skillEWeaponProjectileMaxBackwardOffset = 1.28;
 const skillEWeaponProjectileUpwardOffset = 0.16;
+const skillEBareWeaponFadeInStartProgress = 0.03;
+const skillEBareWeaponFadeInEndProgress = 0.62;
+const skillEBareSummonParticleCount = 32;
+const skillEBareSummonParticleSpawnRate = 64;
+const skillEBareSummonParticleLifeMin = 0.2;
+const skillEBareSummonParticleLifeMax = 0.56;
+const skillEBareSummonParticleSpeedMin = 0.55;
+const skillEBareSummonParticleSpeedMax = 1.95;
 const skillEWeaponExplosionFxDurationMs = 5200;
 const skillEWeaponExplosionShakeDurationMs = skillEWeaponExplosionFxDurationMs;
 const skillEWeaponExplosionShakeMagnitude = 0.34;
@@ -57,6 +104,19 @@ const skillEWeaponExplosionMaxActiveCount = 3;
 const skillEWeaponExplosionFlashIntervalMs = 250;
 const skillEWeaponExplosionDamageTickIntervalMs = 250;
 const skillEWeaponExplosionDamageTick = 12;
+const skillQWeaponExplosionTriggerStartProgress = 0.14;
+const skillQWeaponExplosionTriggerEndProgress = 0.9;
+const skillQWeaponSwingMinSpeed = 3.2;
+const skillQWeaponSwingPersistMs = 95;
+const skillQWeaponContactRadius = 0.5;
+const skillQWeaponContactForwardOffset = 0.16;
+const skillQWeaponContactMinTravel = 0.18;
+const skillQWeaponExplosionSweepMaxHits = 12;
+const skillQWeaponColliderDamage = 1;
+const skillQCastMoveSpeedMultiplier = 0.1;
+const skillQBarePurcleHitManaGain = 1;
+const skillQBarePurcleHitEnergyGain = 1;
+const weaponMeshColliderBoundsPadding = 0.04;
 const skillQBareGateSummonProgress = 0.52;
 const skillQBareGateSpawnForwardOffset = 2.2;
 const skillQBareGateGroundYOffset = -0.04;
@@ -82,6 +142,19 @@ const skillQBarePurcleSpawnBoundsPadding = 0.28;
 const skillQBarePurcleSpawnCheckRadius = 0.48;
 const skillQBarePurcleSpawnStep = 0.45;
 const skillQBarePurcleGravity = -22;
+const skillRWeaponPurcleSummonProgress = 0.36;
+const skillRWeaponPurcleSummonCount = 3;
+const skillRWeaponPurcleSummonRadius = 5;
+const skillRWeaponPurcleSummonMinRadius = 1.15;
+const skillRWeaponPurcleSummonAttemptsPerUnit = 12;
+const skillRWeaponPurcleMinSeparation = 1.35;
+const purcleSmokeFxDurationMs = 900;
+const purcleSmokeFxParticleCount = 11;
+const purcleSmokeFxMaxActiveBursts = 24;
+const purcleSmokeFxSpeedMin = 0.68;
+const purcleSmokeFxSpeedMax = 2.05;
+const purcleSmokeFxRiseBoostMin = 0.42;
+const purcleSmokeFxRiseBoostMax = 1.24;
 const skillQBarePurcleMeleeHitHeightMin = 1.05;
 const skillQBarePurcleMeleeHitHeightMax = 2.4;
 const skillQBarePurcleMeleeHitRadiusMin = 0.58;
@@ -125,6 +198,7 @@ const skillRBareHomingMaxSpeed = 17.2;
 const skillRBareHomingLifetime = 2.3;
 const skillRBareHomingTurnRate = 5.8;
 const skillRBareHomingTargetRadius = 18;
+const skillRBareHomingEnergyGainOnHit = 2;
 const skillRBareCameraShakeMagnitude = 0.21;
 const skillRBareCameraShakeDurationMs = 420;
 const legTrackPattern = /shoe|leg|foot|thigh|calf|toe|hips|pelvis|ankle/i;
@@ -145,12 +219,64 @@ type BarePrimaryAttackState = {
   endsAt: number;
 };
 
+type WeaponPrimaryAttackState = {
+  active: boolean;
+  stageIndex: number;
+  stageHitApplied: boolean;
+  stage3BackstepApplied: boolean;
+};
+
+type WeaponPrimaryBackstepState = {
+  active: boolean;
+  direction: THREE.Vector3;
+  plannedDistance: number;
+  appliedDistance: number;
+  elapsedMs: number;
+  durationMs: number;
+};
+
+type SkillQWeaponExplosionState = {
+  active: boolean;
+  hasWeaponSample: boolean;
+  previousSampleAt: number;
+  swingActiveUntil: number;
+  hitTargetIds: Set<string>;
+};
+
 type SkillEWeaponThrowState = {
   active: boolean;
   projectileLaunched: boolean;
   forcedBare: boolean;
   hasSourceSample: boolean;
   previousSourceWorldPos: THREE.Vector3;
+};
+
+type WeaponMeshColliderHitResolvedArgs = {
+  targetId: string;
+  point: THREE.Vector3;
+  direction: THREE.Vector3;
+};
+
+type WeaponMeshColliderResult = {
+  hitCount: number;
+  hasCollider: boolean;
+};
+
+type HarperWeaponMaterialEntry = {
+  material: THREE.Material;
+  baseOpacity: number;
+  baseTransparent: boolean;
+};
+
+type SkillEBareSummonParticle = {
+  mesh: THREE.Mesh<THREE.ConeGeometry, THREE.MeshBasicMaterial>;
+  material: THREE.MeshBasicMaterial;
+  velocity: THREE.Vector3;
+  spin: THREE.Vector3;
+  age: number;
+  life: number;
+  startScale: number;
+  active: boolean;
 };
 
 type SkillEWeaponExplosionParticle = {
@@ -264,6 +390,7 @@ type SkillQBarePurclePendingSummon = {
 };
 
 type SkillQBarePurcleMotionState = "idle" | "walk" | "attack";
+type PurcleSmokeReason = "spawn" | "expired" | "dead";
 
 type SkillQBarePurcleEntry = {
   id: string;
@@ -288,6 +415,23 @@ type SkillQBarePurcleEntry = {
   nextAttackAt: number;
   attackDurationMs: number;
   speed: number;
+};
+
+type PurcleSmokeFxParticle = {
+  mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  material: THREE.MeshBasicMaterial;
+  velocity: THREE.Vector3;
+  spin: THREE.Vector3;
+  startScale: number;
+  baseOpacity: number;
+  phase: number;
+};
+
+type PurcleSmokeFxEntry = {
+  root: THREE.Group;
+  particles: PurcleSmokeFxParticle[];
+  startedAt: number;
+  endsAt: number;
 };
 
 let harperGateTemplatePromise: Promise<THREE.Object3D | null> | null = null;
@@ -354,6 +498,74 @@ const setHarperWeaponNodesVisible = (
   });
 };
 
+const isWithinHiddenWeaponNode = (node: THREE.Object3D) => {
+  let current: THREE.Object3D | null = node;
+  while (current) {
+    if (hiddenNodePattern.test(current.name || "")) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+};
+
+const collectHarperWeaponMaterialEntries = (
+  avatarModel: THREE.Object3D | null,
+  out: HarperWeaponMaterialEntry[]
+) => {
+  out.length = 0;
+  if (!avatarModel) return;
+  const seen = new Set<string>();
+  avatarModel.traverse((node) => {
+    if (!isWithinHiddenWeaponNode(node)) return;
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+
+    const attachOwnedMaterial = (index: number | null) => {
+      const arrayMaterials = Array.isArray(mesh.material) ? mesh.material : null;
+      const currentMaterial =
+        index == null ? (arrayMaterials ? null : mesh.material) : arrayMaterials?.[index];
+      if (!currentMaterial) return;
+      const owned =
+        currentMaterial.userData && currentMaterial.userData.harperOwnedWeaponMaterial
+          ? currentMaterial
+          : currentMaterial.clone();
+      if (owned !== currentMaterial) {
+        owned.userData = {
+          ...(owned.userData ?? {}),
+          harperOwnedWeaponMaterial: true,
+        };
+        if (index == null) {
+          mesh.material = owned;
+        } else {
+          const nextMaterials = mesh.material.slice();
+          nextMaterials[index] = owned;
+          mesh.material = nextMaterials;
+        }
+      }
+      if (seen.has(owned.uuid)) return;
+      seen.add(owned.uuid);
+      out.push({
+        material: owned,
+        baseOpacity: THREE.MathUtils.clamp(
+          Number.isFinite(owned.opacity) ? owned.opacity : 1,
+          0,
+          1
+        ),
+        baseTransparent: Boolean(owned.transparent),
+      });
+    };
+
+    if (Array.isArray(mesh.material)) {
+      for (let i = 0; i < mesh.material.length; i += 1) {
+        attachOwnedMaterial(i);
+      }
+      return;
+    }
+    attachOwnedMaterial(null);
+  });
+};
+
 const findPrimaryAttackHand = (avatarModel: THREE.Object3D | null) => {
   if (!avatarModel) return null;
   const namedHand = avatarModel.getObjectByName("Hand1");
@@ -401,6 +613,32 @@ const findWeaponThrowSourceNode = (avatarModel: THREE.Object3D | null) => {
     }
   });
   return best ?? fallback;
+};
+
+const collectWeaponColliderNodes = (
+  avatarModel: THREE.Object3D | null,
+  out: THREE.Object3D[]
+) => {
+  out.length = 0;
+  if (!avatarModel) return;
+
+  avatarModel.traverse((node) => {
+    if (!hiddenNodePattern.test(node.name || "")) return;
+    let current = node.parent;
+    while (current) {
+      if (hiddenNodePattern.test(current.name || "")) {
+        return;
+      }
+      current = current.parent;
+    }
+    out.push(node);
+  });
+
+  if (out.length > 0) return;
+  const fallback = findWeaponThrowSourceNode(avatarModel);
+  if (fallback) {
+    out.push(fallback);
+  }
 };
 
 const cloneObjectWithClonedMaterials = (source: THREE.Object3D) => {
@@ -485,6 +723,16 @@ const stopActionBinding = (binding: ActionBinding | null) => {
   stopAction(binding.action);
 };
 
+const finishOneShotBindingWithoutRewind = (binding: ActionBinding | null) => {
+  if (!binding) return;
+  const action = binding.action;
+  action.enabled = true;
+  action.paused = true;
+  action.setEffectiveTimeScale(1);
+  action.time = Math.max(0, binding.clip.duration - 1 / 120);
+  action.setEffectiveWeight(0);
+};
+
 const playActionBinding = (binding: ActionBinding | null) => {
   if (!binding) return false;
   binding.action.reset();
@@ -529,6 +777,15 @@ const setActionWeight = (
   if (!action.isRunning()) {
     action.play();
   }
+};
+
+const freezeLoopBinding = (binding: ActionBinding | null, time = 0) => {
+  if (!binding) return;
+  const action = binding.action;
+  action.enabled = true;
+  action.paused = true;
+  action.time = Math.max(0, time);
+  action.setEffectiveWeight(0);
 };
 
 const resolveClipByPatterns = (
@@ -766,9 +1023,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
   groundY,
   bounds,
   isBlocked,
+  noCooldown,
   fireProjectile,
   getAttackTargets,
   performMeleeAttack,
+  applyEnergy,
+  applyMana,
+  spendMana,
+  clearSkillCooldown,
+  getCurrentStats,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
   const runtimeGroundY = Number.isFinite(groundY) ? groundY : avatar.position.y;
@@ -798,6 +1061,27 @@ export const createRuntime: CharacterRuntimeFactory = ({
     chargeEndsAt: 0,
     fireAt: 0,
     endsAt: 0,
+  };
+  const weaponPrimaryAttackState: WeaponPrimaryAttackState = {
+    active: false,
+    stageIndex: 0,
+    stageHitApplied: false,
+    stage3BackstepApplied: false,
+  };
+  const weaponPrimaryBackstepState: WeaponPrimaryBackstepState = {
+    active: false,
+    direction: new THREE.Vector3(0, 0, 1),
+    plannedDistance: 0,
+    appliedDistance: 0,
+    elapsedMs: 0,
+    durationMs: normalAttackWeaponThirdBackstepDurationMs,
+  };
+  const skillQWeaponExplosionState: SkillQWeaponExplosionState = {
+    active: false,
+    hasWeaponSample: false,
+    previousSampleAt: 0,
+    swingActiveUntil: 0,
+    hitTargetIds: new Set<string>(),
   };
   const skillEWeaponThrowState: SkillEWeaponThrowState = {
     active: false,
@@ -841,6 +1125,32 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const primaryAttackHandUp = new THREE.Vector3();
   const primaryAttackHandQuat = new THREE.Quaternion();
   const primaryAttackProjectileDirection = new THREE.Vector3(0, 0, 1);
+  const weaponPrimaryBackstepForward = new THREE.Vector3(0, 0, 1);
+  const weaponPrimaryBackstepDirection = new THREE.Vector3(0, 0, 1);
+  const weaponPrimaryHitPrevWorldPos = new THREE.Vector3();
+  const weaponPrimaryHitTravel = new THREE.Vector3();
+  const weaponPrimaryHitWorldPos = new THREE.Vector3();
+  const weaponPrimaryHitContactCenter = new THREE.Vector3();
+  const weaponPrimaryHitDirection = new THREE.Vector3(0, 0, 1);
+  const weaponPrimaryHitSourceQuat = new THREE.Quaternion();
+  let weaponPrimaryHitSampleValid = false;
+  const skillQWeaponHitWorldPos = new THREE.Vector3();
+  const skillQWeaponHitPrevWorldPos = new THREE.Vector3();
+  const skillQWeaponHitTravel = new THREE.Vector3();
+  const skillQWeaponHitDirection = new THREE.Vector3(0, 0, 1);
+  const skillQWeaponHitSourceQuat = new THREE.Quaternion();
+  const skillQWeaponHitContactCenter = new THREE.Vector3();
+  const skillQWeaponFallbackBounds = new THREE.Box3();
+  const skillQWeaponFallbackClosestPoint = new THREE.Vector3();
+  const skillQWeaponFallbackDirection = new THREE.Vector3(0, 0, 1);
+  const weaponColliderNodes: THREE.Object3D[] = [];
+  const weaponColliderWorldBounds = new THREE.Box3();
+  const weaponColliderNodeBounds = new THREE.Box3();
+  const weaponColliderTargetBounds = new THREE.Box3();
+  const weaponColliderIntersectionBounds = new THREE.Box3();
+  const weaponColliderCenter = new THREE.Vector3();
+  const weaponColliderHitPoint = new THREE.Vector3();
+  const weaponColliderHitDirection = new THREE.Vector3(0, 0, 1);
   const runtimeAimDirection = new THREE.Vector3(0, 0, 1);
   const skillEWeaponThrowOriginWorld = new THREE.Vector3();
   const skillEWeaponThrowDirection = new THREE.Vector3(0, 0, 1);
@@ -851,6 +1161,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillEWeaponThrowAvatarForward = new THREE.Vector3(0, 0, 1);
   const skillEWeaponThrowAxisWorldCandidate = new THREE.Vector3();
   const skillEWeaponThrowSelectedLocalAxis = new THREE.Vector3(0, 0, 1);
+  const skillEWeaponSpawnToTarget = new THREE.Vector3();
+  const skillEWeaponSpawnTargetBounds = new THREE.Box3();
+  const skillEWeaponSpawnClosestPoint = new THREE.Vector3();
+  const skillEWeaponLaunchSourceWorld = new THREE.Vector3();
   const skillEWeaponThrowAxisProbe = [
     new THREE.Vector3(0, 0, 1),
     new THREE.Vector3(0, 0, -1),
@@ -876,14 +1190,28 @@ export const createRuntime: CharacterRuntimeFactory = ({
   );
   const skillEWeaponExplosionShockDiskGeometry = new THREE.RingGeometry(0.2, 1.22, 44);
   const skillEWeaponExplosionParticleGeometry = new THREE.SphereGeometry(0.09, 8, 8);
+  const skillEBareSummonParticleGeometry = new THREE.ConeGeometry(0.09, 0.28, 3, 1, true);
+  const skillEBareSummonFxRoot = new THREE.Group();
+  const skillEBareSummonParticles: SkillEBareSummonParticle[] = [];
   const skillEWeaponExplosionSpawnWorldPos = new THREE.Vector3();
   const skillEWeaponExplosionDamageCenter = new THREE.Vector3();
   const skillEWeaponExplosionDamageDirection = new THREE.Vector3(0, 0, 1);
   const skillEWeaponExplosionFallbackTargetPos = new THREE.Vector3();
+  const skillEBareSummonSourceWorldPos = new THREE.Vector3();
+  const skillEBareSummonSourceLocalPos = new THREE.Vector3();
+  const skillEBareSummonSpawnDirection = new THREE.Vector3();
+  const skillEBareSummonVelocityScratch = new THREE.Vector3();
+  const harperWeaponMaterialEntries: HarperWeaponMaterialEntry[] = [];
+  let harperWeaponVisualOpacity = 1;
+  let skillEBareSummonFxActive = false;
+  let skillEBareSummonParticleBudget = 0;
   let primaryAttackChargePulse = 0;
   let primaryAttackHeld = false;
   let wasPrimaryAttackAnimationActive = false;
   let weaponEquipped = false;
+  let runtimeSkillECooldownUntil = 0;
+  let runtimeSkillRCooldownUntil = 0;
+  let skillEBarePostTransitionEndsAt = 0;
   let lastAnimationUpdateAt = 0;
   let eyeAnchor: THREE.Object3D | null = null;
   const eyeAnchorRestLocalPos = headEyeOffset.clone();
@@ -978,6 +1306,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let skillQBarePurcleTemplateClips: THREE.AnimationClip[] = [];
   let skillQBarePurcleTemplateLoading = false;
   let skillQBareGateSummonedInCast = false;
+  let skillRWeaponPurcleSummonedInCast = false;
   let skillQBareGateIdCounter = 0;
   let skillQBarePurcleIdCounter = 0;
   const skillQBareGateActiveEntries: SkillQBareGateEntry[] = [];
@@ -985,6 +1314,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillQBareGatePendingSummons: SkillQBareGatePendingSummon[] = [];
   const skillQBarePurclePendingSummons: SkillQBarePurclePendingSummon[] = [];
   const skillQBarePurcleEntries: SkillQBarePurcleEntry[] = [];
+  const purcleSmokeParticleGeometry = new THREE.SphereGeometry(0.12, 10, 10);
+  const purcleSmokeFxEntries: PurcleSmokeFxEntry[] = [];
   const runtimeProjectileBlockersScratch: THREE.Object3D[] = [];
   const skillQBareGateSpawnWorldPos = new THREE.Vector3();
   const skillQBareGateSpawnLocalPos = new THREE.Vector3();
@@ -1008,6 +1339,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillQBarePurcleFallbackForward = new THREE.Vector3();
   const skillQBarePurcleSpawnPerp = new THREE.Vector3();
   const skillQBarePurcleSpawnSample = new THREE.Vector3();
+  const skillRWeaponPurcleCenterWorldPos = new THREE.Vector3();
+  const skillRWeaponPurcleCandidateWorldPos = new THREE.Vector3();
+  const skillRWeaponPurcleDirection = new THREE.Vector3();
+  const skillRWeaponPurcleForward = new THREE.Vector3();
+  const purcleSmokeLocalPos = new THREE.Vector3();
+  const purcleSmokeStep = new THREE.Vector3();
+  const purcleSmokeVelocityDirection = new THREE.Vector3();
 
   primaryAttackChargeCore.renderOrder = 6;
   primaryAttackChargeShell.renderOrder = 5;
@@ -1062,6 +1400,36 @@ export const createRuntime: CharacterRuntimeFactory = ({
   }
   avatar.add(skillRBareFxRoot);
 
+  skillEBareSummonFxRoot.name = "__harperSkillEBareSummonFx";
+  skillEBareSummonFxRoot.visible = false;
+  skillEBareSummonFxRoot.renderOrder = 11;
+  for (let i = 0; i < skillEBareSummonParticleCount; i += 1) {
+    const particleMaterial = new THREE.MeshBasicMaterial({
+      color: 0x111111,
+      transparent: true,
+      opacity: 0,
+      depthWrite: true,
+      side: THREE.DoubleSide,
+    });
+    const particleMesh = new THREE.Mesh(skillEBareSummonParticleGeometry, particleMaterial);
+    particleMesh.visible = false;
+    particleMesh.castShadow = false;
+    particleMesh.receiveShadow = false;
+    particleMesh.renderOrder = 12;
+    skillEBareSummonFxRoot.add(particleMesh);
+    skillEBareSummonParticles.push({
+      mesh: particleMesh,
+      material: particleMaterial,
+      velocity: new THREE.Vector3(),
+      spin: new THREE.Vector3(),
+      age: 0,
+      life: 0.0001,
+      startScale: 0.12,
+      active: false,
+    });
+  }
+  avatar.add(skillEBareSummonFxRoot);
+
   const isSkillAnimationActive = () =>
     Boolean(activeSkillBinding && activeSkillBinding.action.isRunning());
 
@@ -1071,6 +1439,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
         skillQBareBinding &&
         activeSkillBinding === skillQBareBinding &&
         skillQBareBinding.action.isRunning()
+    );
+
+  const isSkillQCastActive = () =>
+    Boolean(
+      (skillQBareBinding &&
+        activeSkillBinding === skillQBareBinding &&
+        skillQBareBinding.action.isRunning()) ||
+        (skillQWeaponBinding &&
+          activeSkillBinding === skillQWeaponBinding &&
+          skillQWeaponBinding.action.isRunning())
     );
 
   const isBareSkillRCastActive = () =>
@@ -1090,6 +1468,209 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const setSkillRBareFxVisible = (visible: boolean) => {
     skillRBareFxRoot.visible = visible;
+  };
+
+  const setHarperWeaponVisualOpacity = (opacity: number) => {
+    harperWeaponVisualOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
+    const applyOpacity = (material: THREE.Material, baseOpacity = 1, baseTransparent = false) => {
+      const nextTransparent =
+        baseTransparent || baseOpacity < 0.999 || harperWeaponVisualOpacity < 0.999;
+      if (material.transparent !== nextTransparent) {
+        material.transparent = nextTransparent;
+        material.needsUpdate = true;
+      }
+      material.opacity = THREE.MathUtils.clamp(
+        baseOpacity * harperWeaponVisualOpacity,
+        0,
+        1
+      );
+    };
+
+    if (!harperWeaponMaterialEntries.length && lastAvatarModel) {
+      lastAvatarModel.traverse((node) => {
+        if (!isWithinHiddenWeaponNode(node)) return;
+        const mesh = node as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (Array.isArray(mesh.material)) {
+          for (let i = 0; i < mesh.material.length; i += 1) {
+            applyOpacity(mesh.material[i], 1, Boolean(mesh.material[i].transparent));
+          }
+        } else if (mesh.material) {
+          applyOpacity(mesh.material, 1, Boolean(mesh.material.transparent));
+        }
+      });
+      return;
+    }
+
+    for (let i = 0; i < harperWeaponMaterialEntries.length; i += 1) {
+      const entry = harperWeaponMaterialEntries[i];
+      applyOpacity(entry.material, entry.baseOpacity, entry.baseTransparent);
+    }
+  };
+
+  const resetSkillEBareSummonFxState = (restoreWeaponOpacity = true) => {
+    skillEBareSummonFxActive = false;
+    skillEBareSummonParticleBudget = 0;
+    skillEBareSummonFxRoot.visible = false;
+    for (let i = 0; i < skillEBareSummonParticles.length; i += 1) {
+      const particle = skillEBareSummonParticles[i];
+      particle.active = false;
+      particle.age = 0;
+      particle.mesh.visible = false;
+      particle.mesh.position.set(0, 0, 0);
+      particle.mesh.scale.setScalar(0.0001);
+      particle.material.opacity = 0;
+      particle.velocity.set(0, 0, 0);
+      particle.spin.set(0, 0, 0);
+    }
+    if (restoreWeaponOpacity) {
+      setHarperWeaponVisualOpacity(1);
+    }
+  };
+
+  const trySpawnSkillEBareSummonParticle = () => {
+    for (let i = 0; i < skillEBareSummonParticles.length; i += 1) {
+      const particle = skillEBareSummonParticles[i];
+      if (particle.active) continue;
+      skillEBareSummonSpawnDirection.set(
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1
+      );
+      if (skillEBareSummonSpawnDirection.lengthSq() < 0.000001) {
+        skillEBareSummonSpawnDirection.set(0, 1, 0);
+      } else {
+        skillEBareSummonSpawnDirection.normalize();
+      }
+      const spawnRadius = THREE.MathUtils.lerp(0.08, 0.34, Math.random());
+      const speed = THREE.MathUtils.lerp(
+        skillEBareSummonParticleSpeedMin,
+        skillEBareSummonParticleSpeedMax,
+        Math.random()
+      );
+      particle.active = true;
+      particle.age = 0;
+      particle.life = THREE.MathUtils.lerp(
+        skillEBareSummonParticleLifeMin,
+        skillEBareSummonParticleLifeMax,
+        Math.random()
+      );
+      particle.startScale = THREE.MathUtils.lerp(0.14, 0.32, Math.random());
+      particle.mesh.visible = true;
+      particle.mesh.position.copy(skillEBareSummonSpawnDirection).multiplyScalar(spawnRadius);
+      particle.mesh.rotation.set(
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2
+      );
+      particle.mesh.scale.setScalar(particle.startScale);
+      particle.velocity.copy(skillEBareSummonSpawnDirection).multiplyScalar(speed);
+      particle.velocity.y += THREE.MathUtils.lerp(0.45, 1.55, Math.random());
+      particle.spin.set(
+        THREE.MathUtils.lerp(-8.5, 8.5, Math.random()),
+        THREE.MathUtils.lerp(-8.5, 8.5, Math.random()),
+        THREE.MathUtils.lerp(-8.5, 8.5, Math.random())
+      );
+      particle.material.opacity = THREE.MathUtils.lerp(0.76, 1, Math.random());
+      return true;
+    }
+    return false;
+  };
+
+  const updateSkillEBareSummonState = (now: number, deltaSeconds: number) => {
+    const isBareSkillEActive = Boolean(
+      skillEBareBinding &&
+        activeSkillBinding === skillEBareBinding
+    );
+
+    if (!isBareSkillEActive) {
+      if (skillEBareSummonFxActive) {
+        resetSkillEBareSummonFxState(true);
+      }
+      return;
+    }
+
+    if (!skillEBareSummonFxActive) {
+      skillEBareSummonFxActive = true;
+      skillEBareSummonParticleBudget = 0;
+      skillEBareSummonFxRoot.visible = true;
+      setHarperWeaponVisualOpacity(0);
+    }
+
+    const duration = Math.max(0.001, skillEBareBinding?.clip.duration ?? 0.001);
+    const progress = THREE.MathUtils.clamp(
+      (skillEBareBinding?.action.time ?? 0) / duration,
+      0,
+      1
+    );
+    const weaponFadeAlpha = THREE.MathUtils.smoothstep(
+      progress,
+      skillEBareWeaponFadeInStartProgress,
+      skillEBareWeaponFadeInEndProgress
+    );
+    setHarperWeaponVisualOpacity(weaponFadeAlpha);
+
+    const sourceNode =
+      (weaponThrowSourceNode && weaponThrowSourceNode.parent
+        ? weaponThrowSourceNode
+        : findWeaponThrowSourceNode(lastAvatarModel)) ?? null;
+    if (sourceNode && sourceNode.parent) {
+      weaponThrowSourceNode = sourceNode;
+      sourceNode.updateWorldMatrix(true, true);
+      sourceNode.getWorldPosition(skillEBareSummonSourceWorldPos);
+    } else {
+      avatar.getWorldPosition(skillEBareSummonSourceWorldPos);
+      skillEBareSummonSourceWorldPos.y += 1.05;
+      if (runtimeAimDirection.lengthSq() > 0.000001) {
+        skillEBareSummonSourceWorldPos.addScaledVector(runtimeAimDirection, 0.36);
+      } else {
+        skillEBareSummonSourceWorldPos.z += 0.36;
+      }
+    }
+    skillEBareSummonSourceLocalPos.copy(skillEBareSummonSourceWorldPos);
+    avatar.worldToLocal(skillEBareSummonSourceLocalPos);
+    skillEBareSummonFxRoot.position.copy(skillEBareSummonSourceLocalPos);
+
+    const safeDelta = Math.max(0, deltaSeconds);
+    const spawnScale = THREE.MathUtils.lerp(1.2, 0.5, weaponFadeAlpha);
+    skillEBareSummonParticleBudget +=
+      safeDelta * skillEBareSummonParticleSpawnRate * spawnScale;
+    while (skillEBareSummonParticleBudget >= 1) {
+      if (!trySpawnSkillEBareSummonParticle()) {
+        skillEBareSummonParticleBudget = 0;
+        break;
+      }
+      skillEBareSummonParticleBudget -= 1;
+    }
+
+    const drag = Math.exp(-2.4 * safeDelta);
+    for (let i = 0; i < skillEBareSummonParticles.length; i += 1) {
+      const particle = skillEBareSummonParticles[i];
+      if (!particle.active) continue;
+      particle.age += safeDelta;
+      if (particle.age >= particle.life) {
+        particle.active = false;
+        particle.mesh.visible = false;
+        particle.material.opacity = 0;
+        continue;
+      }
+      const lifeRatio = 1 - particle.age / particle.life;
+      skillEBareSummonVelocityScratch.copy(particle.velocity).multiplyScalar(safeDelta);
+      particle.mesh.position.add(skillEBareSummonVelocityScratch);
+      particle.velocity.multiplyScalar(drag);
+      particle.velocity.y += safeDelta * 0.6;
+      particle.mesh.rotation.x += particle.spin.x * safeDelta;
+      particle.mesh.rotation.y += particle.spin.y * safeDelta;
+      particle.mesh.rotation.z += particle.spin.z * safeDelta;
+      particle.mesh.scale.setScalar(
+        Math.max(0.03, particle.startScale * (0.25 + lifeRatio * 0.95))
+      );
+      particle.material.opacity = THREE.MathUtils.clamp(
+        lifeRatio * lifeRatio * (0.85 - weaponFadeAlpha * 0.24),
+        0,
+        0.92
+      );
+    }
   };
 
   const clearSkillRBareShockwaves = () => {
@@ -1301,6 +1882,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
         radius: 0.19,
         targetHitRadius: 0.26,
         damage: 11,
+        grantEnergyOnTargetHit: true,
+        energyGainOnHit: skillRBareHomingEnergyGainOnHit,
         gravity: 0,
         splitOnImpact: true,
         explosionRadius: 0,
@@ -1636,6 +2219,521 @@ export const createRuntime: CharacterRuntimeFactory = ({
     setPrimaryAttackChargeVisible(false);
   };
 
+  const startBarePrimaryAttack = (now: number) => {
+    if (!normalAttackBareBinding) return false;
+    const started = playActionBinding(normalAttackBareBinding);
+    if (!started) return false;
+
+    const durationMs = Math.max(1, normalAttackBareBinding.clip.duration * 1000);
+    const chargeEndsAt = now + durationMs * normalAttackBareChargeEndProgress;
+    const fireAt = now + durationMs * normalAttackBareProjectileFireProgress;
+    const fullEndsAt = now + durationMs;
+    const fullRecoveryDuration = Math.max(1, fullEndsAt - fireAt);
+    const shortenedRecoveryDuration =
+      fullRecoveryDuration * normalAttackBareRecoveryDurationScale;
+
+    barePrimaryAttackState.active = true;
+    barePrimaryAttackState.projectileFired = false;
+    barePrimaryAttackState.startedAt = now;
+    barePrimaryAttackState.chargeEndsAt = chargeEndsAt;
+    barePrimaryAttackState.fireAt = fireAt;
+    barePrimaryAttackState.endsAt = fireAt + shortenedRecoveryDuration;
+    primaryAttackChargePulse = 0;
+    setPrimaryAttackChargeVisible(true);
+    return true;
+  };
+
+  const resetWeaponPrimaryAttackState = (stopAnimation = true) => {
+    weaponPrimaryAttackState.active = false;
+    weaponPrimaryAttackState.stageIndex = 0;
+    weaponPrimaryAttackState.stageHitApplied = false;
+    weaponPrimaryAttackState.stage3BackstepApplied = false;
+    weaponPrimaryHitSampleValid = false;
+    if (stopAnimation) {
+      stopActionBinding(normalAttackWeaponBinding);
+    } else if (normalAttackWeaponBinding) {
+      const action = normalAttackWeaponBinding.action;
+      action.enabled = true;
+      action.paused = true;
+      action.setEffectiveTimeScale(1);
+    }
+  };
+
+  const resetWeaponPrimaryBackstepState = () => {
+    weaponPrimaryBackstepState.active = false;
+    weaponPrimaryBackstepState.plannedDistance = 0;
+    weaponPrimaryBackstepState.appliedDistance = 0;
+    weaponPrimaryBackstepState.elapsedMs = 0;
+    weaponPrimaryBackstepState.durationMs = normalAttackWeaponThirdBackstepDurationMs;
+  };
+
+  const refreshWeaponColliderNodes = (avatarModel: THREE.Object3D | null) => {
+    collectWeaponColliderNodes(avatarModel, weaponColliderNodes);
+  };
+
+  const resolveWeaponMeshColliderBounds = () => {
+    weaponColliderWorldBounds.makeEmpty();
+    if (!lastAvatarModel) return false;
+
+    if (!weaponColliderNodes.length || weaponColliderNodes.some((node) => !node.parent)) {
+      refreshWeaponColliderNodes(lastAvatarModel);
+    }
+
+    let hasBounds = false;
+    for (let i = 0; i < weaponColliderNodes.length; i += 1) {
+      const node = weaponColliderNodes[i];
+      if (!node?.parent) continue;
+      node.updateWorldMatrix(true, true);
+      weaponColliderNodeBounds.setFromObject(node);
+      if (weaponColliderNodeBounds.isEmpty()) continue;
+      if (!hasBounds) {
+        weaponColliderWorldBounds.copy(weaponColliderNodeBounds);
+        hasBounds = true;
+      } else {
+        weaponColliderWorldBounds.union(weaponColliderNodeBounds);
+      }
+    }
+
+    if (!hasBounds) return false;
+    weaponColliderWorldBounds.expandByScalar(weaponMeshColliderBoundsPadding);
+    return true;
+  };
+
+  const applyWeaponMeshColliderHits = ({
+    now,
+    damage,
+    maxHits,
+    hitTargetIds,
+    onHitTargetResolved,
+  }: {
+    now: number;
+    damage: number;
+    maxHits?: number;
+    hitTargetIds?: Set<string>;
+    onHitTargetResolved?: (args: WeaponMeshColliderHitResolvedArgs) => void;
+  }): WeaponMeshColliderResult => {
+    if (!resolveWeaponMeshColliderBounds()) {
+      return {
+        hitCount: 0,
+        hasCollider: false,
+      };
+    }
+
+    const targets = getAttackTargets?.() ?? [];
+    if (!targets.length) {
+      return {
+        hitCount: 0,
+        hasCollider: true,
+      };
+    }
+
+    const resolvedMaxHits = Number.isFinite(maxHits)
+      ? Math.max(1, Math.floor(maxHits ?? 1))
+      : Number.POSITIVE_INFINITY;
+
+    weaponColliderWorldBounds.getCenter(weaponColliderCenter);
+    let hitCount = 0;
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      if (!target?.object) continue;
+      if (!target.object.parent) continue;
+      if (target.isActive && !target.isActive()) continue;
+      if (hitTargetIds?.has(target.id)) continue;
+
+      target.object.updateWorldMatrix(true, true);
+      weaponColliderTargetBounds.setFromObject(target.object);
+      if (weaponColliderTargetBounds.isEmpty()) continue;
+      if (!weaponColliderWorldBounds.intersectsBox(weaponColliderTargetBounds)) continue;
+
+      weaponColliderIntersectionBounds
+        .copy(weaponColliderWorldBounds)
+        .intersect(weaponColliderTargetBounds);
+      if (weaponColliderIntersectionBounds.isEmpty()) {
+        weaponColliderTargetBounds.getCenter(weaponColliderHitPoint);
+      } else {
+        weaponColliderIntersectionBounds.getCenter(weaponColliderHitPoint);
+      }
+
+      weaponColliderHitDirection
+        .copy(weaponColliderHitPoint)
+        .sub(weaponColliderCenter);
+      weaponColliderHitDirection.y = 0;
+      if (weaponColliderHitDirection.lengthSq() <= 0.000001) {
+        weaponColliderHitDirection.copy(runtimeAimDirection);
+        weaponColliderHitDirection.y = 0;
+      }
+      if (weaponColliderHitDirection.lengthSq() <= 0.000001) {
+        weaponColliderHitDirection.set(0, 0, 1).applyQuaternion(avatar.quaternion);
+        weaponColliderHitDirection.y = 0;
+      }
+      if (weaponColliderHitDirection.lengthSq() <= 0.000001) {
+        weaponColliderHitDirection.set(0, 0, 1);
+      } else {
+        weaponColliderHitDirection.normalize();
+      }
+
+      const hitPoint = weaponColliderHitPoint.clone();
+      const hitDirection = weaponColliderHitDirection.clone();
+      target.onHit({
+        now,
+        source: "slash",
+        damage,
+        point: hitPoint,
+        direction: hitDirection,
+      });
+      hitTargetIds?.add(target.id);
+      onHitTargetResolved?.({
+        targetId: target.id,
+        point: hitPoint,
+        direction: hitDirection,
+      });
+      hitCount += 1;
+      if (hitCount >= resolvedMaxHits) {
+        break;
+      }
+    }
+
+    return {
+      hitCount,
+      hasCollider: true,
+    };
+  };
+
+  const sampleWeaponPrimaryHitPose = () => {
+    const sourceNode =
+      (weaponThrowSourceNode && weaponThrowSourceNode.parent
+        ? weaponThrowSourceNode
+        : findWeaponThrowSourceNode(lastAvatarModel)) ?? null;
+    if (sourceNode && sourceNode.parent) {
+      weaponThrowSourceNode = sourceNode;
+      sourceNode.updateWorldMatrix(true, true);
+      sourceNode.getWorldPosition(weaponPrimaryHitWorldPos);
+      sourceNode.getWorldQuaternion(weaponPrimaryHitSourceQuat);
+      return;
+    }
+    avatar.getWorldPosition(weaponPrimaryHitWorldPos);
+    weaponPrimaryHitWorldPos.y += 1.08;
+    avatar.getWorldQuaternion(weaponPrimaryHitSourceQuat);
+  };
+
+  const startWeaponPrimaryAttackCombo = () => {
+    if (!normalAttackWeaponBinding) return false;
+    const action = normalAttackWeaponBinding.action;
+    const duration = Math.max(0.001, normalAttackWeaponBinding.clip.duration);
+    const startupTrimProgress = THREE.MathUtils.clamp(
+      normalAttackWeaponComboStages[0]?.startProgress ?? 0,
+      0,
+      0.95
+    );
+    const startupTrimTime = duration * startupTrimProgress;
+    action.reset();
+    action.enabled = true;
+    action.paused = false;
+    action.setEffectiveTimeScale(1);
+    action.setEffectiveWeight(1);
+    action.play();
+    if (startupTrimTime > 0) {
+      action.time = Math.min(duration - 1 / 240, startupTrimTime);
+    }
+    weaponPrimaryAttackState.active = true;
+    weaponPrimaryAttackState.stageIndex = 0;
+    weaponPrimaryAttackState.stageHitApplied = false;
+    weaponPrimaryAttackState.stage3BackstepApplied = false;
+    sampleWeaponPrimaryHitPose();
+    weaponPrimaryHitPrevWorldPos.copy(weaponPrimaryHitWorldPos);
+    weaponPrimaryHitSampleValid = true;
+    return true;
+  };
+
+  const applyWeaponPrimaryThirdStageBackstep = () => {
+    avatar.getWorldQuaternion(skillEWeaponThrowAvatarQuat);
+    weaponPrimaryBackstepForward
+      .set(0, 0, 1)
+      .applyQuaternion(skillEWeaponThrowAvatarQuat);
+    weaponPrimaryBackstepForward.y = 0;
+    if (weaponPrimaryBackstepForward.lengthSq() <= 0.000001) {
+      weaponPrimaryBackstepForward.set(0, 0, 1);
+    } else {
+      weaponPrimaryBackstepForward.normalize();
+    }
+    weaponPrimaryBackstepDirection.copy(weaponPrimaryBackstepForward).multiplyScalar(-1);
+
+    const startX = avatar.position.x;
+    const startZ = avatar.position.z;
+    const step = Math.max(0.02, normalAttackWeaponBackstepStepDistance);
+    let appliedDistance = 0;
+    for (
+      let d = step;
+      d <= normalAttackWeaponThirdBackstepDistance + 0.0001;
+      d += step
+    ) {
+      const sampleX = startX + weaponPrimaryBackstepDirection.x * d;
+      const sampleZ = startZ + weaponPrimaryBackstepDirection.z * d;
+      if (isOutsideRuntimeBounds(sampleX, sampleZ)) {
+        break;
+      }
+      if (runtimeIsBlocked && runtimeIsBlocked(sampleX, sampleZ)) {
+        break;
+      }
+      appliedDistance = d;
+    }
+
+    if (appliedDistance <= 0) {
+      resetWeaponPrimaryBackstepState();
+      return;
+    }
+    weaponPrimaryBackstepState.active = true;
+    weaponPrimaryBackstepState.direction.copy(weaponPrimaryBackstepDirection);
+    weaponPrimaryBackstepState.plannedDistance = appliedDistance;
+    weaponPrimaryBackstepState.appliedDistance = 0;
+    weaponPrimaryBackstepState.elapsedMs = 0;
+    weaponPrimaryBackstepState.durationMs = Math.max(
+      80,
+      normalAttackWeaponThirdBackstepDurationMs
+    );
+  };
+
+  const updateWeaponPrimaryBackstepState = (deltaSeconds: number) => {
+    if (!weaponPrimaryBackstepState.active) return;
+    const safeDelta = Math.max(0, deltaSeconds);
+    if (safeDelta <= 0) return;
+
+    const durationMs = Math.max(1, weaponPrimaryBackstepState.durationMs);
+    const previousProgress = THREE.MathUtils.clamp(
+      weaponPrimaryBackstepState.elapsedMs / durationMs,
+      0,
+      1
+    );
+    weaponPrimaryBackstepState.elapsedMs = Math.min(
+      durationMs,
+      weaponPrimaryBackstepState.elapsedMs + safeDelta * 1000
+    );
+    const nextProgress = THREE.MathUtils.clamp(
+      weaponPrimaryBackstepState.elapsedMs / durationMs,
+      0,
+      1
+    );
+    const previousEase = 1 - Math.pow(1 - previousProgress, 2);
+    const nextEase = 1 - Math.pow(1 - nextProgress, 2);
+    let targetDelta =
+      weaponPrimaryBackstepState.plannedDistance * (nextEase - previousEase);
+
+    if (targetDelta <= 0.000001) {
+      if (nextProgress >= 1) {
+        resetWeaponPrimaryBackstepState();
+      }
+      return;
+    }
+
+    const stepUnit = Math.max(0.01, normalAttackWeaponBackstepStepDistance);
+    while (targetDelta > 0.000001) {
+      const remaining =
+        weaponPrimaryBackstepState.plannedDistance -
+        weaponPrimaryBackstepState.appliedDistance;
+      if (remaining <= 0.000001) {
+        resetWeaponPrimaryBackstepState();
+        return;
+      }
+
+      const step = Math.min(targetDelta, stepUnit, remaining);
+      const nextX =
+        avatar.position.x + weaponPrimaryBackstepState.direction.x * step;
+      const nextZ =
+        avatar.position.z + weaponPrimaryBackstepState.direction.z * step;
+
+      if (isOutsideRuntimeBounds(nextX, nextZ)) {
+        resetWeaponPrimaryBackstepState();
+        return;
+      }
+      if (runtimeIsBlocked && runtimeIsBlocked(nextX, nextZ)) {
+        resetWeaponPrimaryBackstepState();
+        return;
+      }
+
+      avatar.position.x = nextX;
+      avatar.position.z = nextZ;
+      weaponPrimaryBackstepState.appliedDistance += step;
+      targetDelta -= step;
+    }
+
+    if (
+      weaponPrimaryBackstepState.elapsedMs >= durationMs ||
+      weaponPrimaryBackstepState.appliedDistance >=
+        weaponPrimaryBackstepState.plannedDistance - 0.0001
+    ) {
+      resetWeaponPrimaryBackstepState();
+    }
+  };
+
+  const performWeaponPrimaryAttackHit = (stageIndex: number, now: number) => {
+    const resolvedStageIndex = Math.min(
+      normalAttackWeaponStageDamage.length - 1,
+      Math.max(0, Math.floor(stageIndex))
+    );
+    const gainResourcesFromStageHit = (hitCount: number) => {
+      if (hitCount <= 0) return;
+      applyMana?.(normalAttackWeaponStageManaGain[resolvedStageIndex] * hitCount);
+      applyEnergy?.(normalAttackWeaponStageEnergyGain[resolvedStageIndex] * hitCount);
+    };
+    const hitTargetIds = new Set<string>();
+    const meshHits = applyWeaponMeshColliderHits({
+      now,
+      damage: normalAttackWeaponStageDamage[resolvedStageIndex],
+      maxHits: normalAttackWeaponAoEMaxHits,
+      hitTargetIds,
+    });
+    let totalHitCount = Math.max(0, meshHits.hitCount);
+
+    if (!performMeleeAttack) {
+      if (totalHitCount > 0) {
+        gainResourcesFromStageHit(totalHitCount);
+        sampleWeaponPrimaryHitPose();
+        weaponPrimaryHitPrevWorldPos.copy(weaponPrimaryHitWorldPos);
+        weaponPrimaryHitSampleValid = true;
+      }
+      return totalHitCount;
+    }
+
+    sampleWeaponPrimaryHitPose();
+    if (!weaponPrimaryHitSampleValid) {
+      weaponPrimaryHitPrevWorldPos.copy(weaponPrimaryHitWorldPos);
+      weaponPrimaryHitSampleValid = true;
+      gainResourcesFromStageHit(totalHitCount);
+      return totalHitCount;
+    }
+
+    weaponPrimaryHitTravel
+      .copy(weaponPrimaryHitWorldPos)
+      .sub(weaponPrimaryHitPrevWorldPos);
+    let travelDistance = weaponPrimaryHitTravel.length();
+    if (travelDistance > 0.0001) {
+      weaponPrimaryHitDirection.copy(weaponPrimaryHitTravel).multiplyScalar(1 / travelDistance);
+    } else {
+      weaponPrimaryHitDirection.copy(runtimeAimDirection);
+      weaponPrimaryHitDirection.y = 0;
+      if (weaponPrimaryHitDirection.lengthSq() < 0.000001) {
+        weaponPrimaryHitDirection
+          .set(0, 0, 1)
+          .applyQuaternion(weaponPrimaryHitSourceQuat);
+        weaponPrimaryHitDirection.y = 0;
+      }
+      if (weaponPrimaryHitDirection.lengthSq() < 0.000001) {
+        weaponPrimaryHitDirection.set(0, 0, 1);
+      } else {
+        weaponPrimaryHitDirection.normalize();
+      }
+      travelDistance = 0.06;
+    }
+
+    weaponPrimaryHitContactCenter
+      .copy(weaponPrimaryHitWorldPos)
+      .addScaledVector(
+        weaponPrimaryHitDirection,
+        normalAttackWeaponContactForwardOffset[resolvedStageIndex]
+      );
+    const remainingMaxHits = Math.max(0, normalAttackWeaponAoEMaxHits - totalHitCount);
+    if (remainingMaxHits > 0) {
+      const meleeHitCount = performMeleeAttack({
+        damage: normalAttackWeaponStageDamage[resolvedStageIndex],
+        maxDistance: Math.max(
+          0.1,
+          travelDistance + normalAttackWeaponContactForwardOffset[resolvedStageIndex]
+        ),
+        maxHits: remainingMaxHits,
+        excludeTargetIds: hitTargetIds,
+        origin: weaponPrimaryHitPrevWorldPos.clone(),
+        direction: weaponPrimaryHitDirection.clone(),
+        contactCenter: weaponPrimaryHitContactCenter.clone(),
+        contactRadius: normalAttackWeaponContactRadius[resolvedStageIndex],
+      });
+      if (meleeHitCount > 0) {
+        totalHitCount += meleeHitCount;
+      }
+    }
+    gainResourcesFromStageHit(totalHitCount);
+    weaponPrimaryHitPrevWorldPos.copy(weaponPrimaryHitWorldPos);
+    return totalHitCount;
+  };
+
+  const updateWeaponPrimaryAttackState = (now: number) => {
+    const binding = normalAttackWeaponBinding;
+    if (!weaponEquipped || !binding || isSkillAnimationActive()) {
+      if (weaponPrimaryAttackState.active) {
+        resetWeaponPrimaryAttackState(true);
+      }
+      return;
+    }
+
+    if (!primaryAttackHeld) {
+      if (weaponPrimaryAttackState.active) {
+        resetWeaponPrimaryAttackState(false);
+      }
+      return;
+    }
+
+    if (!weaponPrimaryAttackState.active) {
+      startWeaponPrimaryAttackCombo();
+      return;
+    }
+
+    const stageCount = normalAttackWeaponComboStages.length;
+    const duration = Math.max(0.001, binding.clip.duration);
+    const action = binding.action;
+
+    while (weaponPrimaryAttackState.stageIndex < stageCount) {
+      const stageIndex = Math.min(
+        stageCount - 1,
+        Math.max(0, Math.floor(weaponPrimaryAttackState.stageIndex))
+      );
+      const stage = normalAttackWeaponComboStages[stageIndex];
+      const stageStartTime = duration * stage.startProgress;
+      const stageHitTime = duration * stage.hitProgress;
+      const stageEndTime = duration * stage.endProgress;
+
+      if (action.time < stageStartTime) {
+        break;
+      }
+
+      if (!weaponPrimaryAttackState.stageHitApplied && action.time >= stageHitTime) {
+        const hitCount = performWeaponPrimaryAttackHit(stageIndex, now);
+        if (hitCount > 0) {
+          weaponPrimaryAttackState.stageHitApplied = true;
+        }
+      }
+
+      if (action.time >= stageEndTime) {
+        if (!weaponPrimaryAttackState.stageHitApplied) {
+          performWeaponPrimaryAttackHit(stageIndex, now);
+        }
+        weaponPrimaryAttackState.stageIndex = stageIndex + 1;
+        weaponPrimaryAttackState.stageHitApplied = false;
+        continue;
+      }
+
+      break;
+    }
+
+    const thirdStageBackstepTime = Math.max(
+      0,
+      duration * THREE.MathUtils.clamp(normalAttackWeaponThirdBackstepProgress, 0, 1) -
+        normalAttackWeaponThirdBackstepAdvanceSeconds
+    );
+    if (
+      weaponPrimaryAttackState.stageIndex >= stageCount &&
+      !weaponPrimaryAttackState.stage3BackstepApplied &&
+      action.time >= thirdStageBackstepTime
+    ) {
+      applyWeaponPrimaryThirdStageBackstep();
+      weaponPrimaryAttackState.stage3BackstepApplied = true;
+    }
+
+    if (action.time < duration && action.isRunning()) {
+      return;
+    }
+
+    startWeaponPrimaryAttackCombo();
+  };
+
   const resolveBarePrimaryAttackChargeProgress = () => {
     if (!normalAttackBareBinding || !barePrimaryAttackState.active) return 0;
     const duration = Math.max(0.001, normalAttackBareBinding.clip.duration);
@@ -1875,6 +2973,144 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
     entry.worldPos.y = currentWorldY;
     syncSkillQBareObjectToWorld(entry.root, entry.worldPos);
+  };
+
+  const disposePurcleSmokeFxEntry = (entry: PurcleSmokeFxEntry) => {
+    entry.root.removeFromParent();
+    for (let i = 0; i < entry.particles.length; i += 1) {
+      entry.particles[i].material.dispose();
+    }
+  };
+
+  const clearPurcleSmokeFxState = () => {
+    for (let i = purcleSmokeFxEntries.length - 1; i >= 0; i -= 1) {
+      disposePurcleSmokeFxEntry(purcleSmokeFxEntries[i]);
+    }
+    purcleSmokeFxEntries.length = 0;
+  };
+
+  const spawnPurcleSmokeFx = (
+    worldPos: THREE.Vector3,
+    now: number,
+    reason: PurcleSmokeReason
+  ) => {
+    const parent = avatar.parent ?? avatar;
+    const root = new THREE.Group();
+    root.name = "__harperPurcleSmoke";
+    purcleSmokeLocalPos.copy(worldPos);
+    parent.worldToLocal(purcleSmokeLocalPos);
+    root.position.copy(purcleSmokeLocalPos);
+    root.renderOrder = 14;
+    parent.add(root);
+
+    const particles: PurcleSmokeFxParticle[] = [];
+    const baseColor =
+      reason === "dead" ? 0x9333ea : reason === "expired" ? 0x6d28d9 : 0xc084fc;
+    const durationScale = reason === "spawn" ? 0.88 : 1;
+    const opacityScale = reason === "spawn" ? 0.85 : 1;
+    for (let i = 0; i < purcleSmokeFxParticleCount; i += 1) {
+      const material = new THREE.MeshBasicMaterial({
+        color: baseColor,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(purcleSmokeParticleGeometry, material);
+      mesh.renderOrder = 14;
+      mesh.position.set(
+        THREE.MathUtils.lerp(-0.22, 0.22, Math.random()),
+        THREE.MathUtils.lerp(0.04, 0.22, Math.random()),
+        THREE.MathUtils.lerp(-0.22, 0.22, Math.random())
+      );
+      purcleSmokeVelocityDirection.set(
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1
+      );
+      if (purcleSmokeVelocityDirection.lengthSq() < 0.000001) {
+        purcleSmokeVelocityDirection.set(0, 1, 0);
+      } else {
+        purcleSmokeVelocityDirection.normalize();
+      }
+      const speed = THREE.MathUtils.lerp(
+        purcleSmokeFxSpeedMin,
+        purcleSmokeFxSpeedMax,
+        Math.random()
+      );
+      const velocity = purcleSmokeVelocityDirection.multiplyScalar(speed);
+      velocity.y += THREE.MathUtils.lerp(
+        purcleSmokeFxRiseBoostMin,
+        purcleSmokeFxRiseBoostMax,
+        Math.random()
+      );
+      const particle: PurcleSmokeFxParticle = {
+        mesh,
+        material,
+        velocity: velocity.clone(),
+        spin: new THREE.Vector3(
+          THREE.MathUtils.lerp(-4.2, 4.2, Math.random()),
+          THREE.MathUtils.lerp(-4.2, 4.2, Math.random()),
+          THREE.MathUtils.lerp(-4.2, 4.2, Math.random())
+        ),
+        startScale: THREE.MathUtils.lerp(0.42, 1.02, Math.random()),
+        baseOpacity: THREE.MathUtils.lerp(0.4, 0.82, Math.random()) * opacityScale,
+        phase: Math.random() * Math.PI * 2,
+      };
+      mesh.scale.setScalar(particle.startScale * 0.45);
+      root.add(mesh);
+      particles.push(particle);
+    }
+
+    purcleSmokeFxEntries.push({
+      root,
+      particles,
+      startedAt: now,
+      endsAt: now + purcleSmokeFxDurationMs * durationScale,
+    });
+    while (purcleSmokeFxEntries.length > purcleSmokeFxMaxActiveBursts) {
+      const removed = purcleSmokeFxEntries.shift();
+      if (removed) {
+        disposePurcleSmokeFxEntry(removed);
+      }
+    }
+  };
+
+  const updatePurcleSmokeFx = (now: number, deltaSeconds: number) => {
+    if (!purcleSmokeFxEntries.length) return;
+    const safeDelta = Math.max(0, deltaSeconds);
+    const drag = Math.exp(-2.35 * safeDelta);
+    for (let i = purcleSmokeFxEntries.length - 1; i >= 0; i -= 1) {
+      const entry = purcleSmokeFxEntries[i];
+      const duration = Math.max(1, entry.endsAt - entry.startedAt);
+      const progress = THREE.MathUtils.clamp((now - entry.startedAt) / duration, 0, 1);
+      if (progress >= 1 || !entry.root.parent) {
+        disposePurcleSmokeFxEntry(entry);
+        purcleSmokeFxEntries.splice(i, 1);
+        continue;
+      }
+      entry.root.position.y += safeDelta * 0.36;
+      const fade = Math.pow(1 - progress, 1.5);
+      for (let j = 0; j < entry.particles.length; j += 1) {
+        const particle = entry.particles[j];
+        purcleSmokeStep.copy(particle.velocity).multiplyScalar(safeDelta);
+        particle.mesh.position.add(purcleSmokeStep);
+        particle.velocity.multiplyScalar(drag);
+        particle.velocity.y += safeDelta * 0.28;
+        particle.mesh.rotation.x += particle.spin.x * safeDelta;
+        particle.mesh.rotation.y += particle.spin.y * safeDelta;
+        particle.mesh.rotation.z += particle.spin.z * safeDelta;
+        const swell = 0.6 + progress * 1.55;
+        particle.mesh.scale.setScalar(Math.max(0.01, particle.startScale * swell));
+        particle.material.opacity = THREE.MathUtils.clamp(
+          particle.baseOpacity *
+            fade *
+            (0.8 + Math.sin(now * 0.015 + particle.phase) * 0.2),
+          0,
+          0.9
+        );
+      }
+    }
   };
 
   const startSkillQBarePurcleAttack = (entry: SkillQBarePurcleEntry, now: number) => {
@@ -2276,6 +3512,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       speed: skillQBarePurcleMoveSpeed,
     };
     setSkillQBarePurcleMotionState(entry, "idle");
+    spawnPurcleSmokeFx(entry.worldPos, spawnedAt, "spawn");
     return entry;
   };
 
@@ -2407,10 +3644,109 @@ export const createRuntime: CharacterRuntimeFactory = ({
     spawnPendingSkillQBareGates();
   };
 
+  const requestSkillRWeaponPurcleSummon = (now: number) => {
+    avatar.getWorldPosition(skillRWeaponPurcleCenterWorldPos);
+    skillRWeaponPurcleCenterWorldPos.y = runtimeGroundY;
+    skillRWeaponPurcleForward.copy(runtimeAimDirection);
+    skillRWeaponPurcleForward.y = 0;
+    if (skillRWeaponPurcleForward.lengthSq() < 0.000001) {
+      skillRWeaponPurcleForward
+        .set(0, 0, 1)
+        .applyQuaternion(avatar.quaternion);
+      skillRWeaponPurcleForward.y = 0;
+    }
+    if (skillRWeaponPurcleForward.lengthSq() < 0.000001) {
+      skillRWeaponPurcleForward.set(0, 0, 1);
+    } else {
+      skillRWeaponPurcleForward.normalize();
+    }
+    const summonedPositions: THREE.Vector3[] = [];
+    const maxAttempts =
+      skillRWeaponPurcleSummonCount * skillRWeaponPurcleSummonAttemptsPerUnit;
+    const minSeparationSq =
+      skillRWeaponPurcleMinSeparation * skillRWeaponPurcleMinSeparation;
+    for (
+      let attempt = 0;
+      attempt < maxAttempts && summonedPositions.length < skillRWeaponPurcleSummonCount;
+      attempt += 1
+    ) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = THREE.MathUtils.lerp(
+        skillRWeaponPurcleSummonMinRadius,
+        skillRWeaponPurcleSummonRadius,
+        Math.sqrt(Math.random())
+      );
+      skillRWeaponPurcleCandidateWorldPos.copy(skillRWeaponPurcleCenterWorldPos);
+      skillRWeaponPurcleCandidateWorldPos.x += Math.cos(angle) * radius;
+      skillRWeaponPurcleCandidateWorldPos.z += Math.sin(angle) * radius;
+      skillRWeaponPurcleDirection
+        .copy(skillRWeaponPurcleCandidateWorldPos)
+        .sub(skillRWeaponPurcleCenterWorldPos);
+      skillRWeaponPurcleDirection.y = 0;
+      if (skillRWeaponPurcleDirection.lengthSq() < 0.000001) {
+        skillRWeaponPurcleDirection.copy(skillRWeaponPurcleForward);
+      } else {
+        skillRWeaponPurcleDirection.normalize();
+      }
+      let blockedByNeighbor = false;
+      for (let i = 0; i < summonedPositions.length; i += 1) {
+        if (
+          summonedPositions[i].distanceToSquared(skillRWeaponPurcleCandidateWorldPos) <
+          minSeparationSq
+        ) {
+          blockedByNeighbor = true;
+          break;
+        }
+      }
+      if (blockedByNeighbor) continue;
+      if (
+        !canSpawnSkillQBarePurcleAt(
+          skillRWeaponPurcleCenterWorldPos,
+          skillRWeaponPurcleCandidateWorldPos,
+          skillRWeaponPurcleDirection
+        )
+      ) {
+        continue;
+      }
+      const acceptedPos = skillRWeaponPurcleCandidateWorldPos.clone();
+      summonedPositions.push(acceptedPos);
+      queueSkillQBarePurcleSpawn(
+        acceptedPos,
+        skillRWeaponPurcleDirection,
+        runtimeGroundY,
+        now
+      );
+    }
+  };
+
+  const updateSkillRWeaponState = (now: number) => {
+    const isWeaponSkillRRunning = Boolean(
+      weaponEquipped &&
+        skillRWeaponBinding &&
+        activeSkillBinding === skillRWeaponBinding &&
+        skillRWeaponBinding.action.isRunning()
+    );
+    if (!isWeaponSkillRRunning) {
+      skillRWeaponPurcleSummonedInCast = false;
+      return;
+    }
+    if (skillRWeaponPurcleSummonedInCast) return;
+    const duration = Math.max(0.001, skillRWeaponBinding?.clip.duration ?? 0.001);
+    const progress = THREE.MathUtils.clamp(
+      (skillRWeaponBinding?.action.time ?? 0) / duration,
+      0,
+      1
+    );
+    if (progress < skillRWeaponPurcleSummonProgress) return;
+    skillRWeaponPurcleSummonedInCast = true;
+    requestSkillRWeaponPurcleSummon(now);
+  };
+
   const updateSkillQBareGates = (now: number, deltaSeconds: number) => {
     spawnPendingSkillQBareGates();
     spawnPendingSkillQBarePurcles();
     const safeDelta = Math.max(0, deltaSeconds);
+    updatePurcleSmokeFx(now, safeDelta);
     if (skillQBareGateActiveEntries.length > 0) {
     for (let i = skillQBareGateActiveEntries.length - 1; i >= 0; i -= 1) {
       const entry = skillQBareGateActiveEntries[i];
@@ -2538,6 +3874,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
         continue;
       }
       if (!isHarperEnemyTargetAlive(entry.enemyTarget, now)) {
+        const smokeReason: PurcleSmokeReason | null =
+          entry.enemyTarget.health <= 0
+            ? "dead"
+            : now >= entry.enemyTarget.expiresAt
+            ? "expired"
+            : null;
+        if (smokeReason) {
+          entry.targetAnchor.getWorldPosition(skillQBarePurcleSpawnSample);
+          spawnPurcleSmokeFx(skillQBarePurcleSpawnSample, now, smokeReason);
+        }
         disposeSkillQBarePurcleEntry(entry);
         skillQBarePurcleEntries.splice(i, 1);
         continue;
@@ -2573,7 +3919,20 @@ export const createRuntime: CharacterRuntimeFactory = ({
         .sub(skillQBarePurcleWorldPos);
       skillQBarePurcleAttackDirection.y = 0;
       const targetDistance = skillQBarePurcleAttackDirection.length();
-      if (targetDistance > 0.0001) {
+      const lockFacingDuringAttackLaunch =
+        entry.attackActive && now >= entry.attackHitAt;
+      if (lockFacingDuringAttackLaunch) {
+        // Once the fist launch/hit phase starts, keep a fixed attack direction.
+        skillQBarePurcleFallbackForward
+          .set(0, 0, 1)
+          .applyQuaternion(entry.root.quaternion);
+        skillQBarePurcleAttackDirection.copy(skillQBarePurcleFallbackForward).setY(0);
+        if (skillQBarePurcleAttackDirection.lengthSq() > 0.000001) {
+          skillQBarePurcleAttackDirection.normalize();
+        } else {
+          skillQBarePurcleAttackDirection.set(0, 0, 1);
+        }
+      } else if (targetDistance > 0.0001) {
         skillQBarePurcleAttackDirection.multiplyScalar(1 / targetDistance);
         entry.root.rotation.y = Math.atan2(
           skillQBarePurcleAttackDirection.x,
@@ -2593,6 +3952,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
       if (entry.attackActive) {
         if (!entry.attackHitApplied && now >= entry.attackHitAt) {
+          const rewardPurcleHit = (hitCount: number) => {
+            if (hitCount <= 0) return;
+            applyMana?.(skillQBarePurcleHitManaGain * hitCount);
+            applyEnergy?.(skillQBarePurcleHitEnergyGain * hitCount);
+          };
           const hitFromFist = (fist: THREE.Object3D | null) => {
             if (!fist) return 0;
             fist.getWorldPosition(skillQBarePurcleFistWorldPos);
@@ -2600,7 +3964,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
               .copy(skillQBarePurcleFistWorldPos)
               .addScaledVector(skillQBarePurcleAttackDirection, -0.08);
             if (performMeleeAttack) {
-              return performMeleeAttack({
+              const hitCount = performMeleeAttack({
                 damage: skillQBarePurcleAttackDamage,
                 maxDistance: skillQBarePurcleAttackReach,
                 hitRadius: skillQBarePurcleAttackHitRadius,
@@ -2608,6 +3972,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
                 origin: skillQBarePurcleAttackOrigin.clone(),
                 direction: skillQBarePurcleAttackDirection.clone(),
               });
+              rewardPurcleHit(hitCount);
+              return hitCount;
             }
             nearestTarget.onHit({
               now,
@@ -2616,6 +3982,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
               point: skillQBarePurcleAttackOrigin.clone(),
               direction: skillQBarePurcleAttackDirection.clone(),
             });
+            rewardPurcleHit(1);
             return 1;
           };
           const rightHits = hitFromFist(entry.handR);
@@ -2625,7 +3992,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
               .copy(skillQBarePurcleWorldPos)
               .addScaledVector(skillQBarePurcleAttackDirection, 0.66);
             if (performMeleeAttack) {
-              performMeleeAttack({
+              const hitCount = performMeleeAttack({
                 damage: skillQBarePurcleAttackDamage,
                 maxDistance: skillQBarePurcleAttackReach,
                 hitRadius: skillQBarePurcleAttackHitRadius * 1.05,
@@ -2633,6 +4000,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
                 origin: skillQBarePurcleAttackOrigin.clone(),
                 direction: skillQBarePurcleAttackDirection.clone(),
               });
+              rewardPurcleHit(hitCount);
             } else {
               nearestTarget.onHit({
                 now,
@@ -2641,6 +4009,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
                 point: skillQBarePurcleAttackOrigin.clone(),
                 direction: skillQBarePurcleAttackDirection.clone(),
               });
+              rewardPurcleHit(1);
             }
           }
           entry.attackHitApplied = true;
@@ -2695,6 +4064,221 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (progress < skillQBareGateSummonProgress) return;
     skillQBareGateSummonedInCast = true;
     requestSkillQBareGateSummon(now);
+  };
+
+  const resetSkillQWeaponExplosionState = () => {
+    skillQWeaponExplosionState.active = false;
+    skillQWeaponExplosionState.hasWeaponSample = false;
+    skillQWeaponExplosionState.previousSampleAt = 0;
+    skillQWeaponExplosionState.swingActiveUntil = 0;
+    skillQWeaponExplosionState.hitTargetIds.clear();
+  };
+
+  const sampleSkillQWeaponHitPose = () => {
+    const sourceNode =
+      (weaponThrowSourceNode && weaponThrowSourceNode.parent
+        ? weaponThrowSourceNode
+        : findWeaponThrowSourceNode(lastAvatarModel)) ?? null;
+    if (sourceNode && sourceNode.parent) {
+      weaponThrowSourceNode = sourceNode;
+      sourceNode.updateWorldMatrix(true, true);
+      sourceNode.getWorldPosition(skillQWeaponHitWorldPos);
+      sourceNode.getWorldQuaternion(skillQWeaponHitSourceQuat);
+      return;
+    }
+    avatar.getWorldPosition(skillQWeaponHitWorldPos);
+    skillQWeaponHitWorldPos.y += 1.08;
+    avatar.getWorldQuaternion(skillQWeaponHitSourceQuat);
+  };
+
+  const triggerSkillQWeaponHitExplosion = (
+    now: number,
+    point: THREE.Vector3,
+    direction: THREE.Vector3
+  ) => {
+    spawnSkillEWeaponExplosionFx(now, point);
+    applySkillEWeaponExplosionAreaDamage(
+      now,
+      point,
+      skillEWeaponProjectileExplosionDamage,
+      direction
+    );
+  };
+
+  const updateSkillQWeaponState = (now: number) => {
+    const isWeaponSkillQRunning = Boolean(
+      weaponEquipped &&
+        skillQWeaponBinding &&
+        activeSkillBinding === skillQWeaponBinding &&
+        skillQWeaponBinding.action.isRunning()
+    );
+    if (!isWeaponSkillQRunning) {
+      resetSkillQWeaponExplosionState();
+      return;
+    }
+
+    if (!skillQWeaponExplosionState.active) {
+      skillQWeaponExplosionState.active = true;
+      skillQWeaponExplosionState.hasWeaponSample = false;
+      skillQWeaponExplosionState.previousSampleAt = 0;
+      skillQWeaponExplosionState.swingActiveUntil = 0;
+      skillQWeaponExplosionState.hitTargetIds.clear();
+    }
+
+    const duration = Math.max(0.001, skillQWeaponBinding?.clip.duration ?? 0.001);
+    const progress = THREE.MathUtils.clamp(
+      (skillQWeaponBinding?.action.time ?? 0) / duration,
+      0,
+      1
+    );
+    if (
+      progress < skillQWeaponExplosionTriggerStartProgress ||
+      progress > skillQWeaponExplosionTriggerEndProgress
+    ) {
+      skillQWeaponExplosionState.hasWeaponSample = false;
+      skillQWeaponExplosionState.previousSampleAt = 0;
+      skillQWeaponExplosionState.swingActiveUntil = 0;
+      return;
+    }
+
+    sampleSkillQWeaponHitPose();
+    const hadPreviousSample = skillQWeaponExplosionState.hasWeaponSample;
+    if (!hadPreviousSample) {
+      skillQWeaponHitPrevWorldPos.copy(skillQWeaponHitWorldPos);
+      skillQWeaponExplosionState.hasWeaponSample = true;
+      skillQWeaponExplosionState.previousSampleAt = now;
+      skillQWeaponExplosionState.swingActiveUntil = 0;
+      return;
+    }
+
+    const sampleDeltaMs = Math.max(
+      1,
+      now - skillQWeaponExplosionState.previousSampleAt
+    );
+    const sampleTravel = skillQWeaponHitWorldPos.distanceTo(skillQWeaponHitPrevWorldPos);
+    const sampleSpeed = sampleTravel / (sampleDeltaMs / 1000);
+    if (sampleSpeed >= skillQWeaponSwingMinSpeed) {
+      skillQWeaponExplosionState.swingActiveUntil = now + skillQWeaponSwingPersistMs;
+    }
+    const isSwingActive = now <= skillQWeaponExplosionState.swingActiveUntil;
+    if (!isSwingActive) {
+      skillQWeaponHitPrevWorldPos.copy(skillQWeaponHitWorldPos);
+      skillQWeaponExplosionState.previousSampleAt = now;
+      return;
+    }
+
+    const meshColliderResult = applyWeaponMeshColliderHits({
+      now,
+      damage: skillQWeaponColliderDamage,
+      maxHits: skillQWeaponExplosionSweepMaxHits,
+      hitTargetIds: skillQWeaponExplosionState.hitTargetIds,
+      onHitTargetResolved: ({ point, direction }) => {
+        triggerSkillQWeaponHitExplosion(now, point, direction);
+      },
+    });
+    if (meshColliderResult.hasCollider) {
+      skillQWeaponHitPrevWorldPos.copy(skillQWeaponHitWorldPos);
+      skillQWeaponExplosionState.previousSampleAt = now;
+      return;
+    }
+
+    if (!hadPreviousSample) {
+      skillQWeaponExplosionState.previousSampleAt = now;
+      return;
+    }
+
+    skillQWeaponHitTravel.copy(skillQWeaponHitWorldPos).sub(skillQWeaponHitPrevWorldPos);
+    let travelDistance = skillQWeaponHitTravel.length();
+    if (travelDistance > 0.0001) {
+      skillQWeaponHitDirection.copy(skillQWeaponHitTravel).multiplyScalar(1 / travelDistance);
+    } else {
+      skillQWeaponHitDirection.copy(runtimeAimDirection);
+      skillQWeaponHitDirection.y = 0;
+      if (skillQWeaponHitDirection.lengthSq() < 0.000001) {
+        skillQWeaponHitDirection
+          .set(0, 0, 1)
+          .applyQuaternion(skillQWeaponHitSourceQuat);
+        skillQWeaponHitDirection.y = 0;
+      }
+      if (skillQWeaponHitDirection.lengthSq() < 0.000001) {
+        skillQWeaponHitDirection.set(0, 0, 1);
+      } else {
+        skillQWeaponHitDirection.normalize();
+      }
+      travelDistance = skillQWeaponContactMinTravel;
+    }
+
+    skillQWeaponHitContactCenter
+      .copy(skillQWeaponHitWorldPos)
+      .addScaledVector(skillQWeaponHitDirection, skillQWeaponContactForwardOffset);
+
+    if (performMeleeAttack) {
+      performMeleeAttack({
+        damage: skillQWeaponColliderDamage,
+        maxDistance: Math.max(
+          skillQWeaponContactMinTravel,
+          travelDistance + skillQWeaponContactForwardOffset
+        ),
+        maxHits: skillQWeaponExplosionSweepMaxHits,
+        origin: skillQWeaponHitPrevWorldPos.clone(),
+        direction: skillQWeaponHitDirection.clone(),
+        contactCenter: skillQWeaponHitContactCenter.clone(),
+        contactRadius: skillQWeaponContactRadius,
+        excludeTargetIds: skillQWeaponExplosionState.hitTargetIds,
+        onHitTarget: (targetId) => {
+          skillQWeaponExplosionState.hitTargetIds.add(targetId);
+        },
+        onHitTargetResolved: ({ point, direction: hitDirection }) => {
+          triggerSkillQWeaponHitExplosion(now, point, hitDirection);
+        },
+      });
+    } else {
+      const targets = getAttackTargets?.() ?? [];
+      const contactRadiusSq = skillQWeaponContactRadius * skillQWeaponContactRadius;
+      for (let i = 0; i < targets.length; i += 1) {
+        const target = targets[i];
+        if (!target?.object) continue;
+        if (!target.object.parent) continue;
+        if (target.isActive && !target.isActive()) continue;
+        if (skillQWeaponExplosionState.hitTargetIds.has(target.id)) continue;
+        skillQWeaponFallbackBounds.setFromObject(target.object);
+        if (skillQWeaponFallbackBounds.isEmpty()) continue;
+        skillQWeaponFallbackBounds.clampPoint(
+          skillQWeaponHitContactCenter,
+          skillQWeaponFallbackClosestPoint
+        );
+        if (
+          skillQWeaponFallbackClosestPoint.distanceToSquared(skillQWeaponHitContactCenter) >
+          contactRadiusSq
+        ) {
+          continue;
+        }
+        skillQWeaponFallbackDirection
+          .copy(skillQWeaponFallbackClosestPoint)
+          .sub(skillQWeaponHitContactCenter);
+        if (skillQWeaponFallbackDirection.lengthSq() > 0.000001) {
+          skillQWeaponFallbackDirection.normalize();
+        } else {
+          skillQWeaponFallbackDirection.copy(skillQWeaponHitDirection);
+        }
+        target.onHit({
+          now,
+          source: "slash",
+          damage: skillQWeaponColliderDamage,
+          point: skillQWeaponFallbackClosestPoint.clone(),
+          direction: skillQWeaponFallbackDirection.clone(),
+        });
+        skillQWeaponExplosionState.hitTargetIds.add(target.id);
+        triggerSkillQWeaponHitExplosion(
+          now,
+          skillQWeaponFallbackClosestPoint,
+          skillQWeaponFallbackDirection
+        );
+      }
+    }
+
+    skillQWeaponHitPrevWorldPos.copy(skillQWeaponHitWorldPos);
+    skillQWeaponExplosionState.previousSampleAt = now;
   };
 
   const fireBarePrimaryProjectile = () => {
@@ -2781,6 +4365,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       lifetime: normalAttackBareProjectileLifetime,
       radius: normalAttackBareProjectileRadius,
       targetHitRadius: normalAttackBareProjectileRadius * 1.18,
+      grantEnergyOnTargetHit: false,
+      grantManaOnTargetHit: true,
+      manaGainOnHit: normalAttackBareHitManaGain,
       color: 0xe9d5ff,
       emissive: 0xa855f7,
       emissiveIntensity: 3.8,
@@ -3004,14 +4591,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
     );
   };
 
-  const applySkillEWeaponExplosionTickDamage = (
-    entry: SkillEWeaponExplosionFxEntry,
-    now: number
+  const applySkillEWeaponExplosionAreaDamage = (
+    now: number,
+    center: THREE.Vector3,
+    damage: number,
+    directionHint?: THREE.Vector3
   ) => {
-    const damageValue = Math.max(1, Math.round(skillEWeaponExplosionDamageTick));
-    skillEWeaponExplosionDamageCenter.copy(entry.baseWorldPos);
+    const damageValue = Math.max(1, Math.round(damage));
+    skillEWeaponExplosionDamageCenter.copy(center);
 
-    if (runtimeAimDirection.lengthSq() > 0.000001) {
+    if (directionHint && directionHint.lengthSq() > 0.000001) {
+      skillEWeaponExplosionDamageDirection.copy(directionHint).normalize();
+    } else if (runtimeAimDirection.lengthSq() > 0.000001) {
       skillEWeaponExplosionDamageDirection.copy(runtimeAimDirection).normalize();
     } else {
       avatar.getWorldQuaternion(skillEWeaponThrowAvatarQuat);
@@ -3069,6 +4660,17 @@ export const createRuntime: CharacterRuntimeFactory = ({
         direction: skillEWeaponExplosionDamageDirection.clone(),
       });
     }
+  };
+
+  const applySkillEWeaponExplosionTickDamage = (
+    entry: SkillEWeaponExplosionFxEntry,
+    now: number
+  ) => {
+    applySkillEWeaponExplosionAreaDamage(
+      now,
+      entry.baseWorldPos,
+      skillEWeaponExplosionDamageTick
+    );
   };
 
   const updateSkillEWeaponExplosionFx = (now: number, deltaSeconds: number) => {
@@ -3233,6 +4835,55 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillEWeaponThrowDirection.set(0, 0, 1);
   };
 
+  const resolveSkillEWeaponProjectileForwardOffset = (
+    throwOrigin: THREE.Vector3,
+    throwDirection: THREE.Vector3
+  ) => {
+    const baseOffset = Math.max(0, skillEWeaponProjectileForwardOffset);
+    const targets = getAttackTargets?.();
+    if (!targets?.length) return baseOffset;
+
+    // Use the nearest point on each target bounds instead of root position to
+    // avoid misses on large meshes whose pivots are offset.
+    const laneRadius = 2.4;
+    const laneRadiusSq = laneRadius * laneRadius;
+    let nearestForwardDistance = Infinity;
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      if (!target?.object) continue;
+      if (!target.object.parent) continue;
+      if (target.isActive && !target.isActive()) continue;
+      skillEWeaponSpawnTargetBounds.setFromObject(target.object);
+      if (skillEWeaponSpawnTargetBounds.isEmpty()) continue;
+      skillEWeaponSpawnTargetBounds.clampPoint(
+        throwOrigin,
+        skillEWeaponSpawnClosestPoint
+      );
+      skillEWeaponSpawnToTarget
+        .copy(skillEWeaponSpawnClosestPoint)
+        .sub(throwOrigin);
+      const forwardDistance = skillEWeaponSpawnToTarget.dot(throwDirection);
+      const radialDistanceSq =
+        skillEWeaponSpawnToTarget.lengthSq() - forwardDistance * forwardDistance;
+      if (radialDistanceSq > laneRadiusSq) continue;
+      if (forwardDistance < nearestForwardDistance) {
+        nearestForwardDistance = forwardDistance;
+      }
+    }
+
+    if (!Number.isFinite(nearestForwardDistance)) return baseOffset;
+    const safetyMargin = Math.max(
+      0.08,
+      skillEWeaponProjectileRadius * 0.75 + skillEWeaponProjectileTargetHitRadius * 0.45
+    );
+    const clampedOffset = nearestForwardDistance - safetyMargin;
+    return THREE.MathUtils.clamp(
+      clampedOffset,
+      -skillEWeaponProjectileMaxBackwardOffset,
+      baseOffset
+    );
+  };
+
   const resetSkillEWeaponThrowState = () => {
     skillEWeaponThrowState.active = false;
     skillEWeaponThrowState.projectileLaunched = false;
@@ -3284,12 +4935,35 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     resolveSkillEWeaponFallbackDirection();
 
-    const origin = skillEWeaponThrowOriginWorld
+    skillEWeaponLaunchSourceWorld.copy(skillEWeaponThrowOriginWorld);
+    if (skillEWeaponThrowState.hasSourceSample) {
+      skillEWeaponSpawnToTarget
+        .copy(skillEWeaponThrowOriginWorld)
+        .sub(skillEWeaponThrowState.previousSourceWorldPos);
+      const forwardStep = skillEWeaponSpawnToTarget.dot(skillEWeaponThrowDirection);
+      if (forwardStep > 0.0001) {
+        const nearestFromCurrent = resolveSkillEWeaponProjectileForwardOffset(
+          skillEWeaponThrowOriginWorld,
+          skillEWeaponThrowDirection
+        );
+        if (
+          nearestFromCurrent <=
+          skillEWeaponProjectileForwardOffset + skillEWeaponProjectileTargetHitRadius
+        ) {
+          skillEWeaponLaunchSourceWorld.copy(
+            skillEWeaponThrowState.previousSourceWorldPos
+          );
+        }
+      }
+    }
+
+    const resolvedForwardOffset = resolveSkillEWeaponProjectileForwardOffset(
+      skillEWeaponLaunchSourceWorld,
+      skillEWeaponThrowDirection
+    );
+    const origin = skillEWeaponLaunchSourceWorld
       .clone()
-      .addScaledVector(
-        skillEWeaponThrowDirection,
-        skillEWeaponProjectileForwardOffset
-      );
+      .addScaledVector(skillEWeaponThrowDirection, resolvedForwardOffset);
     origin.y += skillEWeaponProjectileUpwardOffset;
 
     const projectileRootGeometry = new THREE.SphereGeometry(0.01, 8, 8);
@@ -3475,7 +5149,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (!isWeaponSkillERunning) {
       if (skillEWeaponThrowState.active) {
         if (!skillEWeaponThrowState.forcedBare && weaponEquipped) {
-          setWeaponEquipped(false);
+          setWeaponEquipped(false, { refreshECooldown: true });
         }
         resetSkillEWeaponThrowState();
       }
@@ -3527,7 +5201,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const shouldForceBare =
       progress >= throwProgress || skillEWeaponThrowState.projectileLaunched;
     if (!skillEWeaponThrowState.forcedBare && shouldForceBare) {
-      setWeaponEquipped(false);
+      setWeaponEquipped(false, { refreshECooldown: true });
       skillEWeaponThrowState.forcedBare = true;
     }
 
@@ -3539,13 +5213,31 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   };
 
+  const settleInactiveSkillBinding = (now: number) => {
+    if (!activeSkillBinding || activeSkillBinding.action.isRunning()) return;
+    if (activeSkillBinding === skillEBareBinding) {
+      // Preserve the anti-pop transition for bare E when ending naturally.
+      finishOneShotBindingWithoutRewind(activeSkillBinding);
+      skillEBarePostTransitionEndsAt = now + skillEBareToWeaponLocomotionBlendMs;
+    } else {
+      stopActionBinding(activeSkillBinding);
+    }
+    activeSkillBinding = null;
+  };
+
   const tryPlaySkill = (binding: ActionBinding | null) => {
     if (!mixer || !binding) return false;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    settleInactiveSkillBinding(now);
     if (isSkillAnimationActive()) return false;
     const started = playActionBinding(binding);
     if (started) {
+      skillEBarePostTransitionEndsAt = 0;
       primaryAttackHeld = false;
       resetBarePrimaryAttackState();
+      resetWeaponPrimaryAttackState(true);
+      resetWeaponPrimaryBackstepState();
+      resetSkillQWeaponExplosionState();
       if (binding !== skillRBareBinding || weaponEquipped) {
         resetSkillRBareState(true);
       }
@@ -3589,14 +5281,20 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillRWeaponBinding = null;
     normalAttackBareBinding = null;
     normalAttackWeaponBinding = null;
+    resetSkillEBareSummonFxState(true);
     resetSkillEWeaponThrowState();
     clearSkillEWeaponExplosionFxState();
+    resetSkillQWeaponExplosionState();
     weaponThrowSourceNode = null;
     skillEWeaponResolvedThrowProgress = skillEWeaponThrowProgressFallback;
+    harperWeaponMaterialEntries.length = 0;
+    harperWeaponVisualOpacity = 1;
     primaryAttackHandBone = null;
     setPrimaryAttackChargeVisible(false);
     clearSkillQBareGateState(true);
+    clearPurcleSmokeFxState();
     resetSkillRBareState(true);
+    skillRWeaponPurcleSummonedInCast = false;
     cameraShakeStartedAt = 0;
     cameraShakeEndsAt = 0;
     cameraShakeMagnitude = 0;
@@ -3609,9 +5307,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
     barePrimaryAttackState.chargeEndsAt = 0;
     barePrimaryAttackState.fireAt = 0;
     barePrimaryAttackState.endsAt = 0;
+    resetWeaponPrimaryAttackState(false);
+    resetWeaponPrimaryBackstepState();
     primaryAttackChargePulse = 0;
     primaryAttackHeld = false;
     wasPrimaryAttackAnimationActive = false;
+    skillEBarePostTransitionEndsAt = 0;
     lastAnimationUpdateAt = 0;
   };
 
@@ -3713,7 +5414,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       resolveClip(clips, normalAttackBareClipName),
       normalAttackBareClipName
     );
-    normalAttackWeaponBinding = createLoopBinding(
+    normalAttackWeaponBinding = createOneShotBinding(
       mixer,
       resolveClip(clips, normalAttackWeaponClipName),
       normalAttackWeaponClipName
@@ -3731,6 +5432,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       if (skillRBareActive) {
         resetSkillRBareState(true);
       }
+      resetWeaponPrimaryBackstepState();
+      resetSkillQWeaponExplosionState();
       updateSkillEWeaponExplosionFx(now, 0);
       updateSkillQBareGates(now, 0);
       updateCameraShake(now);
@@ -3742,19 +5445,40 @@ export const createRuntime: CharacterRuntimeFactory = ({
       lastAnimationUpdateAt > 0 ? Math.max(0, (now - lastAnimationUpdateAt) / 1000) : 0;
     lastAnimationUpdateAt = now;
 
-    if (activeSkillBinding && !activeSkillBinding.action.isRunning()) {
-      stopActionBinding(activeSkillBinding);
-      activeSkillBinding = null;
+    if (
+      activeSkillBinding === skillEBareBinding &&
+      skillEBareBinding?.action.isRunning()
+    ) {
+      const duration = Math.max(0.001, skillEBareBinding.clip.duration);
+      const progress = THREE.MathUtils.clamp(
+        skillEBareBinding.action.time / duration,
+        0,
+        1
+      );
+      // skillEBare tail has a second shoulder-carry motion. Cut over at the
+      // first settled receive pose to avoid replaying shoulder-lift at the end.
+      if (progress >= skillEBareAutoFinishProgress) {
+        finishOneShotBindingWithoutRewind(skillEBareBinding);
+        activeSkillBinding = null;
+        skillEBarePostTransitionEndsAt = now + skillEBareToWeaponLocomotionBlendMs;
+      }
     }
 
+    settleInactiveSkillBinding(now);
+
     updateSkillQBareState(now);
+    updateSkillQWeaponState(now);
     updateSkillRBareState(now, deltaSeconds);
+    updateSkillRWeaponState(now);
+    updateSkillEBareSummonState(now, deltaSeconds);
 
     const hasSkillAnimationActive = isSkillAnimationActive();
     const barePrimaryAttackAction = normalAttackBareBinding?.action ?? null;
     if (
       barePrimaryAttackState.active &&
-      (!barePrimaryAttackAction || now >= barePrimaryAttackState.endsAt + 80)
+      (!barePrimaryAttackAction ||
+        now >=
+          barePrimaryAttackState.endsAt + normalAttackBareRecoveryEndBufferMs)
     ) {
       resetBarePrimaryAttackState();
     }
@@ -3797,23 +5521,42 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
     } else {
       setPrimaryAttackChargeVisible(false);
+      if (!weaponEquipped && primaryAttackHeld && !hasSkillAnimationActive) {
+        startBarePrimaryAttack(now);
+      }
     }
+
+    updateWeaponPrimaryAttackState(now);
+    updateWeaponPrimaryBackstepState(deltaSeconds);
 
     const weaponPrimaryAttackAnimationActive =
       weaponEquipped &&
-      primaryAttackHeld &&
+      weaponPrimaryAttackState.active &&
       !hasSkillAnimationActive &&
       Boolean(normalAttackWeaponBinding);
     const barePrimaryAttackAnimationActive =
       !weaponEquipped && barePrimaryAttackState.active;
     const primaryAttackAnimationActive =
       weaponPrimaryAttackAnimationActive || barePrimaryAttackAnimationActive;
+    const inSkillEBarePostTransition =
+      weaponEquipped &&
+      !hasSkillAnimationActive &&
+      now < skillEBarePostTransitionEndsAt;
     const forceImmediateBlend =
-      primaryAttackAnimationActive || wasPrimaryAttackAnimationActive;
-    const skillEWalkLegsActive =
+      primaryAttackAnimationActive;
+    const skillEBareActive = Boolean(
+      skillEBareBinding && activeSkillBinding === skillEBareBinding
+    );
+    const skillEWeaponActive = Boolean(
+      skillEWeaponBinding && activeSkillBinding === skillEWeaponBinding
+    );
+    const skillRWeaponActive = Boolean(
+      skillRWeaponBinding && activeSkillBinding === skillRWeaponBinding
+    );
+    const skillCastWalkLegsActive =
       hasSkillAnimationActive &&
       isMoving &&
-      Boolean(skillEBareBinding && activeSkillBinding === skillEBareBinding);
+      (skillEBareActive || skillEWeaponActive || skillRWeaponActive);
     const primaryAttackWalkLegsActive =
       isMoving && primaryAttackAnimationActive;
     const resolvedIdleBinding =
@@ -3824,18 +5567,32 @@ export const createRuntime: CharacterRuntimeFactory = ({
       (weaponEquipped ? walkWeaponBinding : walkBareBinding) ??
       walkBareBinding ??
       walkWeaponBinding;
+    const preferWeaponWalkLegs =
+      skillEWeaponActive || skillRWeaponActive || (!skillEBareActive && weaponEquipped);
     const resolvedWalkLegsBinding =
-      (weaponEquipped ? walkWeaponLegsBinding : walkBareLegsBinding) ??
+      (preferWeaponWalkLegs ? walkWeaponLegsBinding : walkBareLegsBinding) ??
       walkBareLegsBinding ??
       walkWeaponLegsBinding;
 
     const walkTimeScale = isSprinting ? 1.4 : 1;
     const targetWalkWeight =
-      hasSkillAnimationActive || primaryAttackAnimationActive ? 0 : isMoving ? 1 : 0;
+      hasSkillAnimationActive || primaryAttackAnimationActive || inSkillEBarePostTransition
+        ? 0
+        : isMoving
+        ? 1
+        : 0;
     const targetIdleWeight =
-      hasSkillAnimationActive || primaryAttackAnimationActive ? 0 : isMoving ? 0 : 1;
+      hasSkillAnimationActive || primaryAttackAnimationActive
+        ? 0
+        : inSkillEBarePostTransition
+        ? 1
+        : isMoving
+        ? 0
+        : 1;
     const targetWalkLegsWeight =
-      skillEWalkLegsActive || primaryAttackWalkLegsActive ? 1 : 0;
+      skillCastWalkLegsActive || primaryAttackWalkLegsActive || inSkillEBarePostTransition
+        ? 1
+        : 0;
     const targetWeaponPrimaryAttackWeight = weaponPrimaryAttackAnimationActive ? 1 : 0;
     const targetBarePrimaryAttackWeight = barePrimaryAttackAnimationActive ? 1 : 0;
     const blend = forceImmediateBlend ? 1 : isMoving ? 0.22 : 0.18;
@@ -3876,12 +5633,24 @@ export const createRuntime: CharacterRuntimeFactory = ({
       walkTimeScale,
       blend
     );
-    applyLoopWeight(
-      normalAttackWeaponBinding,
-      targetWeaponPrimaryAttackWeight,
-      1,
-      blend
-    );
+    if (normalAttackWeaponBinding) {
+      const action = normalAttackWeaponBinding.action;
+      action.setEffectiveWeight(
+        THREE.MathUtils.lerp(
+          action.getEffectiveWeight(),
+          targetWeaponPrimaryAttackWeight,
+          blend
+        )
+      );
+      action.setEffectiveTimeScale(1);
+      action.enabled = true;
+      if (weaponPrimaryAttackAnimationActive) {
+        action.paused = false;
+        if (!action.isRunning()) {
+          action.play();
+        }
+      }
+    }
     if (normalAttackBareBinding) {
       normalAttackBareBinding.action.setEffectiveWeight(
         THREE.MathUtils.lerp(
@@ -3893,6 +5662,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
       normalAttackBareBinding.action.setEffectiveTimeScale(1);
       normalAttackBareBinding.action.enabled = true;
     }
+
+    // During bare E summon, keep weapon loop layers frozen at phase 0 so they do
+    // not accumulate hidden time and pop in with a random shoulder-carry phase.
+    if (skillEBareActive) {
+      freezeLoopBinding(idleWeaponBinding, 0);
+      freezeLoopBinding(walkWeaponBinding, 0);
+      freezeLoopBinding(walkWeaponLegsBinding, 0);
+    }
+
     wasPrimaryAttackAnimationActive = primaryAttackAnimationActive;
 
     if (deltaSeconds > 0) {
@@ -3909,47 +5687,110 @@ export const createRuntime: CharacterRuntimeFactory = ({
     clearAnimationBinding();
     clearEyeAnchor();
     lastAvatarModel = avatarModel;
-    if (!avatarModel) return;
+    if (!avatarModel) {
+      weaponColliderNodes.length = 0;
+      return;
+    }
+    collectHarperWeaponMaterialEntries(avatarModel, harperWeaponMaterialEntries);
     setHarperWeaponNodesVisible(avatarModel, weaponEquipped);
+    setHarperWeaponVisualOpacity(weaponEquipped ? harperWeaponVisualOpacity : 1);
     bindEyeAnchor(avatarModel);
     bindAnimations(avatarModel);
     primaryAttackHandBone = findPrimaryAttackHand(avatarModel);
     weaponThrowSourceNode = findWeaponThrowSourceNode(avatarModel);
+    refreshWeaponColliderNodes(avatarModel);
     refreshSkillEWeaponThrowProgress();
   };
 
-  const setWeaponEquipped = (equipped: boolean) => {
+  const getRuntimeNow = () =>
+    typeof performance !== "undefined" ? performance.now() : Date.now();
+
+  const hasEnoughManualMana = (cost: number) => {
+    if (noCooldown || cost <= 0) return true;
+    const currentMana = getCurrentStats?.().mana;
+    if (typeof currentMana !== "number" || !Number.isFinite(currentMana)) return true;
+    return currentMana + 0.0001 >= cost;
+  };
+
+  const spendManualMana = (cost: number) => {
+    if (noCooldown || cost <= 0) return true;
+    const spent = spendMana?.(cost);
+    if (typeof spent !== "number" || !Number.isFinite(spent)) return true;
+    return spent + 0.0001 >= cost;
+  };
+
+  const startRuntimeSkillECooldown = (now: number) => {
+    if (noCooldown || harperSkillECooldownMs <= 0) {
+      runtimeSkillECooldownUntil = 0;
+      clearSkillCooldown?.("e");
+      return;
+    }
+    runtimeSkillECooldownUntil = now + harperSkillECooldownMs;
+  };
+
+  const startRuntimeSkillRCooldown = (now: number) => {
+    if (noCooldown || harperSkillRCooldownMs <= 0) {
+      runtimeSkillRCooldownUntil = 0;
+      clearSkillCooldown?.("r");
+      return;
+    }
+    runtimeSkillRCooldownUntil = now + harperSkillRCooldownMs;
+  };
+
+  const getRuntimeSkillCooldownRemainingMs = (key: "e" | "r") => {
+    const now = getRuntimeNow();
+    if (key === "e") {
+      return Math.max(0, runtimeSkillECooldownUntil - now);
+    }
+    return Math.max(0, runtimeSkillRCooldownUntil - now);
+  };
+
+  const getRuntimeSkillCooldownDurationMs = (key: "e" | "r") =>
+    key === "e" ? harperSkillECooldownMs : harperSkillRCooldownMs;
+
+  const setWeaponEquipped = (
+    equipped: boolean,
+    options?: {
+      refreshECooldown?: boolean;
+      now?: number;
+    }
+  ) => {
     if (weaponEquipped === equipped) return;
     weaponEquipped = equipped;
+    if (options?.refreshECooldown ?? false) {
+      startRuntimeSkillECooldown(options?.now ?? getRuntimeNow());
+    }
     setHarperWeaponNodesVisible(lastAvatarModel, weaponEquipped);
+    const shouldKeepSummonFade =
+      weaponEquipped &&
+      Boolean(
+        skillEBareBinding &&
+          activeSkillBinding === skillEBareBinding
+      );
+    setHarperWeaponVisualOpacity(shouldKeepSummonFade ? 0 : 1);
+    if (!shouldKeepSummonFade) {
+      resetSkillEBareSummonFxState(false);
+    }
+    if (!weaponEquipped) {
+      resetWeaponPrimaryAttackState(true);
+      resetWeaponPrimaryBackstepState();
+      resetSkillQWeaponExplosionState();
+      primaryAttackHeld = false;
+    }
   };
 
   const handlePrimaryDown = () => {
     if (isSkillAnimationActive()) return;
     if (!weaponEquipped) {
       primaryAttackHeld = true;
-      if (barePrimaryAttackState.active || !normalAttackBareBinding) return;
-      const started = playActionBinding(normalAttackBareBinding);
-      if (!started) return;
-      const now = performance.now();
-      const durationMs = Math.max(
-        1,
-        normalAttackBareBinding.clip.duration * 1000
-      );
-      barePrimaryAttackState.active = true;
-      barePrimaryAttackState.projectileFired = false;
-      barePrimaryAttackState.startedAt = now;
-      barePrimaryAttackState.chargeEndsAt =
-        now + durationMs * normalAttackBareChargeEndProgress;
-      barePrimaryAttackState.fireAt =
-        now + durationMs * normalAttackBareProjectileFireProgress;
-      barePrimaryAttackState.endsAt = now + durationMs;
-      primaryAttackChargePulse = 0;
-      setPrimaryAttackChargeVisible(true);
+      if (barePrimaryAttackState.active) return;
+      startBarePrimaryAttack(performance.now());
       return;
     }
     primaryAttackHeld = true;
-    fireProjectile?.();
+    if (!weaponPrimaryAttackState.active) {
+      startWeaponPrimaryAttackCombo();
+    }
   };
 
   const handlePrimaryUp = () => {
@@ -3960,6 +5801,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
     }
     primaryAttackHeld = false;
+    if (weaponEquipped && weaponPrimaryAttackState.active) {
+      resetWeaponPrimaryAttackState(false);
+    }
   };
 
   const handlePrimaryCancel = () => {
@@ -3970,6 +5814,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
     }
     primaryAttackHeld = false;
+    if (weaponEquipped && weaponPrimaryAttackState.active) {
+      resetWeaponPrimaryAttackState(false);
+    }
   };
 
   const handleSkillQ = () => {
@@ -3989,40 +5836,95 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const handleSkillE = () => {
+    const now = getRuntimeNow();
+    if (!noCooldown && runtimeSkillECooldownUntil > now) {
+      return false;
+    }
     if (weaponEquipped) {
       const skillEBinding = skillEWeaponBinding ?? skillEBareBinding;
       if (tryPlaySkill(skillEBinding)) {
         if (skillEBinding === skillEWeaponBinding) {
           startSkillEWeaponThrowState();
         } else {
-          setWeaponEquipped(false);
+          setWeaponEquipped(false, { now, refreshECooldown: true });
         }
         return true;
       }
       return baseRuntime.handleSkillE?.() ?? false;
     }
 
+    if (!hasEnoughManualMana(harperSkillEBareManaCost)) {
+      return false;
+    }
     if (!skillEBareBinding) {
-      setWeaponEquipped(true);
+      if (!spendManualMana(harperSkillEBareManaCost)) return false;
+      setWeaponEquipped(true, { now, refreshECooldown: false });
       return true;
     }
     if (!tryPlaySkill(skillEBareBinding)) return false;
-    setWeaponEquipped(true);
+    if (!spendManualMana(harperSkillEBareManaCost)) return false;
+    setWeaponEquipped(true, { now, refreshECooldown: false });
     return true;
   };
 
   const handleSkillR = () => {
+    const now = getRuntimeNow();
+    if (!noCooldown && runtimeSkillRCooldownUntil > now) {
+      return false;
+    }
+    if (!hasEnoughManualMana(harperSkillRManaCost)) {
+      return false;
+    }
     const skillRBinding =
       (weaponEquipped ? skillRWeaponBinding : skillRBareBinding) ??
       skillRBareBinding ??
       skillRWeaponBinding;
     if (tryPlaySkill(skillRBinding)) {
+      if (!spendManualMana(harperSkillRManaCost)) {
+        return false;
+      }
+      startRuntimeSkillRCooldown(now);
       if (!weaponEquipped && skillRBinding === skillRBareBinding) {
         startSkillRBareState();
+      } else if (weaponEquipped && skillRBinding === skillRWeaponBinding) {
+        skillRWeaponPurcleSummonedInCast = false;
       }
       return true;
     }
     return baseRuntime.handleSkillR?.() ?? false;
+  };
+
+  const beforeSkillUse: NonNullable<typeof baseRuntime.beforeSkillUse> = (args) => {
+    const baseModifierResult = baseRuntime.beforeSkillUse?.(args);
+    const baseModifier =
+      baseModifierResult && typeof baseModifierResult === "object"
+        ? baseModifierResult
+        : {};
+    if (args.key === "e" || args.key === "r") {
+      return {
+        ...baseModifier,
+        ignoreCostAndCooldown: true,
+      };
+    }
+    return baseModifier;
+  };
+
+  const getSkillCooldownRemainingMs: NonNullable<
+    typeof baseRuntime.getSkillCooldownRemainingMs
+  > = (key) => {
+    if (key === "e" || key === "r") {
+      return getRuntimeSkillCooldownRemainingMs(key);
+    }
+    return baseRuntime.getSkillCooldownRemainingMs?.(key) ?? null;
+  };
+
+  const getSkillCooldownDurationMs: NonNullable<
+    typeof baseRuntime.getSkillCooldownDurationMs
+  > = (key) => {
+    if (key === "e" || key === "r") {
+      return getRuntimeSkillCooldownDurationMs(key);
+    }
+    return baseRuntime.getSkillCooldownDurationMs?.(key) ?? null;
   };
 
   const resetState = () => {
@@ -4036,9 +5938,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
     stopActionBinding(skillRWeaponBinding);
     stopActionBinding(normalAttackBareBinding);
     stopActionBinding(normalAttackWeaponBinding);
+    resetWeaponPrimaryAttackState(false);
+    resetWeaponPrimaryBackstepState();
+    resetSkillQWeaponExplosionState();
     resetSkillEWeaponThrowState();
     clearSkillEWeaponExplosionFxState();
+    resetSkillEBareSummonFxState(true);
     activeSkillBinding = null;
+    skillEBarePostTransitionEndsAt = 0;
     barePrimaryAttackState.active = false;
     barePrimaryAttackState.projectileFired = false;
     barePrimaryAttackState.startedAt = 0;
@@ -4048,13 +5955,19 @@ export const createRuntime: CharacterRuntimeFactory = ({
     primaryAttackHandBone = null;
     setPrimaryAttackChargeVisible(false);
     clearSkillQBareGateState(true);
+    clearPurcleSmokeFxState();
     resetSkillRBareState(true);
+    skillRWeaponPurcleSummonedInCast = false;
     primaryAttackChargePulse = 0;
     primaryAttackHeld = false;
     wasPrimaryAttackAnimationActive = false;
     cameraShakeStartedAt = 0;
     cameraShakeEndsAt = 0;
     cameraShakeMagnitude = 0;
+    runtimeSkillECooldownUntil = 0;
+    runtimeSkillRCooldownUntil = 0;
+    clearSkillCooldown?.("e");
+    clearSkillCooldown?.("r");
     if (eyeAnchor) {
       eyeAnchor.position.copy(eyeAnchorRestLocalPos);
     }
@@ -4096,6 +6009,19 @@ export const createRuntime: CharacterRuntimeFactory = ({
     handleProjectileBlockHit: handleRuntimeProjectileBlockHit,
     getMovementSpeedMultiplier: () => {
       const baseMultiplier = baseRuntime.getMovementSpeedMultiplier?.() ?? 1;
+      if (isSkillQCastActive()) {
+        return baseMultiplier * skillQCastMoveSpeedMultiplier;
+      }
+      const weaponPrimaryActionRunning = Boolean(
+        normalAttackWeaponBinding?.action.isRunning()
+      );
+      if (
+        weaponPrimaryAttackState.active &&
+        primaryAttackHeld &&
+        weaponPrimaryActionRunning
+      ) {
+        return baseMultiplier * normalAttackWeaponMoveSpeedMultiplier;
+      }
       if (isBareSkillRCastActive()) {
         return baseMultiplier * 0.3;
       }
@@ -4108,10 +6034,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       if (isBareSkillQCastActive()) return true;
       return baseRuntime.isMovementLocked?.() ?? false;
     },
-    getSkillCooldownRemainingMs: baseRuntime.getSkillCooldownRemainingMs,
-    getSkillCooldownDurationMs: baseRuntime.getSkillCooldownDurationMs,
+    getSkillCooldownRemainingMs,
+    getSkillCooldownDurationMs,
     getSkillHudIndicators: baseRuntime.getSkillHudIndicators,
-    beforeSkillUse: baseRuntime.beforeSkillUse,
+    beforeSkillUse,
     beforeDamage: baseRuntime.beforeDamage,
     beforeStatusApply: baseRuntime.beforeStatusApply,
     isImmuneToStatus: baseRuntime.isImmuneToStatus,
@@ -4137,7 +6063,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       lastAvatarModel = null;
       primaryAttackChargeOrb.removeFromParent();
       clearSkillQBareGateState(true);
+      clearPurcleSmokeFxState();
       skillRBareFxRoot.removeFromParent();
+      skillEBareSummonFxRoot.removeFromParent();
       clearSkillRBareShockwaves();
       primaryAttackChargeCore.geometry.dispose();
       primaryAttackChargeCore.material.dispose();
@@ -4162,6 +6090,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillEWeaponExplosionRingInnerGeometry.dispose();
       skillEWeaponExplosionShockDiskGeometry.dispose();
       skillEWeaponExplosionParticleGeometry.dispose();
+      skillEBareSummonParticleGeometry.dispose();
+      purcleSmokeParticleGeometry.dispose();
+      for (let i = 0; i < skillEBareSummonParticles.length; i += 1) {
+        skillEBareSummonParticles[i].material.dispose();
+      }
       baseRuntime.dispose();
     },
     isFacingLocked: () => {

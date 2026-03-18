@@ -5,6 +5,7 @@ import type { StatusEffectApplication } from "../../character/general/types";
 import type { ProjectileBlockHitHandler } from "../../../object/projectile/blocking";
 import {
   applyDamageToSlimluThreatOrPlayer,
+  collectActiveSlimluThreatTargets,
   resolveSlimluThreatTargetForEnemy,
 } from "../../character/slimlu/threatRegistry";
 import { Monster } from "../general";
@@ -168,6 +169,7 @@ export const createMochiGeneralBossLifecycle = ({
   const idleSmokeParticles: EntranceSmokeParticle[] = [];
   const pendingSmokeBursts: PendingEntranceSmokeBurst[] = [];
   const preparedBossModels: PreparedBossModel[] = [];
+  const meleeTargets: THREE.Object3D[] = [];
 
   let prototype: THREE.Object3D | null = null;
   let spawned = 0;
@@ -517,6 +519,10 @@ export const createMochiGeneralBossLifecycle = ({
       handleProjectileBlockHit,
     }) => {
       let updateTarget: THREE.Object3D | null = null;
+      collectActiveSlimluThreatTargets(meleeTargets);
+      if (!meleeTargets.includes(player)) {
+        meleeTargets.push(player);
+      }
       for (let i = entries.length - 1; i >= 0; i -= 1) {
         const entry = entries[i];
         if (!entry.monster.isAlive) {
@@ -534,11 +540,18 @@ export const createMochiGeneralBossLifecycle = ({
           entry,
           delta,
           player: resolvedTarget,
+          meleeTargets,
           gameEnded: isGameEnded(),
           isBlocked,
           applyDamage: (amount) =>
             applyDamageToSlimluThreatOrPlayer({
               target: resolvedTarget,
+              amount,
+              applyPlayerDamage: applyDamage,
+            }),
+          applyDamageToTarget: (target, amount) =>
+            applyDamageToSlimluThreatOrPlayer({
+              target,
               amount,
               applyPlayerDamage: applyDamage,
             }),
@@ -566,7 +579,8 @@ export const createMochiGeneralBossLifecycle = ({
             amount,
             applyPlayerDamage: applyDamage,
           }),
-        applyStatusEffect,
+        applyStatusEffect: (effect) =>
+          resolvedUpdateTarget === player ? applyStatusEffect(effect) : false,
         gameEnded: isGameEnded(),
         projectileBlockers,
         handleProjectileBlockHit,
