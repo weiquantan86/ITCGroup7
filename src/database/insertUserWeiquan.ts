@@ -33,7 +33,7 @@ async function assignUserResources(userId: number, amount: number) {
   );
 }
 
-async function initUserWeiquan() {
+async function insertUserWeiquan() {
   const account = {
     email: 'weiquan.itc7@gmail.com',
     phone: '90000001',
@@ -114,13 +114,13 @@ async function initUserWeiquan() {
     await assignUserResources(userId, DEFAULT_SEED_RESOURCE_AMOUNT);
 
     await pool.query('COMMIT');
-    console.log('initUserWeiquan completed: user reset with starter characters and seed resources');
+    console.log('insertUserWeiquan completed: user reset with starter characters and seed resources');
   } catch (err) {
     await pool.query('ROLLBACK');
-    console.error('Error initUserWeiquan:', err);
+    console.error('Error insertUserWeiquan:', err);
   } finally {
     await pool.end();
   }
 }
 
-initUserWeiquan();
+insertUserWeiquan();

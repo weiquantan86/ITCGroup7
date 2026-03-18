@@ -34,7 +34,8 @@ type MenuArtKind =
   | "surge"
   | "battle"
   | "lab"
-  | "subgame";
+  | "subgame"
+  | "starshop";
 
 function MenuArtwork({ kind }: { kind: MenuArtKind }) {
   const baseProps = {
@@ -115,6 +116,15 @@ function MenuArtwork({ kind }: { kind: MenuArtKind }) {
           <circle {...baseProps} cx="90" cy="88" r="8" />
           <circle {...baseProps} cx="123" cy="105" r="8" />
           <circle {...baseProps} cx="175" cy="61" r="8" />
+        </svg>
+      );
+    case "starshop":
+      return (
+        <svg viewBox="0 0 240 180" className="h-full w-full text-white/78" aria-hidden="true">
+          <path {...baseProps} d="m67 86 11-24 33-4 19-22 16 23 32 5 12 22-18 22 4 32-30 13-16 24-23-20-33 7-6-33-29-16 8-31-18-28Z" />
+          <path {...baseProps} d="m120 66 8 16 18 3-13 12 3 18-16-9-16 9 3-18-13-12 18-3 8-16Z" />
+          <path {...baseProps} d="M51 145h138M164 145l8 20m-92-20-8 20" />
+          <path {...baseProps} d="M183 74h22m-11-11v22" />
         </svg>
       );
   }
@@ -357,7 +367,7 @@ export default async function UserPage() {
 
             <Panel className="grid h-full min-h-0 grid-rows-2 gap-6">
               <MenuButton label="Subgame1" art="subgame" className="h-full" />
-              <MenuButton label="Subgame2" art="subgame" className="h-full" />
+              <MenuButton label="Star Shop" art="starshop" className="h-full" href="/starshop" />
             </Panel>
           </div>
         </div>
