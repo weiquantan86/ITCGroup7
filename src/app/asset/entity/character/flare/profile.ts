@@ -15,6 +15,7 @@ export const profile: CharacterProfile = {
     passivePerSecond: 0.5,
   },
   camera: {
+    hideLocalBody: true,
     miniBehindDistance: 6.9,
     miniUpDistance: 4.2,
   },

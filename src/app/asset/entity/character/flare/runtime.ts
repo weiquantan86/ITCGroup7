@@ -48,10 +48,13 @@ const secondaryBurnPrimaryHoldSpinMultiplier = 2;
 const skillQBurningModeDurationMs = 20000;
 const burningModeHeadFallbackRelativeOffset = new THREE.Vector3(0, 1.22, 0);
 // Q flame tuning knobs: offset is x/y/z, rotation is degrees x/y/z.
-const burningModeRelativeOffset = new THREE.Vector3(0, -0.2, 0);
+const burningModeRelativeOffset = new THREE.Vector3(0, -1.8, -1.2);
 const burningModeRelativeRotationDegrees = new THREE.Vector3(0, 0, 0);
 const burningModeHeadFadeMs = 260;
 const burningModeHeadLift = 0.18;
+const burningModeHeadFallbackFromHeadLift = 1.55;
+const burningModeHeadFxScale = 1.5;
+const burningModeHeadFxWidthScale = 2;
 const burningModeCoverPadding = new THREE.Vector3(0.34, 0.3, 0.78);
 const burningModePreludeDurationMs = 1500;
 const burningModePreludeGatherStartProgress = 0.2;
@@ -65,6 +68,12 @@ const secondaryBurnFallbackLocalOffset = new THREE.Vector3(0, 2.6, 0);
 const secondaryBurnOppositeFallbackLocalOffset = new THREE.Vector3(0, 1.62, 0);
 const secondaryBurnTipNudge = -0.06;
 const secondaryBurnTipBandRatio = 0.04;
+const secondaryBurnFxTopLift = 0.06;
+const secondaryBurnFxTipDistanceBandRatio = 0.04;
+const secondaryBurnAnchorResampleIntervalMs = 8;
+const secondaryBurnAnchorWeaponBonePattern = /weapon/i;
+const secondaryBurnAnchorFallbackBoneIncludePattern = /(weapon|hand|arm)/i;
+const secondaryBurnAnchorFallbackBoneExcludePattern = /(head|shoe|leg|foot)/i;
 const secondaryBurnLandingMinTravel = 0.14;
 const secondaryBurnLandingRecoveryDistance = 0.012;
 const secondaryBurnLandingProgressFloor = 0.22;
@@ -150,6 +159,11 @@ const superBurnThirdAttackPoolMaxHitsPerTick = 8;
 const superBurnThirdAttackPoolMaxActive = 3;
 const superBurnThirdAttackPoolFlameCount = 12;
 const superBurnThirdAttackPoolSparkCount = 22;
+const superBurnThirdAttackPoolVisualUpdateIntervalMsNear = 16;
+const superBurnThirdAttackPoolVisualUpdateIntervalMsFar = 42;
+const superBurnThirdAttackPoolHighDetailDistance = 11;
+const superBurnThirdAttackPoolHighDetailDistanceSq =
+  superBurnThirdAttackPoolHighDetailDistance * superBurnThirdAttackPoolHighDetailDistance;
 const superBurnSkillRFanTickIntervalMs = 500;
 const superBurnSkillRFanTickDamage = 15;
 const superBurnSkillRFanRange = 10;
@@ -185,6 +199,9 @@ const skillQEPreludeOpacityBoost = 1.9;
 const flareWeaponSweepRadiusScale = 0.22;
 const flareWeaponContactRadiusScale = 0.16;
 const flareWeaponSweepMaxDistance = 0.72;
+const flareFirstPersonVisibleBonePattern = /(hand|weapon|arm)/i;
+const flareMainCameraLayerMask = 1 << 0;
+const flareMiniBodyCameraLayerMask = 1 << 2;
 
 const createBurstDirections = (count: number) => {
   const directions: THREE.Vector3[] = [];
@@ -296,6 +313,20 @@ type AttackClipBinding = ActionBinding & {
 
 type WeaponSampleState = {
   hasWeaponSample: boolean;
+};
+
+type FirstPersonProxyMaterialState = {
+  material: THREE.Material;
+  colorWrite: boolean;
+  depthWrite: boolean;
+  depthTest: boolean;
+};
+
+type FirstPersonMeshSplitEntry = {
+  source: THREE.SkinnedMesh;
+  sourceLayerMask: number;
+  proxy: THREE.SkinnedMesh;
+  proxyMaterialStates: FirstPersonProxyMaterialState[];
 };
 
 type SecondaryBurnEmber = {
@@ -510,6 +541,7 @@ type SuperBurnFlamePoolEntry = {
   expiresAt: number;
   nextTickAt: number;
   phase: number;
+  lastVisualUpdateAt: number;
   core: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   coreMaterial: THREE.MeshBasicMaterial;
   ring: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
@@ -768,32 +800,67 @@ const makeLoopSeamlessClip = (clip: THREE.AnimationClip | null) => {
 
 const findWeaponNode = (model: THREE.Object3D) => {
   let exactBone: THREE.Object3D | null = null;
+  let exactNonMesh: THREE.Object3D | null = null;
   let exactMesh: THREE.Object3D | null = null;
+  let fallbackBone: THREE.Object3D | null = null;
+  let fallbackNonMesh: THREE.Object3D | null = null;
+  let fallbackMesh: THREE.Object3D | null = null;
 
   model.traverse((child) => {
-    if (child.name !== "Weapon") return;
-    if ((child as THREE.Mesh).isMesh) {
+    if (!child.name) return;
+    const normalizedName = child.name.trim().toLowerCase();
+    if (!normalizedName) return;
+    const isExactWeaponName = /^weapon(?:_[0-9]+)?$/i.test(normalizedName);
+    const isWeaponLikeName =
+      isExactWeaponName || normalizedName.includes("weapon");
+    if (!isWeaponLikeName) return;
+    const isMesh = (child as THREE.Mesh).isMesh === true;
+    const isBone = (child as THREE.Bone).isBone === true;
+
+    if (isExactWeaponName) {
+      if (isBone) {
+        if (!exactBone) {
+          exactBone = child;
+        }
+        return;
+      }
+      if (!isMesh) {
+        if (!exactNonMesh) {
+          exactNonMesh = child;
+        }
+        return;
+      }
       if (!exactMesh) {
         exactMesh = child;
       }
       return;
     }
-    if (!exactBone) {
-      exactBone = child;
+
+    if (isBone) {
+      if (!fallbackBone) {
+        fallbackBone = child;
+      }
+      return;
+    }
+    if (!isMesh) {
+      if (!fallbackNonMesh) {
+        fallbackNonMesh = child;
+      }
+      return;
+    }
+    if (!fallbackMesh) {
+      fallbackMesh = child;
     }
   });
 
-  if (exactBone) return exactBone;
-  if (exactMesh) return exactMesh;
-
-  let fallback: THREE.Object3D | null = null;
-  model.traverse((child) => {
-    if (fallback || !child.name) return;
-    if (/weapon/i.test(child.name)) {
-      fallback = child;
-    }
-  });
-  return fallback;
+  return (
+    exactBone ??
+    exactNonMesh ??
+    fallbackBone ??
+    fallbackNonMesh ??
+    exactMesh ??
+    fallbackMesh
+  );
 };
 
 const findCoverNode = (model: THREE.Object3D) => {
@@ -813,6 +880,106 @@ const findCoverNode = (model: THREE.Object3D) => {
   });
 
   return exact ?? fallback;
+};
+
+const findHeadNode = (model: THREE.Object3D) => {
+  let exact: THREE.Object3D | null = null;
+  let fallback: THREE.Object3D | null = null;
+
+  model.traverse((child) => {
+    if (!child.name) return;
+    const nodeName = child.name.trim().toLowerCase();
+    if (!exact && nodeName === "head") {
+      exact = child;
+      return;
+    }
+    if (!fallback && /head|face|helmet|mask/i.test(nodeName)) {
+      fallback = child;
+    }
+  });
+
+  return exact ?? fallback;
+};
+
+const isFirstPersonVisibleBoneName = (boneName: string) =>
+  flareFirstPersonVisibleBonePattern.test(boneName.trim().toLowerCase());
+
+const buildFirstPersonVisibleProxyGeometry = (mesh: THREE.SkinnedMesh) => {
+  const geometry = mesh.geometry;
+  const skinIndex = geometry.getAttribute("skinIndex") as THREE.BufferAttribute | null;
+  const skinWeight = geometry.getAttribute("skinWeight") as THREE.BufferAttribute | null;
+  const bones = mesh.skeleton?.bones ?? [];
+  if (!skinIndex || !skinWeight || !bones.length) return null;
+
+  const vertexCount = Math.min(skinIndex.count, skinWeight.count);
+  if (vertexCount <= 0) return null;
+  const keepVertex = new Uint8Array(vertexCount);
+  for (let i = 0; i < vertexCount; i += 1) {
+    let dominantWeight = -Infinity;
+    let dominantJoint = -1;
+    const j0 = Math.floor(skinIndex.getX(i));
+    const j1 = Math.floor(skinIndex.getY(i));
+    const j2 = Math.floor(skinIndex.getZ(i));
+    const j3 = Math.floor(skinIndex.getW(i));
+    const w0 = skinWeight.getX(i);
+    const w1 = skinWeight.getY(i);
+    const w2 = skinWeight.getZ(i);
+    const w3 = skinWeight.getW(i);
+    if (w0 > dominantWeight) {
+      dominantWeight = w0;
+      dominantJoint = j0;
+    }
+    if (w1 > dominantWeight) {
+      dominantWeight = w1;
+      dominantJoint = j1;
+    }
+    if (w2 > dominantWeight) {
+      dominantWeight = w2;
+      dominantJoint = j2;
+    }
+    if (w3 > dominantWeight) {
+      dominantWeight = w3;
+      dominantJoint = j3;
+    }
+    const dominantBoneName =
+      dominantJoint >= 0 && dominantJoint < bones.length ? bones[dominantJoint].name : "";
+    if (isFirstPersonVisibleBoneName(dominantBoneName)) {
+      keepVertex[i] = 1;
+    }
+  }
+
+  const keptIndices: number[] = [];
+  const sourceIndex = geometry.getIndex();
+  if (sourceIndex) {
+    for (let i = 0; i + 2 < sourceIndex.count; i += 3) {
+      const a = sourceIndex.getX(i);
+      const b = sourceIndex.getX(i + 1);
+      const c = sourceIndex.getX(i + 2);
+      if (
+        a < vertexCount &&
+        b < vertexCount &&
+        c < vertexCount &&
+        keepVertex[a] === 1 &&
+        keepVertex[b] === 1 &&
+        keepVertex[c] === 1
+      ) {
+        keptIndices.push(a, b, c);
+      }
+    }
+  } else {
+    for (let i = 0; i + 2 < vertexCount; i += 3) {
+      if (keepVertex[i] === 1 && keepVertex[i + 1] === 1 && keepVertex[i + 2] === 1) {
+        keptIndices.push(i, i + 1, i + 2);
+      }
+    }
+  }
+  if (!keptIndices.length) return null;
+
+  const proxyGeometry = geometry.clone();
+  proxyGeometry.setIndex(keptIndices);
+  proxyGeometry.computeBoundingSphere();
+  proxyGeometry.computeBoundingBox();
+  return proxyGeometry;
 };
 
 const findDominantSkinBone = (mesh: THREE.SkinnedMesh) => {
@@ -965,11 +1132,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const burningModeHeadSurfaceVertex = new THREE.Vector3();
   const burningModeHeadSurfaceBoundsCorner = new THREE.Vector3();
   const burningModeAnchorWorldQuaternion = new THREE.Quaternion();
+  const burningModeAnchorNeutralizeQuaternion = new THREE.Quaternion();
   const burningModePreludeWorldTarget = new THREE.Vector3();
   const burningModePreludeAuraTargetLocal = new THREE.Vector3();
   const burningModePreludeParticlePosition = new THREE.Vector3();
   const currentWeaponWorldPosition = new THREE.Vector3();
   const previousWeaponWorldPosition = new THREE.Vector3();
+  const currentWeaponFxWorldPosition = new THREE.Vector3();
+  const previousWeaponFxWorldPosition = new THREE.Vector3();
   const currentWeaponOppositeWorldPosition = new THREE.Vector3();
   const previousWeaponOppositeWorldPosition = new THREE.Vector3();
   const weaponContactMidpointWorldPosition = new THREE.Vector3();
@@ -977,7 +1147,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const primaryHoldForwardMidContactWorldPosition = new THREE.Vector3();
   const swingDelta = new THREE.Vector3();
   const skillRDirection = new THREE.Vector3();
+  const firstPersonHiddenBoneMaskViewport = new THREE.Vector4();
   const secondaryBurnAnchorLocal = secondaryBurnFallbackLocalOffset.clone();
+  const secondaryBurnFxAnchorLocal = secondaryBurnFallbackLocalOffset.clone();
   const secondaryBurnOppositeAnchorLocal =
     secondaryBurnOppositeFallbackLocalOffset.clone();
   const secondaryBurnHoldTopLocal = new THREE.Vector3(1.14, 2.64, -0.05);
@@ -987,9 +1159,34 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const secondaryBurnTipDirection = new THREE.Vector3();
   const secondaryBurnTipRangeMin = new THREE.Vector3(Infinity, Infinity, Infinity);
   const secondaryBurnTipRangeMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  const secondaryBurnFallbackTipRangeMin = new THREE.Vector3(
+    Infinity,
+    Infinity,
+    Infinity
+  );
+  const secondaryBurnFallbackTipRangeMax = new THREE.Vector3(
+    -Infinity,
+    -Infinity,
+    -Infinity
+  );
+  const secondaryBurnFxTipRangeMin = new THREE.Vector3(Infinity, Infinity, Infinity);
+  const secondaryBurnFxTipRangeMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  const secondaryBurnFxFallbackTipRangeMin = new THREE.Vector3(
+    Infinity,
+    Infinity,
+    Infinity
+  );
+  const secondaryBurnFxFallbackTipRangeMax = new THREE.Vector3(
+    -Infinity,
+    -Infinity,
+    -Infinity
+  );
   const secondaryBurnTipAccum = new THREE.Vector3();
   const secondaryBurnOppositeTipAccum = new THREE.Vector3();
   const secondaryBurnTipSamples: THREE.Vector3[] = [];
+  const secondaryBurnFallbackTipSamples: THREE.Vector3[] = [];
+  const secondaryBurnFxTipSamples: THREE.Vector3[] = [];
+  const secondaryBurnFxFallbackTipSamples: THREE.Vector3[] = [];
   const secondaryBurnHoldAxisLocal = new THREE.Vector3();
   const secondaryBurnHoldMidLocal = new THREE.Vector3();
   const secondaryBurnPreludeWorldTarget = new THREE.Vector3();
@@ -1154,12 +1351,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
   avatar.add(primaryHoldReflectBlocker);
   const secondaryBurnPreludeFxRoot = new THREE.Group();
   secondaryBurnPreludeFxRoot.visible = false;
-  secondaryBurnPreludeFxRoot.position.copy(secondaryBurnAnchorLocal);
+  secondaryBurnPreludeFxRoot.position.copy(secondaryBurnFxAnchorLocal);
   const secondaryBurnPreludeAuraFxRoot = new THREE.Group();
   secondaryBurnPreludeAuraFxRoot.visible = false;
   const secondaryBurnFxRoot = new THREE.Group();
   secondaryBurnFxRoot.visible = false;
-  secondaryBurnFxRoot.position.copy(secondaryBurnAnchorLocal);
+  secondaryBurnFxRoot.position.copy(secondaryBurnFxAnchorLocal);
   const secondaryBurnHoldTopFxRoot = new THREE.Group();
   secondaryBurnHoldTopFxRoot.visible = false;
   secondaryBurnHoldTopFxRoot.position.copy(secondaryBurnHoldTopLocal);
@@ -2523,6 +2720,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.expiresAt = 0;
     entry.nextTickAt = 0;
     entry.phase = 0;
+    entry.lastVisualUpdateAt = 0;
 
     entry.core.position.set(0, 0.01, 0);
     entry.core.rotation.set(-Math.PI * 0.5, 0, 0);
@@ -2677,6 +2875,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       expiresAt: 0,
       nextTickAt: 0,
       phase: 0,
+      lastVisualUpdateAt: 0,
       core,
       coreMaterial,
       ring,
@@ -2763,6 +2962,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.expiresAt = now + superBurnThirdAttackPoolDurationMs;
     entry.nextTickAt = now + superBurnThirdAttackPoolTickMs;
     entry.phase = Math.random() * Math.PI * 2;
+    entry.lastVisualUpdateAt = -Infinity;
 
     activeSuperBurnFlamePools.push(entry);
   };
@@ -2777,7 +2977,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
         continue;
       }
 
-      const t = (now - entry.startedAt) * 0.001;
       const lifeProgress = THREE.MathUtils.clamp(
         (now - entry.startedAt) / Math.max(1, entry.expiresAt - entry.startedAt),
         0,
@@ -2786,61 +2985,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
       const fadeIn = THREE.MathUtils.smoothstep(lifeProgress, 0, 0.12);
       const fadeOut = 1 - THREE.MathUtils.smoothstep(lifeProgress, 0.72, 1);
       const fade = fadeIn * fadeOut;
-      const pulse =
-        1 + Math.sin(t * 6.6 + entry.phase) * 0.14 + Math.cos(t * 3.8 + entry.phase) * 0.07;
-
-      entry.core.scale.setScalar(entry.radius * pulse);
-      entry.ring.scale.setScalar(entry.radius * (1.02 + pulse * 0.08));
-      entry.ring.rotation.z = t * 1.5 + entry.phase;
-      entry.glow.scale.set(
-        entry.radius * (1.72 + pulse * 0.16),
-        0.46 + pulse * 0.08,
-        entry.radius * (1.72 + pulse * 0.16)
-      );
-
-      entry.coreMaterial.opacity = Math.min(1, 0.52 * fade);
-      entry.ringMaterial.opacity = Math.min(1, 0.62 * fade);
-      entry.glowMaterial.opacity = Math.min(1, 0.34 * fade);
-      entry.light.intensity = fade * (1.4 + pulse * 0.9);
-      entry.light.distance = entry.radius * (2.4 + pulse * 0.8);
-
-      for (let j = 0; j < entry.flames.length; j += 1) {
-        const flame = entry.flames[j];
-        const spin = t * flame.orbitSpeed + flame.phase;
-        const surge = 0.82 + Math.sin(t * (8.8 + j * 0.22) + flame.phase) * 0.22;
-        flame.mesh.position.set(
-          Math.cos(spin) * flame.orbitRadius * entry.radius,
-          0.03 + surge * 0.16,
-          Math.sin(spin) * flame.orbitRadius * entry.radius
-        );
-        flame.mesh.rotation.set(
-          Math.sin(spin) * flame.tilt,
-          spin + t * 0.8,
-          Math.cos(spin) * flame.tilt
-        );
-        flame.mesh.scale
-          .copy(flame.baseScale)
-          .multiplyScalar((0.54 + surge * 0.34) * (entry.radius * 0.56));
-        flame.material.opacity = Math.min(1, fade * (0.44 + surge * 0.26));
-      }
-
-      for (let j = 0; j < entry.sparks.length; j += 1) {
-        const spark = entry.sparks[j];
-        const spin = t * spark.orbitSpeed + spark.phase;
-        const risePhase = THREE.MathUtils.euclideanModulo(
-          t * (0.7 + j * 0.03) + spark.phase * 0.18,
-          1
-        );
-        spark.mesh.visible = fade > 0.001;
-        spark.mesh.position.set(
-          Math.cos(spin) * spark.orbitRadius * entry.radius * (0.44 + risePhase * 0.56),
-          0.08 + risePhase * spark.lift,
-          Math.sin(spin) * spark.orbitRadius * entry.radius * (0.44 + risePhase * 0.56)
-        );
-        spark.mesh.rotation.set(spin * 1.2, spin, spin * 1.7);
-        spark.mesh.scale.setScalar(spark.scale * (0.56 + risePhase * 0.58));
-        spark.material.opacity = Math.min(1, fade * (1 - risePhase * 0.72) * 0.52);
-      }
 
       while (entry.nextTickAt <= entry.expiresAt && now + 0.001 >= entry.nextTickAt) {
         if (performMeleeAttack) {
@@ -2872,6 +3016,98 @@ export const createRuntime: CharacterRuntimeFactory = ({
           });
         }
         entry.nextTickAt += superBurnThirdAttackPoolTickMs;
+      }
+
+      entry.root.visible = fade > 0.001;
+      if (fade <= 0.001) {
+        entry.light.intensity = 0;
+        entry.light.distance = 0;
+        continue;
+      }
+
+      const isHighDetailPool =
+        !hasAimOriginWorld ||
+        latestAimOriginWorld.distanceToSquared(entry.center) <=
+          superBurnThirdAttackPoolHighDetailDistanceSq;
+      const visualUpdateIntervalMs = isHighDetailPool
+        ? superBurnThirdAttackPoolVisualUpdateIntervalMsNear
+        : superBurnThirdAttackPoolVisualUpdateIntervalMsFar;
+      if (
+        Number.isFinite(entry.lastVisualUpdateAt) &&
+        now - entry.lastVisualUpdateAt < visualUpdateIntervalMs
+      ) {
+        continue;
+      }
+      entry.lastVisualUpdateAt = now;
+
+      const t = (now - entry.startedAt) * 0.001;
+      const pulse =
+        1 + Math.sin(t * 6.6 + entry.phase) * 0.14 + Math.cos(t * 3.8 + entry.phase) * 0.07;
+      const flameUpdateStride = isHighDetailPool ? 1 : 2;
+      const sparkUpdateStride = isHighDetailPool ? 1 : 3;
+
+      entry.core.scale.setScalar(entry.radius * pulse);
+      entry.ring.scale.setScalar(entry.radius * (1.02 + pulse * 0.08));
+      entry.ring.rotation.z = t * 1.5 + entry.phase;
+      entry.glow.scale.set(
+        entry.radius * (1.72 + pulse * 0.16),
+        0.46 + pulse * 0.08,
+        entry.radius * (1.72 + pulse * 0.16)
+      );
+
+      entry.coreMaterial.opacity = Math.min(1, 0.52 * fade);
+      entry.ringMaterial.opacity = Math.min(1, 0.62 * fade);
+      entry.glowMaterial.opacity = Math.min(1, 0.34 * fade);
+      entry.light.intensity = fade * (1.4 + pulse * 0.9);
+      entry.light.distance = entry.radius * (2.4 + pulse * 0.8);
+
+      for (let j = 0; j < entry.flames.length; j += 1) {
+        const flame = entry.flames[j];
+        const shouldUpdateFlame = j % flameUpdateStride === 0;
+        flame.mesh.visible = shouldUpdateFlame;
+        if (!shouldUpdateFlame) {
+          flame.material.opacity = 0;
+          continue;
+        }
+        const spin = t * flame.orbitSpeed + flame.phase;
+        const surge = 0.82 + Math.sin(t * (8.8 + j * 0.22) + flame.phase) * 0.22;
+        flame.mesh.position.set(
+          Math.cos(spin) * flame.orbitRadius * entry.radius,
+          0.03 + surge * 0.16,
+          Math.sin(spin) * flame.orbitRadius * entry.radius
+        );
+        flame.mesh.rotation.set(
+          Math.sin(spin) * flame.tilt,
+          spin + t * 0.8,
+          Math.cos(spin) * flame.tilt
+        );
+        flame.mesh.scale
+          .copy(flame.baseScale)
+          .multiplyScalar((0.54 + surge * 0.34) * (entry.radius * 0.56));
+        flame.material.opacity = Math.min(1, fade * (0.44 + surge * 0.26));
+      }
+
+      for (let j = 0; j < entry.sparks.length; j += 1) {
+        const spark = entry.sparks[j];
+        const shouldUpdateSpark = j % sparkUpdateStride === 0;
+        spark.mesh.visible = shouldUpdateSpark;
+        if (!shouldUpdateSpark) {
+          spark.material.opacity = 0;
+          continue;
+        }
+        const spin = t * spark.orbitSpeed + spark.phase;
+        const risePhase = THREE.MathUtils.euclideanModulo(
+          t * (0.7 + j * 0.03) + spark.phase * 0.18,
+          1
+        );
+        spark.mesh.position.set(
+          Math.cos(spin) * spark.orbitRadius * entry.radius * (0.44 + risePhase * 0.56),
+          0.08 + risePhase * spark.lift,
+          Math.sin(spin) * spark.orbitRadius * entry.radius * (0.44 + risePhase * 0.56)
+        );
+        spark.mesh.rotation.set(spin * 1.2, spin, spin * 1.7);
+        spark.mesh.scale.setScalar(spark.scale * (0.56 + risePhase * 0.58));
+        spark.material.opacity = Math.min(1, fade * (1 - risePhase * 0.72) * 0.52);
       }
     }
   };
@@ -3023,11 +3259,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let boundModel: THREE.Object3D | null = null;
   let boundBurningModeSurface: THREE.Object3D | null = null;
   let boundBurningModeAnchor: THREE.Object3D | null = null;
+  let boundBurningModeFallbackHead: THREE.Object3D | null = null;
   let boundWeapon: THREE.Object3D | null = null;
   let boundWeaponMeshes: THREE.Mesh<
     THREE.BufferGeometry,
     THREE.Material | THREE.Material[]
   >[] = [];
+  let firstPersonHiddenBoneMaskSplitEntries: FirstPersonMeshSplitEntry[] = [];
   let mixer: THREE.AnimationMixer | null = null;
   let walkAction: THREE.AnimationAction | null = null;
   let walkLegsAction: THREE.AnimationAction | null = null;
@@ -3044,6 +3282,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let lastCompletedAttackAt = -Infinity;
   let runtimeFrameStamp = 0;
   let boundWeaponMatrixFrameStamp = -1;
+  let secondaryBurnAnchorLastResolvedAt = -Infinity;
 
   const attackState = {
     active: false,
@@ -3197,13 +3436,28 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const getBurningModeHeadFxAnchor = () =>
-    boundBurningModeAnchor ?? boundBurningModeSurface ?? avatar;
+    boundBurningModeAnchor ??
+    boundBurningModeSurface ??
+    boundBurningModeFallbackHead ??
+    avatar;
 
   const resolveBurningModeHeadLayout = () => {
     burningModeHeadRelativeOffset.copy(burningModeHeadFallbackRelativeOffset);
     burningModeHeadSurfaceSize.set(0.86, 1.34, 0.58);
 
-    if (!boundBurningModeSurface) return;
+    if (!boundBurningModeSurface) {
+      if (boundBurningModeFallbackHead) {
+        const anchor = getBurningModeHeadFxAnchor();
+        anchor.updateMatrixWorld(true);
+        boundBurningModeFallbackHead.updateMatrixWorld(true);
+        boundBurningModeFallbackHead.getWorldPosition(burningModeHeadSurfaceVertex);
+        burningModeHeadRelativeOffset.copy(burningModeHeadSurfaceVertex);
+        anchor.worldToLocal(burningModeHeadRelativeOffset);
+        burningModeHeadRelativeOffset.y += burningModeHeadFallbackFromHeadLift;
+        burningModeHeadRelativeOffset.add(burningModeRelativeOffset);
+      }
+      return;
+    }
 
     const anchor = getBurningModeHeadFxAnchor();
     boundBurningModeSurface.updateMatrixWorld(true);
@@ -3277,8 +3531,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const syncBurningModeHeadFxLayers = () => {
-    const layerSource = boundBurningModeSurface ?? boundBurningModeAnchor ?? avatar;
-    const layerMask = layerSource.layers.mask;
+    const layerSource =
+      boundBurningModeAnchor ??
+      boundBurningModeSurface ??
+      boundBurningModeFallbackHead ??
+      avatar;
+    const suppressFirstPersonFlame =
+      profile.camera?.hideLocalBody === true && burningModeState.active;
+    const layerMask = suppressFirstPersonFlame
+      ? flareMiniBodyCameraLayerMask
+      : layerSource.layers.mask;
     burningModeHeadFxAnchor.traverse((child) => {
       child.layers.mask = layerMask;
     });
@@ -3287,15 +3549,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const syncBurningModeHeadFxTransform = () => {
     resolveBurningModeHeadLayout();
     burningModeHeadFxAnchor.position.copy(burningModeHeadRelativeOffset);
-    const anchor = getBurningModeHeadFxAnchor();
-    anchor.updateMatrixWorld(true);
-    anchor.getWorldQuaternion(burningModeAnchorWorldQuaternion);
-    burningModeHeadFxAnchor.quaternion.copy(burningModeAnchorWorldQuaternion).invert();
+    burningModeHeadFxAnchor.quaternion.copy(burningModeAnchorNeutralizeQuaternion);
     burningModeHeadFxAnchor.scale.setScalar(1);
   };
 
   const syncBurningModePreludeFxLayers = () => {
-    const layerMask = avatar.layers.mask;
+    const suppressFirstPersonFlame =
+      profile.camera?.hideLocalBody === true && burningModeState.active;
+    const layerMask = suppressFirstPersonFlame
+      ? flareMiniBodyCameraLayerMask
+      : avatar.layers.mask;
     burningModePreludeAuraFxRoot.traverse((child) => {
       child.layers.mask = layerMask;
     });
@@ -3305,7 +3568,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
     burningModeHeadFxAnchor.removeFromParent();
     burningModePreludeAuraFxRoot.removeFromParent();
     avatar.add(burningModePreludeAuraFxRoot);
-    getBurningModeHeadFxAnchor().add(burningModeHeadFxAnchor);
+    const anchor = getBurningModeHeadFxAnchor();
+    anchor.add(burningModeHeadFxAnchor);
+    anchor.updateMatrixWorld(true);
+    anchor.getWorldQuaternion(burningModeAnchorWorldQuaternion);
+    burningModeAnchorNeutralizeQuaternion
+      .copy(burningModeAnchorWorldQuaternion)
+      .invert();
     syncBurningModePreludeFxLayers();
     syncBurningModeHeadFxLayers();
     syncBurningModeHeadFxTransform();
@@ -3313,6 +3582,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     burningModePreludeAuraFxRoot.rotation.set(0, 0, 0);
     burningModePreludeAuraFxRoot.scale.setScalar(1);
     burningModeHeadFxRoot.position.set(0, 0, 0);
+    burningModeHeadFxRoot.scale.set(
+      burningModeHeadFxScale * burningModeHeadFxWidthScale,
+      burningModeHeadFxScale,
+      burningModeHeadFxScale
+    );
     applyBurningModeHeadRotation();
   };
 
@@ -3389,6 +3663,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const resolveSecondaryBurnAnchor = () => {
     secondaryBurnAnchorLocal.copy(secondaryBurnFallbackLocalOffset);
+    secondaryBurnFxAnchorLocal.copy(secondaryBurnFallbackLocalOffset);
     secondaryBurnOppositeAnchorLocal.copy(secondaryBurnOppositeFallbackLocalOffset);
     secondaryBurnHoldTopLocal.set(1.14, 2.64, -0.05);
     secondaryBurnHoldTopSpread.set(0.16, 0.26, 0.16);
@@ -3399,46 +3674,128 @@ export const createRuntime: CharacterRuntimeFactory = ({
     secondaryBurnTipRangeMin.set(Infinity, Infinity, Infinity);
     secondaryBurnTipRangeMax.set(-Infinity, -Infinity, -Infinity);
     secondaryBurnTipSamples.length = 0;
+    secondaryBurnFallbackTipRangeMin.set(Infinity, Infinity, Infinity);
+    secondaryBurnFallbackTipRangeMax.set(-Infinity, -Infinity, -Infinity);
+    secondaryBurnFallbackTipSamples.length = 0;
+    secondaryBurnFxTipRangeMin.set(Infinity, Infinity, Infinity);
+    secondaryBurnFxTipRangeMax.set(-Infinity, -Infinity, -Infinity);
+    secondaryBurnFxTipSamples.length = 0;
+    secondaryBurnFxFallbackTipRangeMin.set(Infinity, Infinity, Infinity);
+    secondaryBurnFxFallbackTipRangeMax.set(-Infinity, -Infinity, -Infinity);
+    secondaryBurnFxFallbackTipSamples.length = 0;
 
     for (let meshIndex = 0; meshIndex < boundWeaponMeshes.length; meshIndex += 1) {
       const weaponMesh = boundWeaponMeshes[meshIndex];
       const positionAttribute = weaponMesh.geometry.getAttribute("position");
       if (!positionAttribute) continue;
+      const isSkinned = isSkinnedMeshObject(weaponMesh);
+      const skinIndexAttribute = isSkinned
+        ? (weaponMesh.geometry.getAttribute("skinIndex") as THREE.BufferAttribute | null)
+        : null;
+      const skinWeightAttribute = isSkinned
+        ? (weaponMesh.geometry.getAttribute("skinWeight") as THREE.BufferAttribute | null)
+        : null;
+      const skinBones = isSkinned ? weaponMesh.skeleton?.bones ?? [] : [];
 
       weaponMesh.updateMatrixWorld(true);
 
       for (let i = 0; i < positionAttribute.count; i += 1) {
         secondaryBurnTipCandidate.fromBufferAttribute(positionAttribute, i);
-        if (isSkinnedMeshObject(weaponMesh)) {
+        if (isSkinned) {
           weaponMesh.applyBoneTransform(i, secondaryBurnTipCandidate);
         }
         weaponMesh.localToWorld(secondaryBurnTipCandidate);
         secondaryBurnTipBest.copy(boundWeapon.worldToLocal(secondaryBurnTipCandidate));
-        secondaryBurnTipSamples.push(secondaryBurnTipBest.clone());
-        secondaryBurnTipRangeMin.min(secondaryBurnTipBest);
-        secondaryBurnTipRangeMax.max(secondaryBurnTipBest);
+        const tipSample = secondaryBurnTipBest.clone();
+        let dominantBoneName = "";
+        if (
+          skinIndexAttribute &&
+          skinWeightAttribute &&
+          skinBones.length > 0 &&
+          i < skinIndexAttribute.count &&
+          i < skinWeightAttribute.count
+        ) {
+          const j0 = Math.floor(skinIndexAttribute.getX(i));
+          const j1 = Math.floor(skinIndexAttribute.getY(i));
+          const j2 = Math.floor(skinIndexAttribute.getZ(i));
+          const j3 = Math.floor(skinIndexAttribute.getW(i));
+          const w0 = skinWeightAttribute.getX(i);
+          const w1 = skinWeightAttribute.getY(i);
+          const w2 = skinWeightAttribute.getZ(i);
+          const w3 = skinWeightAttribute.getW(i);
+          let dominantJoint = j0;
+          let dominantWeight = w0;
+          if (w1 > dominantWeight) {
+            dominantJoint = j1;
+            dominantWeight = w1;
+          }
+          if (w2 > dominantWeight) {
+            dominantJoint = j2;
+            dominantWeight = w2;
+          }
+          if (w3 > dominantWeight) {
+            dominantJoint = j3;
+          }
+          dominantBoneName =
+            dominantJoint >= 0 && dominantJoint < skinBones.length
+              ? skinBones[dominantJoint].name
+              : "";
+        }
+        const isWeaponDominantBone =
+          secondaryBurnAnchorWeaponBonePattern.test(dominantBoneName);
+        if (isWeaponDominantBone) {
+          secondaryBurnTipSamples.push(tipSample);
+          secondaryBurnTipRangeMin.min(tipSample);
+          secondaryBurnTipRangeMax.max(tipSample);
+          secondaryBurnFxTipSamples.push(tipSample);
+          secondaryBurnFxTipRangeMin.min(tipSample);
+          secondaryBurnFxTipRangeMax.max(tipSample);
+          continue;
+        }
+        const includeFallbackSample =
+          !dominantBoneName ||
+          (secondaryBurnAnchorFallbackBoneIncludePattern.test(dominantBoneName) &&
+            !secondaryBurnAnchorFallbackBoneExcludePattern.test(dominantBoneName));
+        if (includeFallbackSample) {
+          secondaryBurnFallbackTipSamples.push(tipSample);
+          secondaryBurnFallbackTipRangeMin.min(tipSample);
+          secondaryBurnFallbackTipRangeMax.max(tipSample);
+          secondaryBurnFxFallbackTipSamples.push(tipSample);
+          secondaryBurnFxFallbackTipRangeMin.min(tipSample);
+          secondaryBurnFxFallbackTipRangeMax.max(tipSample);
+        }
       }
     }
 
-    if (!secondaryBurnTipSamples.length) {
+    let tipSamples: THREE.Vector3[] = secondaryBurnTipSamples;
+    let tipRangeMin = secondaryBurnTipRangeMin;
+    let tipRangeMax = secondaryBurnTipRangeMax;
+    if (tipSamples.length === 0 && secondaryBurnFallbackTipSamples.length > 0) {
+      tipSamples = secondaryBurnFallbackTipSamples;
+      tipRangeMin = secondaryBurnFallbackTipRangeMin;
+      tipRangeMax = secondaryBurnFallbackTipRangeMax;
+    }
+
+    if (!tipSamples.length) {
       secondaryBurnAnchorLocal.copy(secondaryBurnFallbackLocalOffset);
+      secondaryBurnFxAnchorLocal.copy(secondaryBurnFallbackLocalOffset);
       secondaryBurnOppositeAnchorLocal.copy(secondaryBurnOppositeFallbackLocalOffset);
       return;
     }
 
-    const rangeX = secondaryBurnTipRangeMax.x - secondaryBurnTipRangeMin.x;
-    const rangeY = secondaryBurnTipRangeMax.y - secondaryBurnTipRangeMin.y;
-    const rangeZ = secondaryBurnTipRangeMax.z - secondaryBurnTipRangeMin.z;
+    const rangeX = tipRangeMax.x - tipRangeMin.x;
+    const rangeY = tipRangeMax.y - tipRangeMin.y;
+    const rangeZ = tipRangeMax.z - tipRangeMin.z;
     secondaryBurnHoldTopSpread.set(
       Math.max(0.08, rangeX * 0.42),
       Math.max(0.18, rangeY * 0.18),
       Math.max(0.08, rangeZ * 0.42)
     );
     secondaryBurnHoldTopLocal
-      .copy(secondaryBurnTipRangeMin)
-      .add(secondaryBurnTipRangeMax)
+      .copy(tipRangeMin)
+      .add(tipRangeMax)
       .multiplyScalar(0.5);
-    secondaryBurnHoldTopLocal.y = secondaryBurnTipRangeMax.y + 0.06;
+    secondaryBurnHoldTopLocal.y = tipRangeMax.y + 0.06;
     let majorAxis: "x" | "y" | "z" = "x";
     let majorRange = rangeX;
     if (rangeY > majorRange) {
@@ -3450,16 +3807,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
       majorRange = rangeZ;
     }
 
-    const axisMin = secondaryBurnTipRangeMin[majorAxis];
-    const axisMax = secondaryBurnTipRangeMax[majorAxis];
+    const axisMin = tipRangeMin[majorAxis];
+    const axisMax = tipRangeMax[majorAxis];
     const useAxisMax = Math.abs(axisMax) >= Math.abs(axisMin);
     const extremeValue = useAxisMax ? axisMax : axisMin;
     const bandSize = Math.max(0.02, majorRange * secondaryBurnTipBandRatio);
     secondaryBurnTipAccum.set(0, 0, 0);
     let matchedCount = 0;
 
-    for (let i = 0; i < secondaryBurnTipSamples.length; i += 1) {
-      const sample = secondaryBurnTipSamples[i];
+    for (let i = 0; i < tipSamples.length; i += 1) {
+      const sample = tipSamples[i];
       const axisValue = sample[majorAxis];
       const withinTipBand = useAxisMax
         ? axisValue >= extremeValue - bandSize
@@ -3474,16 +3831,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
         secondaryBurnTipAccum.multiplyScalar(1 / matchedCount)
       );
     } else {
-      secondaryBurnAnchorLocal.copy(
-        useAxisMax ? secondaryBurnTipRangeMax : secondaryBurnTipRangeMin
-      );
+      secondaryBurnAnchorLocal.copy(useAxisMax ? tipRangeMax : tipRangeMin);
     }
 
     const oppositeExtremeValue = useAxisMax ? axisMin : axisMax;
     secondaryBurnOppositeTipAccum.set(0, 0, 0);
     let oppositeMatchedCount = 0;
-    for (let i = 0; i < secondaryBurnTipSamples.length; i += 1) {
-      const sample = secondaryBurnTipSamples[i];
+    for (let i = 0; i < tipSamples.length; i += 1) {
+      const sample = tipSamples[i];
       const axisValue = sample[majorAxis];
       const withinOppositeBand = useAxisMax
         ? axisValue <= oppositeExtremeValue + bandSize
@@ -3497,9 +3852,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         secondaryBurnOppositeTipAccum.multiplyScalar(1 / oppositeMatchedCount)
       );
     } else {
-      secondaryBurnOppositeAnchorLocal.copy(
-        useAxisMax ? secondaryBurnTipRangeMin : secondaryBurnTipRangeMax
-      );
+      secondaryBurnOppositeAnchorLocal.copy(useAxisMax ? tipRangeMin : tipRangeMax);
     }
 
     secondaryBurnTipDirection.copy(secondaryBurnAnchorLocal);
@@ -3517,6 +3870,76 @@ export const createRuntime: CharacterRuntimeFactory = ({
         secondaryBurnTipNudge
       );
     }
+
+    let fxSamples: THREE.Vector3[] = secondaryBurnFxTipSamples;
+    let fxRangeMin = secondaryBurnFxTipRangeMin;
+    let fxRangeMax = secondaryBurnFxTipRangeMax;
+    if (fxSamples.length === 0 && secondaryBurnFxFallbackTipSamples.length > 0) {
+      fxSamples = secondaryBurnFxFallbackTipSamples;
+      fxRangeMin = secondaryBurnFxFallbackTipRangeMin;
+      fxRangeMax = secondaryBurnFxFallbackTipRangeMax;
+    }
+    if (fxSamples.length === 0) {
+      fxSamples = tipSamples;
+      fxRangeMin = tipRangeMin;
+      fxRangeMax = tipRangeMax;
+    }
+    let fxFarthestDistanceSq = -Infinity;
+    for (let i = 0; i < fxSamples.length; i += 1) {
+      const distanceSq = fxSamples[i].lengthSq();
+      if (distanceSq > fxFarthestDistanceSq) {
+        fxFarthestDistanceSq = distanceSq;
+      }
+    }
+    const fxDistanceBand = Math.max(
+      0.0001,
+      fxFarthestDistanceSq * secondaryBurnFxTipDistanceBandRatio
+    );
+    secondaryBurnTipAccum.set(0, 0, 0);
+    let topBandMatchCount = 0;
+    for (let i = 0; i < fxSamples.length; i += 1) {
+      const sample = fxSamples[i];
+      const distanceSq = sample.lengthSq();
+      if (distanceSq < fxFarthestDistanceSq - fxDistanceBand) continue;
+      secondaryBurnTipAccum.add(sample);
+      topBandMatchCount += 1;
+    }
+    if (topBandMatchCount > 0) {
+      secondaryBurnFxAnchorLocal.copy(
+        secondaryBurnTipAccum.multiplyScalar(1 / topBandMatchCount)
+      );
+    } else {
+      secondaryBurnFxAnchorLocal
+        .copy(fxRangeMin)
+        .add(fxRangeMax)
+        .multiplyScalar(0.5);
+    }
+    secondaryBurnTipDirection.copy(secondaryBurnFxAnchorLocal);
+    if (secondaryBurnTipDirection.lengthSq() > 0.000001) {
+      secondaryBurnFxAnchorLocal.addScaledVector(
+        secondaryBurnTipDirection.normalize(),
+        secondaryBurnFxTopLift
+      );
+    }
+  };
+
+  const syncSecondaryBurnAnchors = (
+    now: number,
+    {
+      force = false,
+    }: {
+      force?: boolean;
+    } = {}
+  ) => {
+    if (!boundWeapon) return;
+    if (!force && now - secondaryBurnAnchorLastResolvedAt < secondaryBurnAnchorResampleIntervalMs) {
+      return;
+    }
+    resolveSecondaryBurnAnchor();
+    secondaryBurnAnchorLastResolvedAt = now;
+    secondaryBurnPreludeFxRoot.position.copy(secondaryBurnFxAnchorLocal);
+    secondaryBurnFxRoot.position.copy(secondaryBurnFxAnchorLocal);
+    secondaryBurnHoldTopFxRoot.position.copy(secondaryBurnHoldTopLocal);
   };
 
   const attachSecondaryBurnFx = () => {
@@ -3529,14 +3952,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
     boundWeapon.add(secondaryBurnPreludeFxRoot);
     boundWeapon.add(secondaryBurnFxRoot);
     boundWeapon.add(secondaryBurnHoldTopFxRoot);
-    resolveSecondaryBurnAnchor();
+    syncSecondaryBurnAnchors(performance.now(), { force: true });
     secondaryBurnPreludeAuraFxRoot.position.set(0, 0, 0);
     secondaryBurnPreludeAuraFxRoot.rotation.set(0, 0, 0);
     secondaryBurnPreludeAuraFxRoot.scale.setScalar(1);
-    secondaryBurnPreludeFxRoot.position.copy(secondaryBurnAnchorLocal);
+    secondaryBurnPreludeFxRoot.position.copy(secondaryBurnFxAnchorLocal);
     secondaryBurnPreludeFxRoot.rotation.set(0, 0, 0);
     secondaryBurnPreludeFxRoot.scale.setScalar(1);
-    secondaryBurnFxRoot.position.copy(secondaryBurnAnchorLocal);
+    secondaryBurnFxRoot.position.copy(secondaryBurnFxAnchorLocal);
     secondaryBurnFxRoot.rotation.set(0, 0, 0);
     secondaryBurnFxRoot.scale.setScalar(1);
     secondaryBurnHoldTopFxRoot.position.copy(secondaryBurnHoldTopLocal);
@@ -3909,7 +4332,120 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetSuperBurnSkillRFanFx();
   };
 
+  const isMiniViewportRenderPass = (renderer: THREE.WebGLRenderer) => {
+    renderer.getCurrentViewport(firstPersonHiddenBoneMaskViewport);
+    return (
+      firstPersonHiddenBoneMaskViewport.x > 0.5 ||
+      firstPersonHiddenBoneMaskViewport.y > 0.5
+    );
+  };
+
+  const removeFirstPersonHiddenBoneMaskRenderHooks = () => {
+    for (let i = 0; i < firstPersonHiddenBoneMaskSplitEntries.length; i += 1) {
+      const entry = firstPersonHiddenBoneMaskSplitEntries[i];
+      entry.proxy.onBeforeRender = () => {};
+      entry.proxy.onAfterRender = () => {};
+      entry.proxy.removeFromParent();
+      entry.proxy.geometry.dispose();
+      for (let materialIndex = 0; materialIndex < entry.proxyMaterialStates.length; materialIndex += 1) {
+        entry.proxyMaterialStates[materialIndex].material.dispose();
+      }
+      entry.source.layers.mask = entry.sourceLayerMask;
+      entry.source.visible = true;
+    }
+    firstPersonHiddenBoneMaskSplitEntries = [];
+  };
+
+  const installFirstPersonHiddenBoneMaskRenderHooks = (model: THREE.Object3D) => {
+    removeFirstPersonHiddenBoneMaskRenderHooks();
+    const sourceMeshes: THREE.SkinnedMesh[] = [];
+    model.traverse((child) => {
+      if (!isSkinnedMeshObject(child) || !child.parent) return;
+      sourceMeshes.push(child);
+    });
+    for (let i = 0; i < sourceMeshes.length; i += 1) {
+      const source = sourceMeshes[i];
+      const proxyGeometry = buildFirstPersonVisibleProxyGeometry(source);
+      if (!proxyGeometry) continue;
+      const sourceMaterials = Array.isArray(source.material)
+        ? source.material
+        : [source.material];
+      const proxyMaterials = sourceMaterials.map((material) => material.clone());
+      const proxyMaterial = Array.isArray(source.material)
+        ? proxyMaterials
+        : proxyMaterials[0];
+      const proxy = new THREE.SkinnedMesh(proxyGeometry, proxyMaterial);
+      proxy.name = `${source.name || "flareMesh"}__firstPerson`;
+      proxy.bind(source.skeleton, source.bindMatrix);
+      proxy.bindMode = source.bindMode;
+      proxy.castShadow = source.castShadow;
+      proxy.receiveShadow = source.receiveShadow;
+      proxy.frustumCulled = source.frustumCulled;
+      proxy.renderOrder = source.renderOrder;
+      proxy.matrixAutoUpdate = source.matrixAutoUpdate;
+      proxy.layers.mask = flareMainCameraLayerMask;
+      proxy.position.copy(source.position);
+      proxy.quaternion.copy(source.quaternion);
+      proxy.scale.copy(source.scale);
+      source.parent.add(proxy);
+      const proxyMaterialStates: FirstPersonProxyMaterialState[] = proxyMaterials.map(
+        (material) => ({
+          material,
+          colorWrite: material.colorWrite,
+          depthWrite: material.depthWrite,
+          depthTest: material.depthTest,
+        })
+      );
+      proxy.onBeforeRender = (
+        renderer,
+        _scene,
+        _camera,
+        _geometry,
+        material
+      ) => {
+        const state = proxyMaterialStates.find((entry) => entry.material === material);
+        if (!state) return;
+        if (isMiniViewportRenderPass(renderer)) {
+          material.colorWrite = false;
+          material.depthWrite = false;
+          material.depthTest = false;
+          return;
+        }
+        material.colorWrite = state.colorWrite;
+        material.depthWrite = state.depthWrite;
+        material.depthTest = state.depthTest;
+      };
+      proxy.onAfterRender = (
+        _renderer,
+        _scene,
+        _camera,
+        _geometry,
+        material
+      ) => {
+        const state = proxyMaterialStates.find((entry) => entry.material === material);
+        if (!state) return;
+        material.colorWrite = state.colorWrite;
+        material.depthWrite = state.depthWrite;
+        material.depthTest = state.depthTest;
+      };
+      const sourceLayerMask = source.layers.mask;
+      source.layers.mask = flareMiniBodyCameraLayerMask;
+      source.visible = true;
+      firstPersonHiddenBoneMaskSplitEntries.push({
+        source,
+        sourceLayerMask,
+        proxy,
+        proxyMaterialStates,
+      });
+    }
+  };
+
+  const clearFirstPersonHiddenBoneMask = () => {
+    removeFirstPersonHiddenBoneMaskRenderHooks();
+  };
+
   const clearAnimationBinding = () => {
+    clearFirstPersonHiddenBoneMask();
     stopAllAttackActions();
     stopAllSkillActions();
     if (walkAction) {
@@ -3943,8 +4479,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     boundModel = null;
     boundBurningModeSurface = null;
     boundBurningModeAnchor = null;
+    boundBurningModeFallbackHead = null;
     boundWeapon = null;
     boundWeaponMatrixFrameStamp = -1;
+    secondaryBurnAnchorLastResolvedAt = -Infinity;
     boundWeaponMeshes = [];
     lastAnimationUpdateAt = 0;
     resetAttackState();
@@ -3975,9 +4513,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
     boundBurningModeAnchor = isSkinnedMeshObject(boundBurningModeSurface)
       ? findDominantSkinBone(boundBurningModeSurface) ?? boundBurningModeSurface
       : boundBurningModeSurface;
+    boundBurningModeFallbackHead =
+      !boundBurningModeSurface ? findHeadNode(model) : null;
     boundWeapon = findWeaponNode(model);
     boundWeaponMatrixFrameStamp = -1;
+    secondaryBurnAnchorLastResolvedAt = -Infinity;
     boundWeaponMeshes = findWeaponMeshes(model);
+    if (profile.camera?.hideLocalBody === true) {
+      installFirstPersonHiddenBoneMaskRenderHooks(model);
+    }
     mixer = new THREE.AnimationMixer(model);
 
     attachBurningModeHeadFx();
@@ -4141,6 +4685,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const getWeaponSweepSamplePosition = (target: THREE.Vector3) =>
     getWeaponSweepSamplePositionFromLocal(secondaryBurnAnchorLocal, target);
 
+  const getWeaponFxTipSamplePosition = (target: THREE.Vector3) =>
+    getWeaponSweepSamplePositionFromLocal(secondaryBurnFxAnchorLocal, target);
+
   const updatePrimaryHoldProjectileReflectBlocker = () => {
     const shouldReflect =
       primaryHoldState.active && (secondaryBurnState.active || superBurnState.active);
@@ -4186,6 +4733,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const sampleWeaponPosition = (state: WeaponSampleState) => {
     if (!getWeaponSweepSamplePosition(previousWeaponWorldPosition)) return false;
+    if (!getWeaponFxTipSamplePosition(previousWeaponFxWorldPosition)) {
+      previousWeaponFxWorldPosition.copy(previousWeaponWorldPosition);
+    }
     state.hasWeaponSample = true;
     return true;
   };
@@ -4198,6 +4748,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
     grantBasicAttackManaOnHit = false
   ) => {
     if (!performMeleeAttack || !getWeaponSweepSamplePosition(currentWeaponWorldPosition)) return;
+    if (secondaryBurnState.active) {
+      syncSecondaryBurnAnchors(now);
+    }
+    if (!getWeaponFxTipSamplePosition(currentWeaponFxWorldPosition)) {
+      currentWeaponFxWorldPosition.copy(currentWeaponWorldPosition);
+    }
     const attackDirection = directionOverride
       ? directionOverride
       : getAttackDirection(avatarForward);
@@ -4238,8 +4794,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
         ? superBurnSwingTrailSpawnIntervalMs
         : secondaryBurnSwingTrailSpawnIntervalMs;
       spawnSecondaryBurnSwingTrail({
-        start: previousWeaponWorldPosition,
-        end: currentWeaponWorldPosition,
+        start: previousWeaponFxWorldPosition,
+        end: currentWeaponFxWorldPosition,
         now,
         fallbackDirection: attackDirection,
         spawnIntervalMs: trailSpawnInterval,
@@ -4304,6 +4860,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     previousWeaponWorldPosition.copy(currentWeaponWorldPosition);
+    previousWeaponFxWorldPosition.copy(currentWeaponFxWorldPosition);
   };
 
   const startAttack = (
@@ -4882,9 +5439,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const launchAt = now;
 
     if (boundWeapon) {
-      boundWeapon.updateMatrixWorld(true);
-      skillRProjectileOrigin.copy(secondaryBurnHoldTopLocal);
-      boundWeapon.localToWorld(skillRProjectileOrigin);
+      syncSecondaryBurnAnchors(now, { force: true });
+      if (!getWeaponFxTipSamplePosition(skillRProjectileOrigin)) {
+        boundWeapon.updateMatrixWorld(true);
+        boundWeapon.getWorldPosition(skillRProjectileOrigin);
+      }
     } else {
       avatar.updateMatrixWorld(true);
       avatar.getWorldPosition(skillRProjectileOrigin);
@@ -5941,6 +6500,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     syncBurningModeHeadFxTransform();
+    syncBurningModePreludeFxLayers();
+    syncBurningModeHeadFxLayers();
     const fadeIn = THREE.MathUtils.clamp(
       (now - burningModeState.activatedAt) / burningModeHeadFadeMs,
       0,
@@ -6553,10 +7114,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
       secondaryBurnHoldTopFxRoot.visible = false;
       return;
     }
+    syncSecondaryBurnAnchors(now);
 
     secondaryBurnFxRoot.visible = fadeVisibility > 0.001;
     secondaryBurnLight.visible = fadeVisibility > 0.001;
-    secondaryBurnFxRoot.position.copy(secondaryBurnAnchorLocal);
+    secondaryBurnFxRoot.position.copy(secondaryBurnFxAnchorLocal);
     secondaryBurnHoldTopFxRoot.position.copy(secondaryBurnHoldTopLocal);
     secondaryBurnHoldTopFxRoot.quaternion.identity();
     const elapsed = Math.max(0, now - secondaryBurnState.activatedAt);
@@ -6999,9 +7561,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       return;
     }
 
+    syncSecondaryBurnAnchors(now);
     secondaryBurnPreludeAuraFxRoot.visible = true;
     secondaryBurnPreludeFxRoot.visible = true;
-    secondaryBurnPreludeFxRoot.position.copy(secondaryBurnAnchorLocal);
+    secondaryBurnPreludeFxRoot.position.copy(secondaryBurnFxAnchorLocal);
 
     const usingSkillQEPrelude = skillQEPreludeActive;
     const progress = THREE.MathUtils.clamp(
@@ -7081,7 +7644,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     boundWeapon.updateMatrixWorld(true);
     avatar.updateMatrixWorld(true);
-    secondaryBurnPreludeWorldTarget.copy(secondaryBurnAnchorLocal);
+    secondaryBurnPreludeWorldTarget.copy(secondaryBurnFxAnchorLocal);
     boundWeapon.localToWorld(secondaryBurnPreludeWorldTarget);
     secondaryBurnPreludeAuraTargetLocal.copy(secondaryBurnPreludeWorldTarget);
     avatar.worldToLocal(secondaryBurnPreludeAuraTargetLocal);
@@ -7579,6 +8142,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
     updateSecondaryBurnSkillRBurnExplosionFx(args.now);
   };
 
+  const getSkillHudIndicators = () =>
+    burningModeState.active
+      ? ({
+          q: "overdrive-ready",
+          e: "overdrive-ready",
+          r: "overdrive-ready",
+        } as const)
+      : null;
+
   return new CharacterRuntimeObject({
     setProfile: baseRuntime.setProfile,
     triggerSlash: baseRuntime.triggerSlash,
@@ -7607,6 +8179,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillRState.active,
     getSkillCooldownRemainingMs: baseRuntime.getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs: baseRuntime.getSkillCooldownDurationMs,
+    getSkillHudIndicators,
     beforeSkillUse: ({ key, now }) => {
       const baseModifierResult = baseRuntime.beforeSkillUse?.({ key, now });
       if (key !== "r" || superBurnState.active) {

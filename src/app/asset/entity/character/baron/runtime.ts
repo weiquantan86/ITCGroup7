@@ -11,6 +11,7 @@ import {
   tryReflectLinearProjectile,
   type ProjectileReflector,
 } from "../../../object/projectile/reflection";
+import { characterGltfAnimationClipsKey } from "../general/engine/characterLoader";
 import type { CharacterRuntime, CharacterRuntimeFactory } from "../general/types";
 import { profile } from "./profile";
 
@@ -18,6 +19,54 @@ type ChargeHud = {
   setVisible: (visible: boolean) => void;
   setRatio: (ratio: number) => void;
   dispose: () => void;
+};
+
+type SkillQDarknessOverlay = {
+  update: (targetOpacity: number, deltaSeconds: number) => void;
+  reset: () => void;
+  dispose: () => void;
+};
+
+const createNoopSkillQDarknessOverlay = (): SkillQDarknessOverlay => ({
+  update: () => {},
+  reset: () => {},
+  dispose: () => {},
+});
+
+const createSkillQDarknessOverlay = (mount?: HTMLElement): SkillQDarknessOverlay => {
+  if (typeof document === "undefined" || !mount) {
+    return createNoopSkillQDarknessOverlay();
+  }
+
+  const overlay = document.createElement("div");
+  overlay.style.position = "absolute";
+  overlay.style.left = "0";
+  overlay.style.top = "0";
+  overlay.style.right = "0";
+  overlay.style.bottom = "0";
+  overlay.style.pointerEvents = "none";
+  overlay.style.background = "#000";
+  overlay.style.opacity = "0";
+  overlay.style.zIndex = "2";
+  mount.appendChild(overlay);
+
+  let currentOpacity = 0;
+
+  return {
+    update: (targetOpacity, deltaSeconds) => {
+      const target = THREE.MathUtils.clamp(targetOpacity, 0, 1);
+      const blend = THREE.MathUtils.clamp(deltaSeconds * 8.5, 0, 1);
+      currentOpacity = THREE.MathUtils.lerp(currentOpacity, target, blend);
+      overlay.style.opacity = currentOpacity.toFixed(3);
+    },
+    reset: () => {
+      currentOpacity = 0;
+      overlay.style.opacity = "0";
+    },
+    dispose: () => {
+      overlay.parentElement?.removeChild(overlay);
+    },
+  };
 };
 
 const createShurikenChargeHud = (mount?: HTMLElement): ChargeHud => {
@@ -157,6 +206,13 @@ type DrawSwordFx = {
   setDrawRatio: (ratio: number) => void;
   dispose: () => void;
 };
+
+const createNoopDrawSwordFx = (): DrawSwordFx => ({
+  attachTo: () => {},
+  setVisible: () => {},
+  setDrawRatio: () => {},
+  dispose: () => {},
+});
 
 type HeldShurikenFx = {
   attachTo: (arm: THREE.Object3D | null) => void;
@@ -422,23 +478,134 @@ type BaronClone = {
   speed: number;
   direction: THREE.Vector3;
   nextTurnAt: number;
+  animation: CloneAnimationState | null;
   materials: THREE.Material[];
   geometries: THREE.BufferGeometry[];
 };
+
+type SkillRAfterImage = {
+  root: THREE.Object3D;
+  materials: THREE.Material[];
+  spawnedAt: number;
+  lifeMs: number;
+  baseOpacity: number;
+};
+
+type ActionBinding = {
+  clipName: string;
+  clip: THREE.AnimationClip;
+  action: THREE.AnimationAction;
+};
+
+type CloneAnimationState = {
+  mixer: THREE.AnimationMixer;
+  walkBinding: ActionBinding | null;
+  runBinding: ActionBinding | null;
+  skillEHoldBinding: ActionBinding | null;
+  skillESuperHoldBinding: ActionBinding | null;
+  skillEShootBinding: ActionBinding | null;
+  skillESuperShootBinding: ActionBinding | null;
+  skillQBeforeBinding: ActionBinding | null;
+  skillQAfterBinding: ActionBinding | null;
+  shootEndsAt: number;
+  shootSuper: boolean;
+};
+
+type SkillQSuperStage =
+  | "idle"
+  | "before"
+  | "cloneSlash"
+  | "hostSlow"
+  | "hostSlash"
+  | "after";
+
+type SkillQSuperSlashState = {
+  kind: "clone" | "host";
+  cloneIndex: number;
+  startedAt: number;
+  endsAt: number;
+  originPosition: THREE.Vector3;
+  originQuaternion: THREE.Quaternion;
+  slashPosition: THREE.Vector3;
+  slashQuaternion: THREE.Quaternion;
+  slashDirection: THREE.Vector3;
+};
+
+type SkillRSlashEvent = {
+  timeSec: number;
+};
+
+type SkillQTiming = {
+  durationSec: number;
+  signEndSec: number;
+  summonStartSec: number;
+  summonEndSec: number;
+};
+
+type SkillQSealGlyphEntry = {
+  sprite: THREE.Sprite;
+  material: THREE.SpriteMaterial;
+  spawnedAt: number;
+  lifeMs: number;
+  baseScale: number;
+  origin: THREE.Vector3;
+  drift: THREE.Vector3;
+};
+
+type SkillQSuperHitFxEntry = {
+  root: THREE.Group;
+  slashA: THREE.Mesh;
+  slashB: THREE.Mesh;
+  ring: THREE.Mesh;
+  slashMaterialA: THREE.MeshBasicMaterial;
+  slashMaterialB: THREE.MeshBasicMaterial;
+  ringMaterial: THREE.MeshBasicMaterial;
+  active: boolean;
+  spawnedAt: number;
+  lifeMs: number;
+  baseScale: number;
+};
+
+type SkillRShadowMaterialState = {
+  material: THREE.Material;
+  color: THREE.Color | null;
+  emissive: THREE.Color | null;
+  emissiveIntensity: number | null;
+};
+
+type WeaponFirstPersonProxyEntry = {
+  sourceMesh: THREE.SkinnedMesh;
+  proxyMesh: THREE.SkinnedMesh;
+  geometry: THREE.BufferGeometry;
+  materials: THREE.Material[];
+};
+
+const walkClipName = "walk";
+const runClipName = "run";
+const holdClipName = "hold";
+const normalAttackClipName = "normalAttack";
+const skillEHoldClipName = "skillEHold";
+const skillEShootClipName = "skillEShoot";
+const skillESuperHoldClipName = "skillESuperHold";
+const skillESuperShootClipName = "skillESuperShoot";
+const skillQClipName = "skillQ";
+const skillQBeforeClipName = "skillQBefore";
+const skillQAfterClipName = "skillQAfter";
+const skillRClipName = "skillR";
 
 const createSwordWaveEntry = (
   geometry: THREE.BufferGeometry
 ): SwordWaveEntry => {
   const material = new THREE.MeshStandardMaterial({
-    color: 0xbfe8ff,
-    roughness: 0.2,
-    metalness: 0.14,
-    emissive: 0x38bdf8,
-    emissiveIntensity: 0.9,
+    color: 0x060606,
+    roughness: 0.64,
+    metalness: 0.08,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
     transparent: true,
-    opacity: 0.8,
+    opacity: 0.92,
     side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
   });
   material.depthWrite = false;
 
@@ -490,15 +657,15 @@ const createSkillRDanceWaveEntry = (
   geometry: THREE.BufferGeometry
 ): SkillRDanceWaveEntry => {
   const material = new THREE.MeshStandardMaterial({
-    color: 0xf0fdff,
-    roughness: 0.16,
-    metalness: 0.34,
-    emissive: 0x67e8f9,
-    emissiveIntensity: 1.45,
+    color: 0x090909,
+    roughness: 0.68,
+    metalness: 0.1,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
     transparent: true,
-    opacity: 0.8,
+    opacity: 0.92,
     side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
   });
   material.depthWrite = false;
   const mesh = new THREE.Mesh(geometry, material);
@@ -744,6 +911,550 @@ const createSkillRDanceWaveGeometry = () => {
   return geometry;
 };
 
+const filterClipTracks = (
+  clip: THREE.AnimationClip | null,
+  includeTrack: (track: THREE.KeyframeTrack) => boolean
+) => {
+  if (!clip) return null;
+  const tracks = clip.tracks.filter(includeTrack).map((track) => track.clone());
+  if (!tracks.length) return null;
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+};
+
+const isRightArmOrWeaponTrack = (trackName: string) =>
+  /(?:ArmRoot[._]?R|UpperArm[._]?R|LowerArm[._]?R|Hand[._]?R|RightHand|Weapon)/i.test(
+    trackName
+  );
+
+const isLeftArmOrWeaponTrack = (trackName: string) =>
+  /(?:ArmRoot[._]?L|UpperArm[._]?L|LowerArm[._]?L|Hand[._]?L|LeftHand|Weapon)/i.test(
+    trackName
+  );
+
+const resolveModelNode = (
+  model: THREE.Object3D,
+  matchers: Array<{ pattern: RegExp; score: number }>
+) => {
+  let bestNode: THREE.Object3D | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  model.traverse((child) => {
+    if (!child.name) return;
+    const name = child.name.trim();
+    if (!name) return;
+    let score = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < matchers.length; i += 1) {
+      const matcher = matchers[i];
+      if (!matcher.pattern.test(name)) continue;
+      score = Math.max(score, matcher.score);
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestNode = child;
+    }
+  });
+  return bestNode;
+};
+
+const resolveRightHandNode = (model: THREE.Object3D) =>
+  resolveModelNode(model, [
+    { pattern: /^HandR$/i, score: 100 },
+    { pattern: /^RightHand$/i, score: 95 },
+    { pattern: /right.?hand/i, score: 90 },
+    { pattern: /hand.?r/i, score: 88 },
+    { pattern: /wrist.?r/i, score: 82 },
+    { pattern: /^LowerArmR$/i, score: 78 },
+    { pattern: /lower.?arm.?r/i, score: 76 },
+    { pattern: /^UpperArmR$/i, score: 66 },
+    { pattern: /upper.?arm.?r/i, score: 64 },
+    { pattern: /^ArmRootR$/i, score: 52 },
+    { pattern: /arm.?root.?r/i, score: 50 },
+  ]);
+
+const resolveWeaponNode = (model: THREE.Object3D) =>
+  resolveModelNode(model, [
+    { pattern: /^Weapon$/i, score: 100 },
+    { pattern: /weapon/i, score: 95 },
+    { pattern: /sword/i, score: 90 },
+    { pattern: /blade/i, score: 88 },
+  ]);
+
+const vertexInfluencedByBone = (
+  skinIndex: THREE.BufferAttribute,
+  skinWeight: THREE.BufferAttribute,
+  vertexIndex: number,
+  boneIndex: number
+) => {
+  const i0 = Math.floor(skinIndex.getX(vertexIndex));
+  const i1 = Math.floor(skinIndex.getY(vertexIndex));
+  const i2 = Math.floor(skinIndex.getZ(vertexIndex));
+  const i3 = Math.floor(skinIndex.getW(vertexIndex));
+  const w0 = skinWeight.getX(vertexIndex);
+  const w1 = skinWeight.getY(vertexIndex);
+  const w2 = skinWeight.getZ(vertexIndex);
+  const w3 = skinWeight.getW(vertexIndex);
+
+  let dominantIndex = i0;
+  let dominantWeight = w0;
+  if (w1 > dominantWeight) {
+    dominantIndex = i1;
+    dominantWeight = w1;
+  }
+  if (w2 > dominantWeight) {
+    dominantIndex = i2;
+    dominantWeight = w2;
+  }
+  if (w3 > dominantWeight) {
+    dominantIndex = i3;
+    dominantWeight = w3;
+  }
+
+  return dominantIndex === boneIndex && dominantWeight >= 0.2;
+};
+
+const resolveSkeletonBoneIndex = (
+  skeleton: THREE.Skeleton,
+  targetBone: THREE.Object3D
+) => {
+  const byReference = skeleton.bones.findIndex((bone) => bone === targetBone);
+  if (byReference >= 0) return byReference;
+  const targetName = (targetBone.name || "").trim().toLowerCase();
+  if (!targetName) return -1;
+  return skeleton.bones.findIndex(
+    (bone) => (bone.name || "").trim().toLowerCase() === targetName
+  );
+};
+
+const buildWeaponOnlyTriangleIndex = (
+  geometry: THREE.BufferGeometry,
+  weaponBoneIndex: number
+) => {
+  const position = geometry.getAttribute("position") as
+    | THREE.BufferAttribute
+    | undefined;
+  const skinIndex = geometry.getAttribute("skinIndex") as
+    | THREE.BufferAttribute
+    | undefined;
+  const skinWeight = geometry.getAttribute("skinWeight") as
+    | THREE.BufferAttribute
+    | undefined;
+  if (!position || !skinIndex || !skinWeight) return [];
+
+  const sourceIndex = geometry.index;
+  const triangleIndices: number[] = [];
+  if (sourceIndex) {
+    for (let i = 0; i < sourceIndex.count; i += 1) {
+      triangleIndices.push(sourceIndex.getX(i));
+    }
+  } else {
+    for (let i = 0; i < position.count; i += 1) {
+      triangleIndices.push(i);
+    }
+  }
+
+  const filtered: number[] = [];
+  for (let i = 0; i + 2 < triangleIndices.length; i += 3) {
+    const a = triangleIndices[i];
+    const b = triangleIndices[i + 1];
+    const c = triangleIndices[i + 2];
+    const keepA = vertexInfluencedByBone(skinIndex, skinWeight, a, weaponBoneIndex);
+    const keepB = vertexInfluencedByBone(skinIndex, skinWeight, b, weaponBoneIndex);
+    const keepC = vertexInfluencedByBone(skinIndex, skinWeight, c, weaponBoneIndex);
+    if (!keepA || !keepB || !keepC) continue;
+    filtered.push(a, b, c);
+  }
+  return filtered;
+};
+
+const createWeaponFirstPersonProxyEntries = (
+  model: THREE.Object3D,
+  weaponNode: THREE.Object3D | null
+): WeaponFirstPersonProxyEntry[] => {
+  if (!weaponNode) return [];
+  const entries: WeaponFirstPersonProxyEntry[] = [];
+
+  model.traverse((child) => {
+    const sourceMesh = child as THREE.SkinnedMesh;
+    if (!sourceMesh.isSkinnedMesh || !sourceMesh.skeleton) return;
+    // Only build proxy for meshes hidden from main camera by first-person body masking.
+    if (sourceMesh.layers.isEnabled(0)) return;
+
+    const weaponBoneIndex = resolveSkeletonBoneIndex(sourceMesh.skeleton, weaponNode);
+    if (weaponBoneIndex < 0) return;
+
+    const filteredIndex = buildWeaponOnlyTriangleIndex(
+      sourceMesh.geometry,
+      weaponBoneIndex
+    );
+    if (!filteredIndex.length) return;
+
+    const proxyGeometry = sourceMesh.geometry.clone();
+    proxyGeometry.setIndex(filteredIndex);
+    proxyGeometry.computeBoundingBox();
+    proxyGeometry.computeBoundingSphere();
+
+    const sourceMaterial = sourceMesh.material;
+    const proxyMaterials = Array.isArray(sourceMaterial)
+      ? sourceMaterial.map((material) => material.clone())
+      : [sourceMaterial.clone()];
+    const proxyMaterial = Array.isArray(sourceMaterial)
+      ? proxyMaterials
+      : proxyMaterials[0];
+
+    const proxyMesh = new THREE.SkinnedMesh(proxyGeometry, proxyMaterial);
+    proxyMesh.name = `${sourceMesh.name || "baronMesh"}__weaponOnlyFirstPerson`;
+    proxyMesh.position.copy(sourceMesh.position);
+    proxyMesh.quaternion.copy(sourceMesh.quaternion);
+    proxyMesh.scale.copy(sourceMesh.scale);
+    proxyMesh.castShadow = sourceMesh.castShadow;
+    proxyMesh.receiveShadow = sourceMesh.receiveShadow;
+    proxyMesh.frustumCulled = sourceMesh.frustumCulled;
+    proxyMesh.renderOrder = sourceMesh.renderOrder + 1;
+    proxyMesh.bindMode = sourceMesh.bindMode;
+    proxyMesh.visible = sourceMesh.visible;
+    proxyMesh.layers.set(0);
+    if (sourceMesh.parent) {
+      sourceMesh.parent.add(proxyMesh);
+      proxyMesh.bind(sourceMesh.skeleton, sourceMesh.bindMatrix);
+    }
+    if (
+      sourceMesh.morphTargetInfluences &&
+      sourceMesh.morphTargetInfluences.length > 0
+    ) {
+      proxyMesh.morphTargetDictionary = sourceMesh.morphTargetDictionary;
+      proxyMesh.morphTargetInfluences = sourceMesh.morphTargetInfluences.slice();
+    }
+
+    entries.push({
+      sourceMesh,
+      proxyMesh,
+      geometry: proxyGeometry,
+      materials: proxyMaterials,
+    });
+  });
+
+  return entries;
+};
+
+const resolveSkillRSlashEvents = (
+  clip: THREE.AnimationClip | null
+): SkillRSlashEvent[] => {
+  if (!clip) return [];
+  const quatTrack = clip.tracks.find((track) =>
+    /(?:^|[.:])weapon\.quaternion$/i.test(track.name)
+  ) as THREE.QuaternionKeyframeTrack | undefined;
+  const posTrack = clip.tracks.find((track) =>
+    /(?:^|[.:])weapon\.position$/i.test(track.name)
+  ) as THREE.VectorKeyframeTrack | undefined;
+  if (!quatTrack || !posTrack) return [];
+
+  const sampleCount = Math.min(quatTrack.times.length, posTrack.times.length);
+  if (sampleCount < 3) return [];
+
+  const prevQuat = new THREE.Quaternion();
+  const nextQuat = new THREE.Quaternion();
+  const prevPos = new THREE.Vector3();
+  const nextPos = new THREE.Vector3();
+  const samples: Array<{ timeSec: number; score: number }> = [];
+
+  for (let i = 1; i < sampleCount; i += 1) {
+    const dt = quatTrack.times[i] - quatTrack.times[i - 1];
+    if (dt <= 0) continue;
+    prevQuat.fromArray(quatTrack.values, (i - 1) * 4);
+    nextQuat.fromArray(quatTrack.values, i * 4);
+    const dot = THREE.MathUtils.clamp(Math.abs(prevQuat.dot(nextQuat)), 0, 1);
+    const angle = 2 * Math.acos(dot);
+    const angularSpeed = angle / dt;
+    prevPos.fromArray(posTrack.values, (i - 1) * 3);
+    nextPos.fromArray(posTrack.values, i * 3);
+    const linearSpeed = prevPos.distanceTo(nextPos) / dt;
+    const score = angularSpeed * 0.75 + linearSpeed * 0.25;
+    if (!Number.isFinite(score)) continue;
+    samples.push({
+      timeSec: quatTrack.times[i],
+      score,
+    });
+  }
+  if (samples.length < 3) return [];
+
+  const peaks: Array<{ timeSec: number; score: number }> = [];
+  for (let i = 1; i < samples.length - 1; i += 1) {
+    if (
+      samples[i].score >= samples[i - 1].score &&
+      samples[i].score > samples[i + 1].score
+    ) {
+      peaks.push(samples[i]);
+    }
+  }
+  if (!peaks.length) return [];
+
+  const minTimeSec = 0.4;
+  // Exclude ending sheath/settle frames from hit-event extraction.
+  const maxTimeSec = Math.max(minTimeSec + 0.2, clip.duration - 0.6);
+  const activePeaks = peaks.filter(
+    (peak) => peak.timeSec >= minTimeSec && peak.timeSec <= maxTimeSec
+  );
+  if (!activePeaks.length) return [];
+
+  const meanScore =
+    activePeaks.reduce((sum, peak) => sum + peak.score, 0) / activePeaks.length;
+  const variance =
+    activePeaks.reduce(
+      (sum, peak) => sum + Math.pow(peak.score - meanScore, 2),
+      0
+    ) / activePeaks.length;
+  const stdDev = Math.sqrt(Math.max(0, variance));
+  const anchorThreshold = meanScore + stdDev * 0.35;
+  const anchorPeaks = activePeaks
+    .filter((peak) => peak.score >= anchorThreshold)
+    .sort((a, b) => a.timeSec - b.timeSec);
+
+  const attackStartSec = anchorPeaks[0]?.timeSec ?? minTimeSec;
+  const attackEndSec =
+    anchorPeaks.length > 0
+      ? anchorPeaks[anchorPeaks.length - 1].timeSec
+      : maxTimeSec;
+  const denseThreshold = meanScore - stdDev * 0.6;
+  const filtered = activePeaks
+    .filter(
+      (peak) =>
+        peak.timeSec >= attackStartSec &&
+        peak.timeSec <= attackEndSec &&
+        peak.score >= denseThreshold
+    )
+    .sort((a, b) => a.timeSec - b.timeSec);
+  if (!filtered.length) {
+    return anchorPeaks.map((peak) => ({ timeSec: peak.timeSec }));
+  }
+
+  // Keep one strike event roughly every 2~3 keyframes (24fps clip).
+  const minSpacingSec = 0.1;
+  const selected: Array<{ timeSec: number; score: number }> = [];
+  for (let i = 0; i < filtered.length; i += 1) {
+    const peak = filtered[i];
+    const last = selected[selected.length - 1];
+    if (!last || peak.timeSec - last.timeSec >= minSpacingSec) {
+      selected.push(peak);
+      continue;
+    }
+    if (peak.score > last.score) {
+      selected[selected.length - 1] = peak;
+    }
+  }
+
+  if (!selected.length) {
+    return anchorPeaks.map((peak) => ({ timeSec: peak.timeSec }));
+  }
+  return selected.map((peak) => ({ timeSec: peak.timeSec }));
+};
+
+const resolveSkillQTiming = (clip: THREE.AnimationClip | null): SkillQTiming => {
+  const durationSec = Math.max(0.24, clip?.duration ?? 2.25);
+  const fallbackSignEndSec = THREE.MathUtils.clamp(
+    durationSec * 0.72,
+    0.12,
+    Math.max(0.12, durationSec - 0.2)
+  );
+  const fallbackSummonStartSec = THREE.MathUtils.clamp(
+    durationSec * 0.8,
+    fallbackSignEndSec + 0.04,
+    Math.max(fallbackSignEndSec + 0.04, durationSec - 0.08)
+  );
+  const fallbackSummonEndSec = THREE.MathUtils.clamp(
+    durationSec * 0.93,
+    fallbackSummonStartSec + 0.06,
+    durationSec
+  );
+  if (!clip) {
+    return {
+      durationSec,
+      signEndSec: fallbackSignEndSec,
+      summonStartSec: fallbackSummonStartSec,
+      summonEndSec: fallbackSummonEndSec,
+    };
+  }
+
+  const armQuatTracks = clip.tracks.filter(
+    (track): track is THREE.QuaternionKeyframeTrack =>
+      track instanceof THREE.QuaternionKeyframeTrack &&
+      /(?:^|[.:])(?:UpperArm|LowerArm|Hand)(?:[._]?L|[._]?R)\.quaternion$/i.test(
+        track.name
+      )
+  );
+  if (armQuatTracks.length === 0) {
+    return {
+      durationSec,
+      signEndSec: fallbackSignEndSec,
+      summonStartSec: fallbackSummonStartSec,
+      summonEndSec: fallbackSummonEndSec,
+    };
+  }
+
+  const scoreByTime = new Map<number, number>();
+  const prevQuat = new THREE.Quaternion();
+  const nextQuat = new THREE.Quaternion();
+  for (let trackIndex = 0; trackIndex < armQuatTracks.length; trackIndex += 1) {
+    const track = armQuatTracks[trackIndex];
+    const sampleCount = track.times.length;
+    if (sampleCount < 2) continue;
+    for (let sampleIndex = 1; sampleIndex < sampleCount; sampleIndex += 1) {
+      const dt = track.times[sampleIndex] - track.times[sampleIndex - 1];
+      if (dt <= 0) continue;
+      prevQuat.fromArray(track.values, (sampleIndex - 1) * 4);
+      nextQuat.fromArray(track.values, sampleIndex * 4);
+      const dot = THREE.MathUtils.clamp(Math.abs(prevQuat.dot(nextQuat)), 0, 1);
+      const angle = 2 * Math.acos(dot);
+      const angularSpeed = angle / dt;
+      if (!Number.isFinite(angularSpeed)) continue;
+      const timeKey = Number(track.times[sampleIndex].toFixed(4));
+      scoreByTime.set(timeKey, (scoreByTime.get(timeKey) ?? 0) + angularSpeed);
+    }
+  }
+
+  const samples = Array.from(scoreByTime.entries())
+    .map(([timeSec, score]) => ({ timeSec, score }))
+    .sort((a, b) => a.timeSec - b.timeSec);
+  if (samples.length < 4) {
+    return {
+      durationSec,
+      signEndSec: fallbackSignEndSec,
+      summonStartSec: fallbackSummonStartSec,
+      summonEndSec: fallbackSummonEndSec,
+    };
+  }
+
+  const meanScore =
+    samples.reduce((sum, sample) => sum + sample.score, 0) / samples.length;
+  const variance =
+    samples.reduce(
+      (sum, sample) => sum + Math.pow(sample.score - meanScore, 2),
+      0
+    ) / samples.length;
+  const stdDev = Math.sqrt(Math.max(0, variance));
+  const highMotionThreshold = meanScore + stdDev * 0.4;
+  const lowMotionThreshold = Math.max(0, meanScore - stdDev * 0.45);
+  const tailCutoffSec = durationSec * 0.93;
+  const activeWindowSamples = samples.filter(
+    (sample) =>
+      sample.timeSec >= durationSec * 0.08 &&
+      sample.timeSec <= tailCutoffSec &&
+      sample.score >= highMotionThreshold
+  );
+  const lastActiveTimeSec =
+    activeWindowSamples[activeWindowSamples.length - 1]?.timeSec ??
+    fallbackSignEndSec;
+  const quietScanStartSec = THREE.MathUtils.clamp(
+    lastActiveTimeSec + 0.01,
+    durationSec * 0.2,
+    tailCutoffSec
+  );
+
+  let bestQuietStartSec = 0;
+  let bestQuietEndSec = 0;
+  let cursorStartSec: number | null = null;
+  for (let i = 0; i < samples.length; i += 1) {
+    const sample = samples[i];
+    if (sample.timeSec < quietScanStartSec || sample.timeSec > tailCutoffSec) {
+      continue;
+    }
+    if (sample.score <= lowMotionThreshold) {
+      if (cursorStartSec === null) {
+        cursorStartSec = sample.timeSec;
+      }
+      continue;
+    }
+    if (cursorStartSec !== null) {
+      const segmentDurationSec = sample.timeSec - cursorStartSec;
+      if (segmentDurationSec > bestQuietEndSec - bestQuietStartSec) {
+        bestQuietStartSec = cursorStartSec;
+        bestQuietEndSec = sample.timeSec;
+      }
+      cursorStartSec = null;
+    }
+  }
+  if (cursorStartSec !== null) {
+    const finalQuietEndSec =
+      samples[samples.length - 1]?.timeSec ?? Math.min(durationSec, tailCutoffSec);
+    const segmentDurationSec = finalQuietEndSec - cursorStartSec;
+    if (segmentDurationSec > bestQuietEndSec - bestQuietStartSec) {
+      bestQuietStartSec = cursorStartSec;
+      bestQuietEndSec = finalQuietEndSec;
+    }
+  }
+
+  const hasQuietWindow = bestQuietEndSec - bestQuietStartSec >= 0.08;
+  const summonStartSec = hasQuietWindow
+    ? THREE.MathUtils.clamp(bestQuietStartSec, 0.12, durationSec)
+    : fallbackSummonStartSec;
+  const summonEndSec = hasQuietWindow
+    ? THREE.MathUtils.clamp(
+        bestQuietEndSec,
+        summonStartSec + 0.05,
+        Math.min(durationSec, tailCutoffSec + 0.08)
+      )
+    : fallbackSummonEndSec;
+  const signEndSec = THREE.MathUtils.clamp(
+    hasQuietWindow
+      ? Math.min(summonStartSec, lastActiveTimeSec + 0.06)
+      : fallbackSignEndSec,
+    0.12,
+    summonStartSec
+  );
+
+  return {
+    durationSec,
+    signEndSec,
+    summonStartSec,
+    summonEndSec,
+  };
+};
+
+const resolveClip = (clips: THREE.AnimationClip[], clipName: string) => {
+  const lowerClipName = clipName.toLowerCase();
+  return (
+    clips.find((clip) => clip.name === clipName) ??
+    clips.find((clip) => clip.name.toLowerCase() === lowerClipName) ??
+    null
+  );
+};
+
+const createOneShotBinding = (
+  mixer: THREE.AnimationMixer,
+  clip: THREE.AnimationClip | null,
+  clipName: string
+) => {
+  if (!clip) return null;
+  const action = mixer.clipAction(clip);
+  action.clampWhenFinished = true;
+  action.setLoop(THREE.LoopOnce, 1);
+  action.enabled = true;
+  action.paused = true;
+  action.setEffectiveWeight(0);
+  return { clipName, clip, action };
+};
+
+const createLoopBinding = (
+  mixer: THREE.AnimationMixer,
+  clip: THREE.AnimationClip | null,
+  clipName: string
+) => {
+  if (!clip) return null;
+  const action = mixer.clipAction(clip);
+  action.clampWhenFinished = false;
+  action.setLoop(THREE.LoopRepeat, Infinity);
+  action.enabled = true;
+  action.paused = true;
+  action.setEffectiveWeight(0);
+  return { clipName, clip, action };
+};
+
+const stopActionBinding = (binding: ActionBinding | null) => {
+  if (!binding) return;
+  binding.action.stop();
+  binding.action.paused = true;
+  binding.action.enabled = true;
+  binding.action.setEffectiveWeight(0);
+};
+
 export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
   mount,
@@ -754,8 +1465,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   getCurrentStats,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
+  const skillQDarknessOverlay = createSkillQDarknessOverlay(mount);
   const hud = createShurikenChargeHud(mount);
-  const drawSword = createDrawSwordFx(avatar);
+  const drawSword = createNoopDrawSwordFx();
   const heldShuriken = createHeldShurikenFx(avatar);
 
   const chargeConfig = {
@@ -772,8 +1484,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     maxRange: 4.55,
     minHitRadius: 0.9,
     maxHitRadius: 2.25,
-    minFxScale: 0.58,
-    maxFxScale: 1.12,
+    minFxScale: 1.74,
+    maxFxScale: 3.36,
     minReflectSpeedMultiplier: 1.05,
     maxReflectSpeedMultiplier: 2.35,
     energyGainOnReflect: 15,
@@ -833,9 +1545,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const rightQuatZ = new THREE.Quaternion();
   const leftQuatX = new THREE.Quaternion();
   const leftQuatZ = new THREE.Quaternion();
-  const cloneArmQuatX = new THREE.Quaternion();
-  const cloneArmQuatY = new THREE.Quaternion();
-  const cloneArmQuatZ = new THREE.Quaternion();
   const swingOrigin = new THREE.Vector3();
   const swingForward = new THREE.Vector3();
   const swingRight = new THREE.Vector3();
@@ -860,6 +1569,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const shurikenPool: ShurikenEntry[] = Array.from({ length: 12 }, () =>
     createShurikenEntry(shurikenGeometry)
   );
+  const skillQSuperHitSlashGeometry = new THREE.PlaneGeometry(4.26, 0.48);
+  const skillQSuperHitRingGeometry = new THREE.RingGeometry(0.78, 1.68, 24);
+  const skillQSuperHitFxPool: SkillQSuperHitFxEntry[] = [];
   const projectileForward = new THREE.Vector3(0, 0, 1);
   const skillRDanceWaveOrigin = new THREE.Vector3();
   const skillRDanceWaveDirection = new THREE.Vector3();
@@ -918,16 +1630,60 @@ export const createRuntime: CharacterRuntimeFactory = ({
     waveMinSpeed: 7.8,
     waveMaxSpeed: 11.6,
     waveLifeMs: 460,
-    waveMinScale: 0.85,
-    waveMaxScale: 1.28,
+    waveMinScale: 2.55,
+    waveMaxScale: 3.84,
   };
   const skillRState = {
     active: false,
     startedAt: 0,
     endsAt: 0,
-    nextMeleeAt: 0,
-    nextWaveSide: 1 as 1 | -1,
+    nextSlashIndex: 0,
   };
+  const skillQConfig = {
+    glyphSpawnIntervalMs: 110,
+    glyphLifeMs: 520,
+    glyphScaleMin: 0.58,
+    glyphScaleMax: 0.84,
+    glyphLateralSpread: 0.8,
+    glyphFrontMin: 0.95,
+    glyphFrontMax: 1.25,
+    glyphHeightMin: 1.35,
+    glyphHeightMax: 2.25,
+  };
+  const skillQState = {
+    active: false,
+    startedAt: 0,
+    endsAt: 0,
+    signEndsAt: 0,
+    summonWindowStartAt: 0,
+    summonWindowEndAt: 0,
+    nextGlyphSpawnAt: 0,
+    clonesSummoned: false,
+  };
+  const skillQSuperConfig = {
+    cloneSlashDurationMs: 300,
+    hostSlashDurationMs: 600,
+    hostSlowDurationMs: 180,
+    hostSlowAnimationScale: 0.32,
+    strikeDamage: 150,
+    strikeRadius: 100,
+    strikeMaxHits: 96,
+    cloneDashDistance: 2.4,
+    hostDashDistance: 3.2,
+  };
+  const skillQSuperState = {
+    active: false,
+    stage: "idle" as SkillQSuperStage,
+    startedAt: 0,
+    beforeEndsAt: 0,
+    hostSlowEndsAt: 0,
+    afterEndsAt: 0,
+    nextCloneIndex: 0,
+    slash: null as SkillQSuperSlashState | null,
+    hostReturnReady: false,
+    hostReturnPosition: new THREE.Vector3(),
+  };
+  let skillRDanceWaveNextSide: 1 | -1 = 1;
   const cloneConfig = {
     count: 5,
     durationMs: 10000,
@@ -966,6 +1722,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     active: false,
     startedAt: 0,
     endsAt: 0,
+    consumePending: false,
+    consumeAfterShootAt: 0,
     clones: [] as BaronClone[],
   };
   const cloneAnchor = new THREE.Group();
@@ -981,7 +1739,58 @@ export const createRuntime: CharacterRuntimeFactory = ({
     Math.max(0.1, profile.movement?.baseSpeed ?? 5) * cloneConfig.speedRatio;
   const cloneSmokeGeometry = new THREE.SphereGeometry(0.32, 8, 8);
   const cloneSmokePuffs: CloneSmokePuff[] = [];
+  let runtimeAnimationClips: THREE.AnimationClip[] = [];
+  const skillQSealGlyphChars = ["甲", "乙", "丙", "丁"] as const;
+  const skillQSealGlyphEntries: SkillQSealGlyphEntry[] = [];
+  const skillQSealGlyphTextureCache = new Map<string, THREE.CanvasTexture>();
   let runtimeLastUpdateAt = 0;
+  let runtimeAnimationModel: THREE.Object3D | null = null;
+  let runtimeAnimationMixer: THREE.AnimationMixer | null = null;
+  let runtimeWalkBinding: ActionBinding | null = null;
+  let runtimeRunBinding: ActionBinding | null = null;
+  let runtimeWalkNoRightArmBinding: ActionBinding | null = null;
+  let runtimeRunNoRightArmBinding: ActionBinding | null = null;
+  let runtimeWalkNoLeftArmBinding: ActionBinding | null = null;
+  let runtimeRunNoLeftArmBinding: ActionBinding | null = null;
+  let runtimeHoldBinding: ActionBinding | null = null;
+  let runtimeHoldRightArmBinding: ActionBinding | null = null;
+  let runtimeSkillEHoldBinding: ActionBinding | null = null;
+  let runtimeSkillESuperHoldBinding: ActionBinding | null = null;
+  let runtimeSkillEShootBinding: ActionBinding | null = null;
+  let runtimeSkillESuperShootBinding: ActionBinding | null = null;
+  let runtimeSkillEShootEndsAt = 0;
+  let runtimeSkillEShootSuper = false;
+  let runtimeNormalAttackBinding: ActionBinding | null = null;
+  let runtimeNormalAttackRightArmBinding: ActionBinding | null = null;
+  let runtimeSkillQBinding: ActionBinding | null = null;
+  let runtimeSkillQBeforeBinding: ActionBinding | null = null;
+  let runtimeSkillQAfterBinding: ActionBinding | null = null;
+  let runtimeSkillQTiming = resolveSkillQTiming(null);
+  let runtimeSkillRBinding: ActionBinding | null = null;
+  let runtimeSkillRSlashEvents: SkillRSlashEvent[] = [];
+  const runtimeWeaponFirstPersonProxyEntries: WeaponFirstPersonProxyEntry[] = [];
+  let runtimeNormalAttackEndsAt = 0;
+  let runtimeIsMoving = false;
+  let runtimeWeaponConstraintHand: THREE.Object3D | null = null;
+  let runtimeWeaponConstraintWeapon: THREE.Object3D | null = null;
+  let runtimeWeaponConstraintOffsetReady = false;
+  let runtimePreferredGripOffsetReady = false;
+  const runtimeWeaponConstraintHandToWeapon = new THREE.Matrix4();
+  const runtimePreferredGripHandToWeapon = new THREE.Matrix4();
+  const runtimeWeaponConstraintHandWorld = new THREE.Matrix4();
+  const runtimeWeaponConstraintTargetWorld = new THREE.Matrix4();
+  const runtimeWeaponConstraintParentInverse = new THREE.Matrix4();
+  const runtimeWeaponConstraintLocal = new THREE.Matrix4();
+  const runtimeWeaponConstraintLocalPosition = new THREE.Vector3();
+  const runtimeWeaponConstraintLocalQuaternion = new THREE.Quaternion();
+  const runtimeWeaponConstraintLocalScale = new THREE.Vector3();
+  const skillQSuperSlashOrigin = new THREE.Vector3();
+  const skillQSuperSlashQuaternion = new THREE.Quaternion();
+  const skillQSuperSlashForward = new THREE.Vector3();
+  const skillQSuperSlashTarget = new THREE.Vector3();
+  const skillQSuperSlashCurrentPosition = new THREE.Vector3();
+  const skillQSuperParentQuaternion = new THREE.Quaternion();
+  const skillQSuperHitQuaternion = new THREE.Quaternion();
   const skillRReflectVolumeGeometry = new THREE.SphereGeometry(1, 22, 14);
   const skillRReflectVolumeMaterial = new THREE.MeshBasicMaterial({
     color: 0x38bdf8,
@@ -1158,8 +1967,779 @@ export const createRuntime: CharacterRuntimeFactory = ({
     return deltaSeconds;
   };
 
+  const clearRuntimeWeaponFirstPersonProxies = () => {
+    for (let i = 0; i < runtimeWeaponFirstPersonProxyEntries.length; i += 1) {
+      const entry = runtimeWeaponFirstPersonProxyEntries[i];
+      entry.proxyMesh.removeFromParent();
+      entry.geometry.dispose();
+      for (let matIndex = 0; matIndex < entry.materials.length; matIndex += 1) {
+        entry.materials[matIndex].dispose();
+      }
+    }
+    runtimeWeaponFirstPersonProxyEntries.length = 0;
+  };
+
+  const syncRuntimeWeaponFirstPersonProxies = () => {
+    for (let i = 0; i < runtimeWeaponFirstPersonProxyEntries.length; i += 1) {
+      const entry = runtimeWeaponFirstPersonProxyEntries[i];
+      entry.proxyMesh.visible = entry.sourceMesh.visible;
+      if (
+        entry.sourceMesh.morphTargetInfluences &&
+        entry.proxyMesh.morphTargetInfluences &&
+        entry.proxyMesh.morphTargetInfluences.length ===
+          entry.sourceMesh.morphTargetInfluences.length
+      ) {
+        for (
+          let morphIndex = 0;
+          morphIndex < entry.sourceMesh.morphTargetInfluences.length;
+          morphIndex += 1
+        ) {
+          entry.proxyMesh.morphTargetInfluences[morphIndex] =
+            entry.sourceMesh.morphTargetInfluences[morphIndex];
+        }
+      }
+    }
+  };
+
+  const clearRuntimeAnimationBindings = () => {
+    restoreSkillRShadowForm();
+    stopActionBinding(runtimeWalkBinding);
+    stopActionBinding(runtimeRunBinding);
+    stopActionBinding(runtimeWalkNoRightArmBinding);
+    stopActionBinding(runtimeRunNoRightArmBinding);
+    stopActionBinding(runtimeWalkNoLeftArmBinding);
+    stopActionBinding(runtimeRunNoLeftArmBinding);
+    stopActionBinding(runtimeHoldBinding);
+    stopActionBinding(runtimeHoldRightArmBinding);
+    stopActionBinding(runtimeSkillEHoldBinding);
+    stopActionBinding(runtimeSkillESuperHoldBinding);
+    stopActionBinding(runtimeSkillEShootBinding);
+    stopActionBinding(runtimeSkillESuperShootBinding);
+    stopActionBinding(runtimeNormalAttackBinding);
+    stopActionBinding(runtimeNormalAttackRightArmBinding);
+    stopActionBinding(runtimeSkillQBinding);
+    stopActionBinding(runtimeSkillQBeforeBinding);
+    stopActionBinding(runtimeSkillQAfterBinding);
+    stopActionBinding(runtimeSkillRBinding);
+    clearRuntimeWeaponFirstPersonProxies();
+    if (runtimeAnimationMixer && runtimeAnimationModel) {
+      runtimeAnimationMixer.stopAllAction();
+      runtimeAnimationMixer.uncacheRoot(runtimeAnimationModel);
+    }
+    runtimeAnimationModel = null;
+    runtimeAnimationMixer = null;
+    runtimeWalkBinding = null;
+    runtimeRunBinding = null;
+    runtimeWalkNoRightArmBinding = null;
+    runtimeRunNoRightArmBinding = null;
+    runtimeWalkNoLeftArmBinding = null;
+    runtimeRunNoLeftArmBinding = null;
+    runtimeHoldBinding = null;
+    runtimeHoldRightArmBinding = null;
+    runtimeSkillEHoldBinding = null;
+    runtimeSkillESuperHoldBinding = null;
+    runtimeSkillEShootBinding = null;
+    runtimeSkillESuperShootBinding = null;
+    runtimeSkillEShootEndsAt = 0;
+    runtimeSkillEShootSuper = false;
+    runtimeNormalAttackBinding = null;
+    runtimeNormalAttackRightArmBinding = null;
+    runtimeSkillQBinding = null;
+    runtimeSkillQBeforeBinding = null;
+    runtimeSkillQAfterBinding = null;
+    runtimeSkillQTiming = resolveSkillQTiming(null);
+    runtimeSkillRBinding = null;
+    runtimeSkillRSlashEvents = [];
+    runtimeAnimationClips = [];
+    runtimeNormalAttackEndsAt = 0;
+    runtimeIsMoving = false;
+    runtimeWeaponConstraintHand = null;
+    runtimeWeaponConstraintWeapon = null;
+    runtimeWeaponConstraintOffsetReady = false;
+    runtimePreferredGripOffsetReady = false;
+    runtimeWeaponConstraintHandToWeapon.identity();
+    runtimePreferredGripHandToWeapon.identity();
+  };
+
+  const resetRuntimeAnimationPlayback = () => {
+    restoreSkillRShadowForm();
+    stopActionBinding(runtimeWalkBinding);
+    stopActionBinding(runtimeRunBinding);
+    stopActionBinding(runtimeWalkNoRightArmBinding);
+    stopActionBinding(runtimeRunNoRightArmBinding);
+    stopActionBinding(runtimeWalkNoLeftArmBinding);
+    stopActionBinding(runtimeRunNoLeftArmBinding);
+    stopActionBinding(runtimeHoldBinding);
+    stopActionBinding(runtimeHoldRightArmBinding);
+    stopActionBinding(runtimeSkillEHoldBinding);
+    stopActionBinding(runtimeSkillESuperHoldBinding);
+    stopActionBinding(runtimeSkillEShootBinding);
+    stopActionBinding(runtimeSkillESuperShootBinding);
+    stopActionBinding(runtimeNormalAttackBinding);
+    stopActionBinding(runtimeNormalAttackRightArmBinding);
+    stopActionBinding(runtimeSkillQBinding);
+    stopActionBinding(runtimeSkillQBeforeBinding);
+    stopActionBinding(runtimeSkillQAfterBinding);
+    stopActionBinding(runtimeSkillRBinding);
+    runtimeSkillEShootEndsAt = 0;
+    runtimeSkillEShootSuper = false;
+    runtimeNormalAttackEndsAt = 0;
+    runtimeIsMoving = false;
+  };
+
+  const bindRuntimeAnimationModel = (model: THREE.Object3D | null) => {
+    if (runtimeAnimationModel === model) return;
+    clearRuntimeAnimationBindings();
+    if (!model) return;
+
+    const clips =
+      model.userData[characterGltfAnimationClipsKey] as
+        | THREE.AnimationClip[]
+        | undefined;
+    if (!Array.isArray(clips) || clips.length === 0) {
+      return;
+    }
+
+    const mixer = new THREE.AnimationMixer(model);
+    runtimeAnimationModel = model;
+    runtimeAnimationMixer = mixer;
+    runtimeAnimationClips = clips;
+    const walkClip = resolveClip(clips, walkClipName);
+    const runClip = resolveClip(clips, runClipName);
+    const holdClip = resolveClip(clips, holdClipName);
+    const normalAttackClip = resolveClip(clips, normalAttackClipName);
+    const skillEHoldClip = resolveClip(clips, skillEHoldClipName);
+    const skillEShootClip = resolveClip(clips, skillEShootClipName);
+    const skillESuperHoldClip = resolveClip(clips, skillESuperHoldClipName);
+    const skillESuperShootClip = resolveClip(clips, skillESuperShootClipName);
+    const skillQClip = resolveClip(clips, skillQClipName);
+    const skillQBeforeClip = resolveClip(clips, skillQBeforeClipName) ?? skillQClip;
+    const skillQAfterClip = resolveClip(clips, skillQAfterClipName) ?? skillQClip;
+    const skillRClip = resolveClip(clips, skillRClipName);
+    runtimeWalkBinding = createLoopBinding(
+      mixer,
+      walkClip,
+      walkClipName
+    );
+    runtimeRunBinding = createLoopBinding(
+      mixer,
+      runClip,
+      runClipName
+    );
+    runtimeWalkNoRightArmBinding = createLoopBinding(
+      mixer,
+      filterClipTracks(walkClip, (track) => !isRightArmOrWeaponTrack(track.name)),
+      `${walkClipName}-no-right-arm`
+    );
+    runtimeRunNoRightArmBinding = createLoopBinding(
+      mixer,
+      filterClipTracks(runClip, (track) => !isRightArmOrWeaponTrack(track.name)),
+      `${runClipName}-no-right-arm`
+    );
+    runtimeWalkNoLeftArmBinding = createLoopBinding(
+      mixer,
+      filterClipTracks(walkClip, (track) => !isLeftArmOrWeaponTrack(track.name)),
+      `${walkClipName}-no-left-arm`
+    );
+    runtimeRunNoLeftArmBinding = createLoopBinding(
+      mixer,
+      filterClipTracks(runClip, (track) => !isLeftArmOrWeaponTrack(track.name)),
+      `${runClipName}-no-left-arm`
+    );
+    runtimeHoldBinding = createLoopBinding(
+      mixer,
+      holdClip,
+      holdClipName
+    );
+    runtimeHoldRightArmBinding = createLoopBinding(
+      mixer,
+      filterClipTracks(holdClip, (track) => isRightArmOrWeaponTrack(track.name)),
+      `${holdClipName}-right-arm`
+    );
+    runtimeSkillEHoldBinding = createLoopBinding(
+      mixer,
+      filterClipTracks(skillEHoldClip, (track) =>
+        isLeftArmOrWeaponTrack(track.name)
+      ),
+      `${skillEHoldClipName}-left-arm`
+    );
+    runtimeSkillESuperHoldBinding = createLoopBinding(
+      mixer,
+      filterClipTracks(skillESuperHoldClip, (track) =>
+        isRightArmOrWeaponTrack(track.name)
+      ),
+      `${skillESuperHoldClipName}-right-arm`
+    );
+    runtimeSkillEShootBinding = createOneShotBinding(
+      mixer,
+      filterClipTracks(skillEShootClip, (track) =>
+        isLeftArmOrWeaponTrack(track.name)
+      ),
+      `${skillEShootClipName}-left-arm`
+    );
+    runtimeSkillESuperShootBinding = createOneShotBinding(
+      mixer,
+      filterClipTracks(skillESuperShootClip, (track) =>
+        isRightArmOrWeaponTrack(track.name)
+      ),
+      `${skillESuperShootClipName}-right-arm`
+    );
+    runtimeNormalAttackBinding = createOneShotBinding(
+      mixer,
+      normalAttackClip,
+      normalAttackClipName
+    );
+    runtimeNormalAttackRightArmBinding = createOneShotBinding(
+      mixer,
+      filterClipTracks(normalAttackClip, (track) =>
+        isRightArmOrWeaponTrack(track.name)
+      ),
+      `${normalAttackClipName}-right-arm`
+    );
+    runtimeSkillQBinding = createOneShotBinding(
+      mixer,
+      skillQClip,
+      skillQClipName
+    );
+    runtimeSkillQBeforeBinding = createOneShotBinding(
+      mixer,
+      skillQBeforeClip,
+      skillQBeforeClipName
+    );
+    runtimeSkillQAfterBinding = createOneShotBinding(
+      mixer,
+      skillQAfterClip,
+      skillQAfterClipName
+    );
+    runtimeSkillQTiming = resolveSkillQTiming(skillQClip);
+    runtimeSkillRBinding = createOneShotBinding(
+      mixer,
+      skillRClip,
+      skillRClipName
+    );
+    runtimeSkillRSlashEvents = resolveSkillRSlashEvents(skillRClip);
+
+    runtimeWeaponConstraintHand = resolveRightHandNode(model);
+    runtimeWeaponConstraintWeapon = resolveWeaponNode(model);
+    runtimeWeaponConstraintOffsetReady = false;
+    runtimePreferredGripOffsetReady = false;
+    runtimeWeaponConstraintHandToWeapon.identity();
+    runtimePreferredGripHandToWeapon.identity();
+    clearRuntimeWeaponFirstPersonProxies();
+    const weaponProxyEntries = createWeaponFirstPersonProxyEntries(
+      model,
+      runtimeWeaponConstraintWeapon
+    );
+    for (let i = 0; i < weaponProxyEntries.length; i += 1) {
+      runtimeWeaponFirstPersonProxyEntries.push(weaponProxyEntries[i]);
+    }
+  };
+
+  const applyLoopBindingState = (
+    binding: ActionBinding | null,
+    active: boolean,
+    timeScale: number
+  ) => {
+    if (!binding) return;
+    const action = binding.action;
+    if (active) {
+      action.enabled = true;
+      action.paused = false;
+      action.setEffectiveWeight(1);
+      action.setEffectiveTimeScale(timeScale);
+      if (!action.isRunning()) {
+        action.play();
+      }
+      return;
+    }
+    action.setEffectiveWeight(0);
+    action.paused = true;
+  };
+
+  const applyOneShotBindingState = (
+    binding: ActionBinding | null,
+    active: boolean
+  ) => {
+    if (!binding) return;
+    const action = binding.action;
+    action.setEffectiveWeight(active ? 1 : 0);
+    action.paused = !active;
+    if (active) {
+      action.enabled = true;
+      if (!action.isRunning() && action.time <= 0.0001) {
+        action.play();
+      }
+    }
+  };
+
+  const startSkillEShootAnimation = (now: number, superMode: boolean) => {
+    const preferred = superMode
+      ? runtimeSkillESuperShootBinding ?? runtimeSkillEShootBinding
+      : runtimeSkillEShootBinding ?? runtimeSkillESuperShootBinding;
+    if (!preferred) {
+      runtimeSkillEShootEndsAt = 0;
+      runtimeSkillEShootSuper = false;
+      return;
+    }
+    runtimeSkillEShootSuper = preferred === runtimeSkillESuperShootBinding;
+    runtimeSkillEShootEndsAt =
+      now + Math.max(120, preferred.clip.duration * 1000);
+    const action = preferred.action;
+    action.reset();
+    action.enabled = true;
+    action.paused = false;
+    action.setEffectiveWeight(1);
+    action.setEffectiveTimeScale(1);
+    action.play();
+  };
+
+  const createCloneAnimationState = (
+    model: THREE.Object3D | null,
+    clips: THREE.AnimationClip[]
+  ): CloneAnimationState | null => {
+    if (!model || clips.length === 0) return null;
+    const mixer = new THREE.AnimationMixer(model);
+    const walkClip = resolveClip(clips, walkClipName);
+    const runClip = resolveClip(clips, runClipName);
+    const skillEHoldClip = resolveClip(clips, skillEHoldClipName);
+    const skillESuperHoldClip = resolveClip(clips, skillESuperHoldClipName);
+    const skillEShootClip = resolveClip(clips, skillEShootClipName);
+    const skillESuperShootClip = resolveClip(clips, skillESuperShootClipName);
+    const skillQClip = resolveClip(clips, skillQClipName);
+    const skillQBeforeClip = resolveClip(clips, skillQBeforeClipName) ?? skillQClip;
+    const skillQAfterClip = resolveClip(clips, skillQAfterClipName) ?? skillQClip;
+    return {
+      mixer,
+      walkBinding: createLoopBinding(mixer, walkClip, `clone-${walkClipName}`),
+      runBinding: createLoopBinding(mixer, runClip, `clone-${runClipName}`),
+      skillEHoldBinding: createLoopBinding(
+        mixer,
+        filterClipTracks(skillEHoldClip, (track) =>
+          isLeftArmOrWeaponTrack(track.name)
+        ),
+        `clone-${skillEHoldClipName}`
+      ),
+      skillESuperHoldBinding: createLoopBinding(
+        mixer,
+        filterClipTracks(skillESuperHoldClip, (track) =>
+          isRightArmOrWeaponTrack(track.name)
+        ),
+        `clone-${skillESuperHoldClipName}`
+      ),
+      skillEShootBinding: createOneShotBinding(
+        mixer,
+        filterClipTracks(skillEShootClip, (track) =>
+          isLeftArmOrWeaponTrack(track.name)
+        ),
+        `clone-${skillEShootClipName}`
+      ),
+      skillESuperShootBinding: createOneShotBinding(
+        mixer,
+        filterClipTracks(skillESuperShootClip, (track) =>
+          isRightArmOrWeaponTrack(track.name)
+        ),
+        `clone-${skillESuperShootClipName}`
+      ),
+      skillQBeforeBinding: createOneShotBinding(
+        mixer,
+        skillQBeforeClip,
+        `clone-${skillQBeforeClipName}`
+      ),
+      skillQAfterBinding: createOneShotBinding(
+        mixer,
+        skillQAfterClip,
+        `clone-${skillQAfterClipName}`
+      ),
+      shootEndsAt: 0,
+      shootSuper: false,
+    };
+  };
+
+  const disposeCloneAnimationState = (clone: BaronClone) => {
+    const state = clone.animation;
+    if (!state) return;
+    stopActionBinding(state.walkBinding);
+    stopActionBinding(state.runBinding);
+    stopActionBinding(state.skillEHoldBinding);
+    stopActionBinding(state.skillESuperHoldBinding);
+    stopActionBinding(state.skillEShootBinding);
+    stopActionBinding(state.skillESuperShootBinding);
+    stopActionBinding(state.skillQBeforeBinding);
+    stopActionBinding(state.skillQAfterBinding);
+    state.mixer.stopAllAction();
+    state.mixer.uncacheRoot(clone.model ?? clone.root);
+    clone.animation = null;
+  };
+
+  const playOneShotBinding = (binding: ActionBinding | null, timeScale = 1) => {
+    if (!binding) return;
+    const action = binding.action;
+    action.reset();
+    action.enabled = true;
+    action.paused = false;
+    action.setEffectiveWeight(1);
+    action.setEffectiveTimeScale(timeScale);
+    action.play();
+  };
+
+  const startCloneSkillEShootAnimation = (
+    clone: BaronClone,
+    now: number,
+    superMode: boolean
+  ) => {
+    const state = clone.animation;
+    if (!state) return;
+    const preferred = superMode
+      ? state.skillESuperShootBinding ?? state.skillEShootBinding
+      : state.skillEShootBinding ?? state.skillESuperShootBinding;
+    if (!preferred) {
+      state.shootEndsAt = 0;
+      state.shootSuper = false;
+      return;
+    }
+    state.shootSuper = preferred === state.skillESuperShootBinding;
+    state.shootEndsAt = now + Math.max(120, preferred.clip.duration * 1000);
+    playOneShotBinding(preferred);
+  };
+
+  const clearCloneLocomotionAndShurikenLayers = (state: CloneAnimationState) => {
+    state.shootEndsAt = 0;
+    state.shootSuper = false;
+    stopActionBinding(state.walkBinding);
+    stopActionBinding(state.runBinding);
+    stopActionBinding(state.skillEHoldBinding);
+    stopActionBinding(state.skillESuperHoldBinding);
+    stopActionBinding(state.skillEShootBinding);
+    stopActionBinding(state.skillESuperShootBinding);
+  };
+
+  const startCloneSkillQBeforeAnimation = (clone: BaronClone) => {
+    const state = clone.animation;
+    if (!state) return;
+    clearCloneLocomotionAndShurikenLayers(state);
+    stopActionBinding(state.skillQAfterBinding);
+    playOneShotBinding(state.skillQBeforeBinding);
+  };
+
+  const startCloneSkillQAfterAnimation = (clone: BaronClone) => {
+    const state = clone.animation;
+    if (!state) return;
+    clearCloneLocomotionAndShurikenLayers(state);
+    stopActionBinding(state.skillQBeforeBinding);
+    playOneShotBinding(state.skillQAfterBinding);
+  };
+
+  const updateCloneAnimationState = (
+    clone: BaronClone,
+    now: number,
+    deltaSeconds: number,
+    isMoving: boolean,
+    isSprinting: boolean,
+    eHoldActive: boolean,
+    superMode: boolean
+  ) => {
+    const state = clone.animation;
+    if (!state) return;
+    const shootActive = state.shootEndsAt > now;
+    const holdActive = eHoldActive && !shootActive && !isMoving;
+    const runActive = isMoving && isSprinting;
+    const walkActive = isMoving && !isSprinting;
+    const regularHoldActive = holdActive && !superMode;
+    const superHoldActive = holdActive && superMode;
+    const regularShootActive = shootActive && !state.shootSuper;
+    const superShootActive = shootActive && state.shootSuper;
+
+    applyLoopBindingState(state.runBinding, runActive, 1);
+    applyLoopBindingState(state.walkBinding, walkActive, 1);
+    applyLoopBindingState(state.skillEHoldBinding, regularHoldActive, 1);
+    applyLoopBindingState(state.skillESuperHoldBinding, superHoldActive, 1);
+    applyOneShotBindingState(state.skillEShootBinding, regularShootActive);
+    applyOneShotBindingState(state.skillESuperShootBinding, superShootActive);
+    state.mixer.update(deltaSeconds);
+  };
+
+  const startPrimaryNormalAttackAnimation = (
+    now: number,
+    rightArmOnly: boolean
+  ) => {
+    const binding = rightArmOnly
+      ? runtimeNormalAttackRightArmBinding ?? runtimeNormalAttackBinding
+      : runtimeNormalAttackBinding ?? runtimeNormalAttackRightArmBinding;
+    if (!binding) return;
+    const action = binding.action;
+    runtimeNormalAttackEndsAt = now + Math.max(120, binding.clip.duration * 1000);
+    action.reset();
+    action.enabled = true;
+    action.paused = false;
+    action.setEffectiveWeight(1);
+    action.setEffectiveTimeScale(1);
+    action.play();
+  };
+
+  const startSkillQAnimation = () => {
+    playOneShotBinding(runtimeSkillQBinding);
+  };
+
+  const startSkillQBeforeAnimation = () => {
+    playOneShotBinding(runtimeSkillQBeforeBinding ?? runtimeSkillQBinding);
+  };
+
+  const startSkillQAfterAnimation = () => {
+    playOneShotBinding(runtimeSkillQAfterBinding ?? runtimeSkillQBinding);
+  };
+
+  const startSkillRAnimation = () => {
+    playOneShotBinding(runtimeSkillRBinding);
+  };
+
+  const resolveRuntimeSkillRDurationMs = () => {
+    if (!runtimeSkillRBinding) return skillRConfig.durationMs;
+    return Math.max(240, runtimeSkillRBinding.clip.duration * 1000);
+  };
+
+  const resolveRuntimeSkillQDurationMs = () =>
+    Math.max(
+      240,
+      runtimeSkillQBinding
+        ? runtimeSkillQBinding.clip.duration * 1000
+        : runtimeSkillQTiming.durationSec * 1000
+    );
+
+  const resolveRuntimeSkillQBeforeDurationMs = () =>
+    Math.max(
+      240,
+      runtimeSkillQBeforeBinding
+        ? runtimeSkillQBeforeBinding.clip.duration * 1000
+        : resolveRuntimeSkillQDurationMs()
+    );
+
+  const resolveRuntimeSkillQAfterDurationMs = () =>
+    Math.max(
+      240,
+      runtimeSkillQAfterBinding
+        ? runtimeSkillQAfterBinding.clip.duration * 1000
+        : resolveRuntimeSkillQDurationMs() * 0.64
+    );
+
+  const applyWeaponGripConstraint = (active: boolean) => {
+    if (!active) {
+      runtimeWeaponConstraintOffsetReady = false;
+      runtimeWeaponConstraintHandToWeapon.identity();
+      return;
+    }
+    if (
+      !runtimeAnimationModel ||
+      !runtimeWeaponConstraintHand ||
+      !runtimeWeaponConstraintWeapon
+    ) {
+      return;
+    }
+    const weaponParent = runtimeWeaponConstraintWeapon.parent;
+    if (!weaponParent) return;
+
+    runtimeAnimationModel.updateMatrixWorld(true);
+    if (!runtimeWeaponConstraintOffsetReady) {
+      if (runtimePreferredGripOffsetReady) {
+        runtimeWeaponConstraintHandToWeapon.copy(runtimePreferredGripHandToWeapon);
+      } else {
+        runtimeWeaponConstraintHandWorld
+          .copy(runtimeWeaponConstraintHand.matrixWorld)
+          .invert();
+        runtimeWeaponConstraintHandToWeapon.multiplyMatrices(
+          runtimeWeaponConstraintHandWorld,
+          runtimeWeaponConstraintWeapon.matrixWorld
+        );
+      }
+      runtimeWeaponConstraintOffsetReady = true;
+    }
+    runtimeWeaponConstraintHandWorld.copy(runtimeWeaponConstraintHand.matrixWorld);
+    runtimeWeaponConstraintTargetWorld.multiplyMatrices(
+      runtimeWeaponConstraintHandWorld,
+      runtimeWeaponConstraintHandToWeapon
+    );
+    runtimeWeaponConstraintParentInverse.copy(weaponParent.matrixWorld).invert();
+    runtimeWeaponConstraintLocal.multiplyMatrices(
+      runtimeWeaponConstraintParentInverse,
+      runtimeWeaponConstraintTargetWorld
+    );
+    runtimeWeaponConstraintLocal.decompose(
+      runtimeWeaponConstraintLocalPosition,
+      runtimeWeaponConstraintLocalQuaternion,
+      runtimeWeaponConstraintLocalScale
+    );
+    runtimeWeaponConstraintWeapon.position.copy(runtimeWeaponConstraintLocalPosition);
+    runtimeWeaponConstraintWeapon.quaternion.copy(
+      runtimeWeaponConstraintLocalQuaternion
+    );
+  };
+
+  const capturePreferredGripOffset = (active: boolean) => {
+    if (
+      !active ||
+      !runtimeAnimationModel ||
+      !runtimeWeaponConstraintHand ||
+      !runtimeWeaponConstraintWeapon
+    ) {
+      return;
+    }
+    runtimeAnimationModel.updateMatrixWorld(true);
+    runtimeWeaponConstraintHandWorld
+      .copy(runtimeWeaponConstraintHand.matrixWorld)
+      .invert();
+    runtimePreferredGripHandToWeapon.multiplyMatrices(
+      runtimeWeaponConstraintHandWorld,
+      runtimeWeaponConstraintWeapon.matrixWorld
+    );
+    runtimePreferredGripOffsetReady = true;
+  };
+
+  const updateRuntimeAnimationState = ({
+    now,
+    deltaSeconds,
+    isMoving,
+    isSprinting,
+  }: {
+    now: number;
+    deltaSeconds: number;
+    isMoving: boolean;
+    isSprinting: boolean;
+  }) => {
+    syncRuntimeWeaponFirstPersonProxies();
+    if (!runtimeAnimationMixer) return;
+
+    if (runtimeSkillQBinding) {
+      const action = runtimeSkillQBinding.action;
+      const skillQAnimationActive = skillQState.active;
+      action.setEffectiveWeight(skillQAnimationActive ? 1 : 0);
+      action.paused = !skillQAnimationActive;
+      if (skillQAnimationActive) {
+        action.enabled = true;
+        if (!action.isRunning() && action.time <= 0.0001) {
+          action.play();
+        }
+      }
+    }
+
+    if (runtimeSkillRBinding) {
+      const action = runtimeSkillRBinding.action;
+      const skillRAnimationActive = skillRState.active;
+      action.setEffectiveWeight(skillRAnimationActive ? 1 : 0);
+      action.paused = !skillRAnimationActive;
+      if (skillRAnimationActive) {
+        action.enabled = true;
+        // If model binding becomes ready after R already started, kick off the clip once.
+        if (!action.isRunning() && action.time <= 0.0001) {
+          action.play();
+        }
+      }
+    }
+
+    const cloneBuffActive = isCloneShurikenBuffActive();
+    const eShootActive = runtimeSkillEShootEndsAt > now;
+    const eUseSuper = cloneBuffActive;
+    const eHoldActive = skillEChargeState.isCharging && !eShootActive;
+    const regularEHoldActive = eHoldActive && !eUseSuper;
+    const superEHoldActive = eHoldActive && eUseSuper;
+    const regularEShootActive = eShootActive && !runtimeSkillEShootSuper;
+    const superEShootActive = eShootActive && runtimeSkillEShootSuper;
+    let eActiveArmSide: "left" | "right" | null = null;
+    if (eShootActive) {
+      eActiveArmSide = runtimeSkillEShootSuper ? "right" : "left";
+    } else if (eHoldActive) {
+      eActiveArmSide = eUseSuper ? "right" : "left";
+    }
+    applyLoopBindingState(runtimeSkillEHoldBinding, regularEHoldActive, 1);
+    applyLoopBindingState(runtimeSkillESuperHoldBinding, superEHoldActive, 1);
+    applyOneShotBindingState(runtimeSkillEShootBinding, regularEShootActive);
+    applyOneShotBindingState(runtimeSkillESuperShootBinding, superEShootActive);
+
+    const holdActive = chargeState.isCharging;
+    const skillPoseActive =
+      skillQState.active || skillQSuperState.active || skillRState.active;
+    const normalAttackActive = runtimeNormalAttackEndsAt > now;
+    const stationaryChargeState = holdActive && !isMoving && !skillPoseActive;
+    const movingChargeState = holdActive && isMoving && !skillPoseActive;
+
+    const useRightArmOnlyPrimary = isMoving && !skillPoseActive;
+    const useRightArmHoldOnly =
+      movingChargeState && Boolean(runtimeHoldRightArmBinding);
+    const useRightArmAttackOnly =
+      useRightArmOnlyPrimary && Boolean(runtimeNormalAttackRightArmBinding);
+    const fullBodyNormalAttackActive =
+      normalAttackActive && !useRightArmAttackOnly;
+    const rightArmNormalAttackActive =
+      normalAttackActive && useRightArmAttackOnly;
+    if (runtimeNormalAttackBinding) {
+      runtimeNormalAttackBinding.action.setEffectiveWeight(
+        fullBodyNormalAttackActive ? 1 : 0
+      );
+      runtimeNormalAttackBinding.action.paused = !fullBodyNormalAttackActive;
+      if (fullBodyNormalAttackActive) {
+        runtimeNormalAttackBinding.action.enabled = true;
+      }
+    }
+    if (runtimeNormalAttackRightArmBinding) {
+      runtimeNormalAttackRightArmBinding.action.setEffectiveWeight(
+        rightArmNormalAttackActive ? 1 : 0
+      );
+      runtimeNormalAttackRightArmBinding.action.paused = !rightArmNormalAttackActive;
+      if (rightArmNormalAttackActive) {
+        runtimeNormalAttackRightArmBinding.action.enabled = true;
+      }
+    }
+
+    const blockLocomotion =
+      skillPoseActive || (!isMoving && (holdActive || normalAttackActive));
+    const runActive = !blockLocomotion && isMoving && isSprinting;
+    const walkActive = !blockLocomotion && isMoving && !isSprinting;
+    const fullBodyHoldActive =
+      holdActive && !normalAttackActive && !useRightArmHoldOnly;
+    const rightArmHoldActive =
+      holdActive && !normalAttackActive && useRightArmHoldOnly;
+    const rightArmMaskedLocomotionActive =
+      movingChargeState || (eActiveArmSide === "right" && isMoving);
+    const leftArmMaskedLocomotionActive = eActiveArmSide === "left" && isMoving;
+    const keepRightHandLocked = movingChargeState;
+    const runUseNoRightArm =
+      rightArmMaskedLocomotionActive &&
+      runActive &&
+      Boolean(runtimeRunNoRightArmBinding);
+    const walkUseNoRightArm =
+      rightArmMaskedLocomotionActive &&
+      walkActive &&
+      Boolean(runtimeWalkNoRightArmBinding);
+    const runUseNoLeftArm =
+      leftArmMaskedLocomotionActive &&
+      runActive &&
+      Boolean(runtimeRunNoLeftArmBinding);
+    const walkUseNoLeftArm =
+      leftArmMaskedLocomotionActive &&
+      walkActive &&
+      Boolean(runtimeWalkNoLeftArmBinding);
+    applyLoopBindingState(
+      runtimeRunBinding,
+      runActive && !runUseNoRightArm && !runUseNoLeftArm,
+      1
+    );
+    applyLoopBindingState(
+      runtimeWalkBinding,
+      walkActive && !walkUseNoRightArm && !walkUseNoLeftArm,
+      1
+    );
+    applyLoopBindingState(runtimeRunNoRightArmBinding, runUseNoRightArm, 1);
+    applyLoopBindingState(runtimeWalkNoRightArmBinding, walkUseNoRightArm, 1);
+    applyLoopBindingState(runtimeRunNoLeftArmBinding, runUseNoLeftArm, 1);
+    applyLoopBindingState(runtimeWalkNoLeftArmBinding, walkUseNoLeftArm, 1);
+    applyLoopBindingState(runtimeHoldBinding, fullBodyHoldActive, 1);
+    applyLoopBindingState(runtimeHoldRightArmBinding, rightArmHoldActive, 1);
+
+    runtimeAnimationMixer.update(deltaSeconds);
+    capturePreferredGripOffset(stationaryChargeState);
+    applyWeaponGripConstraint(keepRightHandLocked);
+  };
+
   const isCloneShurikenBuffActive = () =>
-    cloneState.active && cloneState.clones.length > 0;
+    cloneState.active && !cloneState.consumePending && cloneState.clones.length > 0;
 
   const createCloneChargeFx = (
     materials: THREE.Material[],
@@ -1461,6 +3041,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       clone.root.getWorldPosition(cloneScratchTemp);
       spawnCloneSmokeBurst(cloneScratchTemp, 6);
     }
+    disposeCloneAnimationState(clone);
     clone.root.removeFromParent();
     for (let i = 0; i < clone.materials.length; i += 1) {
       clone.materials[i].dispose();
@@ -1480,6 +3061,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     cloneState.active = false;
     cloneState.startedAt = 0;
     cloneState.endsAt = 0;
+    cloneState.consumePending = false;
+    cloneState.consumeAfterShootAt = 0;
   };
 
   const updateCloneDirection = (clone: BaronClone, now: number) => {
@@ -1519,6 +3102,423 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   let runtimeAvatarModelRef: THREE.Object3D | null = null;
+  const skillRShadowColor = new THREE.Color(0x030303);
+  const skillRShadowMaterials: SkillRShadowMaterialState[] = [];
+  let skillRShadowActive = false;
+  let skillRShadowBlend = 0;
+  const skillRShadowFadeInLambda = 16;
+  const skillRShadowFadeOutLambda = 10;
+  const skillRAfterImageConfig = {
+    lifeMs: 420,
+    baseOpacity: 0.72,
+    scaleBoost: 0.06,
+  };
+  const skillRAfterImageTint = new THREE.Color(0x000000);
+  const skillRAfterImages: SkillRAfterImage[] = [];
+  const skillRAfterImageWorldPosition = new THREE.Vector3();
+  const skillRAfterImageWorldQuaternion = new THREE.Quaternion();
+  const skillRAfterImageWorldScale = new THREE.Vector3();
+  const skillRAfterImageParentQuaternion = new THREE.Quaternion();
+  const isColorMaterial = (
+    material: THREE.Material
+  ): material is THREE.Material & { color: THREE.Color } =>
+    Boolean((material as THREE.Material & { color?: THREE.Color }).color?.isColor);
+  const isEmissiveMaterial = (
+    material: THREE.Material
+  ): material is THREE.Material & {
+    emissive: THREE.Color;
+    emissiveIntensity: number;
+  } =>
+    Boolean(
+      (
+        material as THREE.Material & {
+          emissive?: THREE.Color;
+          emissiveIntensity?: number;
+        }
+      ).emissive?.isColor
+    );
+
+  const restoreSkillRShadowForm = () => {
+    if (!skillRShadowMaterials.length) {
+      skillRShadowActive = false;
+      skillRShadowBlend = 0;
+      return;
+    }
+    for (let i = 0; i < skillRShadowMaterials.length; i += 1) {
+      const entry = skillRShadowMaterials[i];
+      const material = entry.material;
+      if (entry.color && isColorMaterial(material)) {
+        material.color.copy(entry.color);
+      }
+      if (entry.emissive && isEmissiveMaterial(material)) {
+        material.emissive.copy(entry.emissive);
+        if (entry.emissiveIntensity !== null) {
+          material.emissiveIntensity = entry.emissiveIntensity;
+        }
+      }
+    }
+    skillRShadowMaterials.length = 0;
+    skillRShadowActive = false;
+    skillRShadowBlend = 0;
+  };
+
+  const captureSkillRShadowMaterials = () => {
+    if (skillRShadowActive || !runtimeAvatarModelRef) return;
+    const visited = new Set<THREE.Material>();
+    const captureMaterial = (material: THREE.Material) => {
+      if (visited.has(material)) return;
+      visited.add(material);
+      const state: SkillRShadowMaterialState = {
+        material,
+        color: null,
+        emissive: null,
+        emissiveIntensity: null,
+      };
+      let changed = false;
+      if (isColorMaterial(material)) {
+        state.color = material.color.clone();
+        changed = true;
+      }
+      if (isEmissiveMaterial(material)) {
+        state.emissive = material.emissive.clone();
+        state.emissiveIntensity = material.emissiveIntensity;
+        changed = true;
+      }
+      if (!changed) return;
+      skillRShadowMaterials.push(state);
+    };
+
+    runtimeAvatarModelRef.traverse((child: THREE.Object3D) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (Array.isArray(mesh.material)) {
+        for (let i = 0; i < mesh.material.length; i += 1) {
+          const material = mesh.material[i];
+          if (!material) continue;
+          captureMaterial(material);
+        }
+        return;
+      }
+      if (mesh.material) {
+        captureMaterial(mesh.material);
+      }
+    });
+    skillRShadowActive = skillRShadowMaterials.length > 0;
+  };
+
+  const applySkillRShadowBlend = (blend: number) => {
+    const clampedBlend = THREE.MathUtils.clamp(blend, 0, 1);
+    for (let i = 0; i < skillRShadowMaterials.length; i += 1) {
+      const entry = skillRShadowMaterials[i];
+      const material = entry.material;
+      if (entry.color && isColorMaterial(material)) {
+        material.color.copy(entry.color).lerp(skillRShadowColor, clampedBlend);
+      }
+      if (entry.emissive && isEmissiveMaterial(material)) {
+        material.emissive.copy(entry.emissive).lerp(skillRShadowColor, clampedBlend);
+        if (entry.emissiveIntensity !== null) {
+          material.emissiveIntensity = THREE.MathUtils.lerp(
+            entry.emissiveIntensity,
+            0,
+            clampedBlend
+          );
+        }
+      }
+    }
+  };
+
+  const updateSkillRShadowForm = (active: boolean, deltaSeconds: number) => {
+    if (active) {
+      captureSkillRShadowMaterials();
+    }
+    if (!skillRShadowActive && skillRShadowBlend <= 0.0001) return;
+
+    skillRShadowBlend = THREE.MathUtils.damp(
+      skillRShadowBlend,
+      active ? 1 : 0,
+      active ? skillRShadowFadeInLambda : skillRShadowFadeOutLambda,
+      Math.max(0, deltaSeconds)
+    );
+
+    if (!active && skillRShadowBlend <= 0.001) {
+      restoreSkillRShadowForm();
+      return;
+    }
+    applySkillRShadowBlend(skillRShadowBlend);
+  };
+
+  const clearSkillRAfterImages = () => {
+    for (let i = 0; i < skillRAfterImages.length; i += 1) {
+      const entry = skillRAfterImages[i];
+      entry.root.removeFromParent();
+      for (let matIndex = 0; matIndex < entry.materials.length; matIndex += 1) {
+        entry.materials[matIndex].dispose();
+      }
+    }
+    skillRAfterImages.length = 0;
+  };
+
+  const spawnSkillRAfterImage = (
+    now: number,
+    options?: {
+      sourceModel?: THREE.Object3D | null;
+      lifeMs?: number;
+      baseOpacity?: number;
+      scaleBoost?: number;
+      attachTo?: THREE.Object3D | null;
+      preserveWorldTransform?: boolean;
+    }
+  ) => {
+    const sourceModel = options?.sourceModel ?? runtimeAvatarModelRef;
+    const snapshotParent = options?.attachTo ?? sourceModel?.parent ?? null;
+    if (!sourceModel || !snapshotParent) return;
+    const lifeMs = Math.max(80, options?.lifeMs ?? skillRAfterImageConfig.lifeMs);
+    const baseOpacity = THREE.MathUtils.clamp(
+      options?.baseOpacity ?? skillRAfterImageConfig.baseOpacity,
+      0.08,
+      1
+    );
+    const scaleBoost = options?.scaleBoost ?? skillRAfterImageConfig.scaleBoost;
+
+    sourceModel.updateMatrixWorld(true);
+    const sourceMeshLayerMasks: number[] = [];
+    sourceModel.traverse((child: THREE.Object3D) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      sourceMeshLayerMasks.push(mesh.layers.mask);
+    });
+    const snapshot = skeletonClone(sourceModel);
+    const materials: THREE.Material[] = [];
+    let meshLayerIndex = 0;
+    snapshot.traverse((child: THREE.Object3D) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const source = mesh.material;
+      if (Array.isArray(source)) {
+        const cloned = source.map((material) => {
+          const next = material.clone();
+          next.transparent = true;
+          next.opacity = baseOpacity;
+          next.depthWrite = false;
+          next.blending = THREE.NormalBlending;
+          if (isColorMaterial(next)) {
+            next.color.copy(skillRAfterImageTint);
+          }
+          if (isEmissiveMaterial(next)) {
+            next.emissive.copy(skillRAfterImageTint);
+            next.emissiveIntensity = 0;
+          }
+          materials.push(next);
+          return next;
+        });
+        mesh.material = cloned;
+      } else if (source) {
+        const next = source.clone();
+        next.transparent = true;
+        next.opacity = baseOpacity;
+        next.depthWrite = false;
+        next.blending = THREE.NormalBlending;
+        if (isColorMaterial(next)) {
+          next.color.copy(skillRAfterImageTint);
+        }
+        if (isEmissiveMaterial(next)) {
+          next.emissive.copy(skillRAfterImageTint);
+          next.emissiveIntensity = 0;
+        }
+        mesh.material = next;
+        materials.push(next);
+      }
+      mesh.layers.mask = sourceMeshLayerMasks[meshLayerIndex] ?? mesh.layers.mask;
+      meshLayerIndex += 1;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+    });
+    if (options?.preserveWorldTransform) {
+      sourceModel.getWorldPosition(skillRAfterImageWorldPosition);
+      sourceModel.getWorldQuaternion(skillRAfterImageWorldQuaternion);
+      sourceModel.getWorldScale(skillRAfterImageWorldScale);
+      snapshotParent.updateMatrixWorld(true);
+      snapshot.position.copy(skillRAfterImageWorldPosition);
+      snapshotParent.worldToLocal(snapshot.position);
+      snapshotParent
+        .getWorldQuaternion(skillRAfterImageParentQuaternion)
+        .invert();
+      snapshot.quaternion
+        .copy(skillRAfterImageParentQuaternion)
+        .multiply(skillRAfterImageWorldQuaternion);
+      snapshot.scale.copy(skillRAfterImageWorldScale).multiplyScalar(1 + scaleBoost);
+    } else {
+      snapshot.scale.multiplyScalar(1 + scaleBoost);
+    }
+    snapshotParent.add(snapshot);
+    skillRAfterImages.push({
+      root: snapshot,
+      materials,
+      spawnedAt: now,
+      lifeMs,
+      baseOpacity,
+    });
+  };
+
+  const updateSkillRAfterImages = (now: number) => {
+    for (let i = skillRAfterImages.length - 1; i >= 0; i -= 1) {
+      const entry = skillRAfterImages[i];
+      const progress = THREE.MathUtils.clamp(
+        (now - entry.spawnedAt) / entry.lifeMs,
+        0,
+        1
+      );
+      const fade = 1 - THREE.MathUtils.smoothstep(progress, 0.15, 1);
+      const opacity = entry.baseOpacity * fade;
+      for (let matIndex = 0; matIndex < entry.materials.length; matIndex += 1) {
+        const material = entry.materials[matIndex];
+        material.transparent = true;
+        material.opacity = opacity;
+      }
+      if (progress < 1) continue;
+      entry.root.removeFromParent();
+      for (let matIndex = 0; matIndex < entry.materials.length; matIndex += 1) {
+        entry.materials[matIndex].dispose();
+      }
+      skillRAfterImages.splice(i, 1);
+    }
+  };
+
+  const getSkillQSealGlyphTexture = (
+    character: string,
+    tone: "black" | "white"
+  ) => {
+    const textureKey = `${character}:${tone}`;
+    const cached = skillQSealGlyphTextureCache.get(textureKey);
+    if (cached) return cached;
+    if (typeof document === "undefined") return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    const isBlackTone = tone === "black";
+    context.shadowColor = isBlackTone
+      ? "rgba(248,250,252,0.6)"
+      : "rgba(15,23,42,0.7)";
+    context.shadowBlur = 26;
+    context.font =
+      "900 168px 'Noto Serif SC','Source Han Serif SC','Microsoft YaHei','PingFang SC',serif";
+    context.lineWidth = 20;
+    context.strokeStyle = isBlackTone
+      ? "rgba(248,250,252,0.98)"
+      : "rgba(15,23,42,0.98)";
+    context.strokeText(character, 128, 132);
+    context.fillStyle = isBlackTone
+      ? "rgba(15,23,42,1)"
+      : "rgba(248,250,252,1)";
+    context.fillText(character, 128, 132);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    skillQSealGlyphTextureCache.set(textureKey, texture);
+    return texture;
+  };
+
+  const clearSkillQSealGlyphEntries = () => {
+    for (let i = 0; i < skillQSealGlyphEntries.length; i += 1) {
+      const entry = skillQSealGlyphEntries[i];
+      entry.sprite.removeFromParent();
+      entry.material.dispose();
+    }
+    skillQSealGlyphEntries.length = 0;
+  };
+
+  const disposeSkillQSealGlyphTextures = () => {
+    for (const texture of skillQSealGlyphTextureCache.values()) {
+      texture.dispose();
+    }
+    skillQSealGlyphTextureCache.clear();
+  };
+
+  const spawnSkillQSealGlyphBurst = (now: number) => {
+    const shuffledCharacters = [...skillQSealGlyphChars].sort(
+      () => Math.random() - 0.5
+    );
+    for (let i = 0; i < shuffledCharacters.length; i += 1) {
+      const tone = i % 2 === 0 ? "black" : "white";
+      const texture = getSkillQSealGlyphTexture(shuffledCharacters[i], tone);
+      if (!texture) continue;
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+        depthTest: true,
+      });
+      material.toneMapped = false;
+      const sprite = new THREE.Sprite(material);
+      sprite.renderOrder = 12;
+      const baseScale = THREE.MathUtils.lerp(
+        skillQConfig.glyphScaleMin,
+        skillQConfig.glyphScaleMax,
+        Math.random()
+      );
+      sprite.scale.set(baseScale * 0.82, baseScale, 1);
+      const lateralOffset = THREE.MathUtils.randFloatSpread(
+        skillQConfig.glyphLateralSpread * 2
+      );
+      const heightOffset = THREE.MathUtils.lerp(
+        skillQConfig.glyphHeightMin,
+        skillQConfig.glyphHeightMax,
+        Math.random()
+      );
+      const frontOffset = THREE.MathUtils.lerp(
+        skillQConfig.glyphFrontMin,
+        skillQConfig.glyphFrontMax,
+        Math.random()
+      );
+      sprite.position.set(lateralOffset, heightOffset, frontOffset);
+      avatar.add(sprite);
+      skillQSealGlyphEntries.push({
+        sprite,
+        material,
+        spawnedAt: now,
+        lifeMs: skillQConfig.glyphLifeMs,
+        baseScale,
+        origin: sprite.position.clone(),
+        drift: new THREE.Vector3(
+          THREE.MathUtils.randFloatSpread(0.12) + lateralOffset * 0.08,
+          THREE.MathUtils.lerp(0.18, 0.38, Math.random()),
+          THREE.MathUtils.lerp(0.06, 0.18, Math.random())
+        ),
+      });
+    }
+  };
+
+  const updateSkillQSealGlyphEntries = (now: number) => {
+    for (let i = skillQSealGlyphEntries.length - 1; i >= 0; i -= 1) {
+      const entry = skillQSealGlyphEntries[i];
+      const progress = THREE.MathUtils.clamp(
+        (now - entry.spawnedAt) / entry.lifeMs,
+        0,
+        1
+      );
+      if (progress >= 1) {
+        entry.sprite.removeFromParent();
+        entry.material.dispose();
+        skillQSealGlyphEntries.splice(i, 1);
+        continue;
+      }
+      const easedProgress = THREE.MathUtils.smoothstep(progress, 0, 1);
+      entry.sprite.position
+        .copy(entry.origin)
+        .addScaledVector(entry.drift, easedProgress);
+      const scale = entry.baseScale * (1 + easedProgress * 0.36);
+      entry.sprite.scale.set(scale * 0.82, scale, 1);
+      entry.material.opacity = Math.pow(1 - progress, 1.45);
+    }
+  };
 
   const spawnClones = (now: number) => {
     clearAllClones(true);
@@ -1602,6 +3602,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         speed: cloneBaseSpeed * THREE.MathUtils.lerp(0.85, 1.18, Math.random()),
         direction: cloneScratchDirection.clone(),
         nextTurnAt: now + THREE.MathUtils.lerp(300, 900, Math.random()),
+        animation: createCloneAnimationState(model, runtimeAnimationClips),
         materials,
         geometries,
       };
@@ -1613,6 +3614,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     cloneState.active = cloneState.clones.length > 0;
     cloneState.startedAt = now;
     cloneState.endsAt = now + cloneConfig.durationMs;
+    cloneState.consumePending = false;
+    cloneState.consumeAfterShootAt = 0;
     if (cloneState.active) {
       spawnCloneSmokeBurst(cloneScratchOrigin, 12);
     }
@@ -1626,7 +3629,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
     hostIsMoving: boolean,
     hostIsSprinting: boolean
   ) => {
+    if (skillQSuperState.active) return;
     if (!cloneState.active) return;
+    if (cloneState.consumePending && now >= cloneState.consumeAfterShootAt) {
+      clearAllClones(true);
+      return;
+    }
     if (now >= cloneState.endsAt) {
       clearAllClones(true);
       return;
@@ -1652,7 +3660,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       const clone = cloneState.clones[i];
       const mimicMovingDuringCharge = preparingThrow && hostIsMoving;
       const useChargeStance = preparingThrow && !mimicMovingDuringCharge;
-      const isCloneMoving = !preparingThrow || mimicMovingDuringCharge;
+      const isCloneMoving = cloneState.consumePending
+        ? false
+        : !preparingThrow || mimicMovingDuringCharge;
       if (isCloneMoving) {
         updateCloneDirection(clone, now);
         clone.root.position.addScaledVector(clone.direction, clone.speed * deltaSeconds);
@@ -1679,199 +3689,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
         targetYaw,
         useChargeStance ? 0.38 : 0.22
       );
-      const crouchDepth = useChargeStance
-        ? THREE.MathUtils.lerp(
-            cloneConfig.preparingCrouchDepthMin,
-            cloneConfig.preparingCrouchDepthMax,
-            eChargeRatio
-          )
-        : 0;
-      const leanForward = useChargeStance
-        ? THREE.MathUtils.lerp(
-            cloneConfig.preparingLeanMin,
-            cloneConfig.preparingLeanMax,
-            eChargeRatio
-          )
-        : 0;
-      const legBend = useChargeStance
-        ? THREE.MathUtils.lerp(
-            cloneConfig.preparingLegBendMin,
-            cloneConfig.preparingLegBendMax,
-            eChargeRatio
-          )
-        : 0;
-      const legSpread = useChargeStance
-        ? THREE.MathUtils.lerp(
-            cloneConfig.preparingLegSpreadMin,
-            cloneConfig.preparingLegSpreadMax,
-            eChargeRatio
-          )
-        : 0;
-      const legTwist = useChargeStance
-        ? THREE.MathUtils.lerp(
-            cloneConfig.preparingLegTwistMin,
-            cloneConfig.preparingLegTwistMax,
-            eChargeRatio
-          )
-        : 0;
-      const handLiftY = preparingThrow
-        ? THREE.MathUtils.lerp(
-            cloneConfig.preparingHandLiftYMin,
-            cloneConfig.preparingHandLiftYMax,
-            eChargeRatio
-          )
-        : 0;
-      const handForward = preparingThrow
-        ? THREE.MathUtils.lerp(
-            cloneConfig.preparingHandForwardMin,
-            cloneConfig.preparingHandForwardMax,
-            eChargeRatio
-          )
-        : 0;
-      const bodySquash = useChargeStance
-        ? THREE.MathUtils.lerp(
-            cloneConfig.preparingBodySquashMin,
-            cloneConfig.preparingBodySquashMax,
-            eChargeRatio
-          )
-        : 1;
-      const bodyWiden = useChargeStance
-        ? THREE.MathUtils.lerp(
-            cloneConfig.preparingBodyWidenMin,
-            cloneConfig.preparingBodyWidenMax,
-            eChargeRatio
-          )
-        : 1;
+      clone.chargeFx.visible = false;
+      clone.heldShuriken.group.visible = false;
 
-      if (clone.model) {
-        profile.animateModel?.({
-          avatarModel: clone.model,
-          isMoving: isCloneMoving,
-          isSprinting: mimicMovingDuringCharge && hostIsSprinting,
-          now,
-          THREE,
-        });
-        clone.walkPhase += deltaSeconds * (isCloneMoving ? 4.2 + clone.speed * 0.3 : 1.6);
-        clone.model.position.y = THREE.MathUtils.lerp(
-          clone.model.position.y,
-          isCloneMoving ? Math.sin(clone.walkPhase + i * 0.45) * 0.055 : -crouchDepth,
-          isCloneMoving ? 0.24 : useChargeStance ? 0.28 : 0.16
-        );
-        if (useChargeStance) {
-          clone.model.rotation.x = THREE.MathUtils.lerp(
-            clone.model.rotation.x,
-            leanForward,
-            0.3
-          );
-        }
-        clone.model.rotation.z = THREE.MathUtils.lerp(
-          clone.model.rotation.z,
-          0,
-          useChargeStance ? 0.28 : 0.14
-        );
-        clone.model.scale.x = THREE.MathUtils.lerp(
-          clone.model.scale.x,
-          bodyWiden,
-          useChargeStance ? 0.26 : 0.14
-        );
-        clone.model.scale.y = THREE.MathUtils.lerp(
-          clone.model.scale.y,
-          bodySquash,
-          useChargeStance ? 0.26 : 0.14
-        );
-        clone.model.scale.z = THREE.MathUtils.lerp(
-          clone.model.scale.z,
-          bodyWiden,
-          useChargeStance ? 0.26 : 0.14
-        );
-      }
-
-      if (clone.legLeft && clone.legRight) {
-        const stride = isCloneMoving ? Math.sin(clone.walkPhase) * 0.52 : 0;
-        const baseLegAngle = useChargeStance ? -0.2 - legBend : -0.16;
-        const legStanceLerp = useChargeStance ? 0.34 : 0.18;
-        clone.legLeft.rotation.x = THREE.MathUtils.lerp(
-          clone.legLeft.rotation.x,
-          baseLegAngle + stride,
-          useChargeStance ? 0.36 : 0.26
-        );
-        clone.legRight.rotation.x = THREE.MathUtils.lerp(
-          clone.legRight.rotation.x,
-          baseLegAngle - stride,
-          useChargeStance ? 0.36 : 0.26
-        );
-        clone.legLeft.rotation.z = THREE.MathUtils.lerp(
-          clone.legLeft.rotation.z,
-          useChargeStance ? legSpread : 0,
-          legStanceLerp
-        );
-        clone.legRight.rotation.z = THREE.MathUtils.lerp(
-          clone.legRight.rotation.z,
-          useChargeStance ? -legSpread : 0,
-          legStanceLerp
-        );
-        clone.legLeft.rotation.y = THREE.MathUtils.lerp(
-          clone.legLeft.rotation.y,
-          useChargeStance ? legTwist : 0,
-          legStanceLerp
-        );
-        clone.legRight.rotation.y = THREE.MathUtils.lerp(
-          clone.legRight.rotation.y,
-          useChargeStance ? -legTwist : 0,
-          legStanceLerp
-        );
-      }
-
-      if (clone.throwArm && clone.throwArmBase) {
-        if (preparingThrow) {
-          const chargeTilt = THREE.MathUtils.lerp(0.7, 1.45, eChargeRatio);
-          const chargeTwist = THREE.MathUtils.lerp(0.18, 0.8, eChargeRatio);
-          const chargeRoll = THREE.MathUtils.lerp(-0.12, -0.62, eChargeRatio);
-          cloneArmQuatX.setFromAxisAngle(axisX, -chargeTilt);
-          cloneArmQuatY.setFromAxisAngle(axisY, chargeTwist);
-          cloneArmQuatZ.setFromAxisAngle(axisZ, chargeRoll);
-          clone.throwArm.quaternion
-            .copy(clone.throwArmBase)
-            .premultiply(cloneArmQuatX)
-            .premultiply(cloneArmQuatY)
-            .premultiply(cloneArmQuatZ);
-        } else {
-          clone.throwArm.quaternion.slerp(clone.throwArmBase, 0.28);
-        }
-      }
-
-      clone.chargeFx.visible = preparingThrow;
-      if (preparingThrow) {
-        const pulse = 0.9 + Math.sin(now * 0.018 + i * 0.8) * 0.12;
-        clone.chargeFx.scale.setScalar((0.82 + eChargeRatio * 0.7) * pulse);
-        clone.chargeFx.rotation.y += deltaSeconds * (2.8 + i * 0.22);
-      } else {
-        clone.chargeFx.scale.setScalar(1);
-        clone.chargeFx.rotation.y = 0;
-      }
-
-      const held = clone.heldShuriken;
-      held.group.visible = preparingThrow;
-      if (preparingThrow) {
-        held.group.position.set(0.04, -0.95 + handLiftY, 0.18 + handForward);
-        const pulse = 0.92 + Math.sin(now * 0.02 + i * 0.65) * 0.11;
-        const chargeScale =
-          (1.02 + eChargeRatio * 1.1) * cloneConfig.preparingHeldScaleBoost;
-        held.group.scale.setScalar(0.52 * chargeScale * pulse);
-        held.group.rotation.y += deltaSeconds * (3.7 + i * 0.18);
-        held.blade.rotation.z += deltaSeconds * (5.3 + i * 0.26);
-        held.aura.rotation.z -= deltaSeconds * (3.4 + i * 0.2);
-        held.auraMaterial.opacity = 0.42 + eChargeRatio * 0.5;
-        held.bladeMaterial.emissiveIntensity = 1.2 + eChargeRatio * 1.0;
-      } else {
-        held.group.position.set(0.04, -0.95, 0.18);
-        held.group.scale.setScalar(0.52);
-        held.group.rotation.set(Math.PI * 0.52, 0.2, Math.PI * 0.22);
-        held.blade.rotation.set(0, 0, 0);
-        held.aura.rotation.set(0, 0, 0);
-        held.auraMaterial.opacity = 0.3;
-        held.bladeMaterial.emissiveIntensity = 1.0;
-      }
+      updateCloneAnimationState(
+        clone,
+        now,
+        deltaSeconds,
+        isCloneMoving,
+        isCloneMoving && hostIsSprinting,
+        preparingThrow,
+        true
+      );
     }
   };
 
@@ -1921,8 +3750,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.mesh.position.set(0, 0, 0);
     entry.mesh.rotation.set(0, 0, 0);
     entry.mesh.scale.setScalar(1);
-    entry.material.opacity = 0.8;
-    entry.material.emissiveIntensity = 1.45;
+    entry.material.opacity = 0.92;
+    entry.material.emissiveIntensity = 0;
   };
 
   const acquireSkillRDanceWave = () => {
@@ -1961,8 +3790,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillRConfig.waveMaxScale,
       Math.random()
     );
-    entry.side = skillRState.nextWaveSide;
-    skillRState.nextWaveSide = (skillRState.nextWaveSide * -1) as 1 | -1;
+    entry.side = skillRDanceWaveNextSide;
+    skillRDanceWaveNextSide = (skillRDanceWaveNextSide * -1) as 1 | -1;
     entry.spinRate = THREE.MathUtils.lerp(5.8, 10.2, Math.random());
 
     avatar.updateMatrixWorld(true);
@@ -2001,8 +3830,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.mesh.quaternion.setFromUnitVectors(projectileForward, entry.direction);
     entry.mesh.rotateZ(entry.side * 0.26);
     entry.mesh.scale.setScalar(entry.baseScale * 0.66);
-    entry.material.opacity = 0.84;
-    entry.material.emissiveIntensity = 1.52;
+    entry.material.opacity = 0.94;
+    entry.material.emissiveIntensity = 0;
   };
 
   const updateSkillRDanceWaves = (now: number) => {
@@ -2030,8 +3859,157 @@ export const createRuntime: CharacterRuntimeFactory = ({
       entry.mesh.scale.setScalar(
         entry.baseScale * THREE.MathUtils.lerp(0.66, 1.22, progress)
       );
-      entry.material.opacity = THREE.MathUtils.lerp(0.84, 0.06, progress);
-      entry.material.emissiveIntensity = THREE.MathUtils.lerp(1.52, 0.24, progress);
+      entry.material.opacity = THREE.MathUtils.lerp(0.94, 0.08, progress);
+      entry.material.emissiveIntensity = 0;
+    }
+  };
+
+  const resetSkillQSuperHitFxEntry = (entry: SkillQSuperHitFxEntry) => {
+    entry.active = false;
+    entry.spawnedAt = 0;
+    entry.lifeMs = 0;
+    entry.baseScale = 1;
+    entry.root.removeFromParent();
+    entry.root.visible = false;
+    entry.root.position.set(0, 0, 0);
+    entry.root.rotation.set(0, 0, 0);
+    entry.root.scale.setScalar(1);
+    entry.slashMaterialA.opacity = 0.96;
+    entry.slashMaterialB.opacity = 0.9;
+    entry.ringMaterial.opacity = 0.84;
+  };
+
+  const createSkillQSuperHitFxEntry = () => {
+    const slashMaterialA = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.96,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+    });
+    const slashMaterialB = new THREE.MeshBasicMaterial({
+      color: 0x1a1a1a,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+    });
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.84,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+    });
+    const slashA = new THREE.Mesh(skillQSuperHitSlashGeometry, slashMaterialA);
+    const slashB = new THREE.Mesh(skillQSuperHitSlashGeometry, slashMaterialB);
+    const ring = new THREE.Mesh(skillQSuperHitRingGeometry, ringMaterial);
+    slashA.renderOrder = 24;
+    slashB.renderOrder = 24;
+    ring.renderOrder = 23;
+    slashA.rotation.z = Math.PI * 0.25;
+    slashB.rotation.z = -Math.PI * 0.25;
+    ring.rotation.x = Math.PI * 0.5;
+    const root = new THREE.Group();
+    root.visible = false;
+    root.add(slashA, slashB, ring);
+
+    return {
+      root,
+      slashA,
+      slashB,
+      ring,
+      slashMaterialA,
+      slashMaterialB,
+      ringMaterial,
+      active: false,
+      spawnedAt: 0,
+      lifeMs: 0,
+      baseScale: 1,
+    } as SkillQSuperHitFxEntry;
+  };
+
+  const acquireSkillQSuperHitFxEntry = () => {
+    for (let i = 0; i < skillQSuperHitFxPool.length; i += 1) {
+      const entry = skillQSuperHitFxPool[i];
+      if (!entry.active && !entry.root.parent) return entry;
+    }
+    const entry = createSkillQSuperHitFxEntry();
+    skillQSuperHitFxPool.push(entry);
+    return entry;
+  };
+
+  const clearSkillQSuperHitFx = () => {
+    for (let i = 0; i < skillQSuperHitFxPool.length; i += 1) {
+      resetSkillQSuperHitFxEntry(skillQSuperHitFxPool[i]);
+    }
+  };
+
+  const disposeSkillQSuperHitFx = () => {
+    for (let i = 0; i < skillQSuperHitFxPool.length; i += 1) {
+      const entry = skillQSuperHitFxPool[i];
+      entry.root.removeFromParent();
+      entry.slashMaterialA.dispose();
+      entry.slashMaterialB.dispose();
+      entry.ringMaterial.dispose();
+    }
+    skillQSuperHitFxPool.length = 0;
+  };
+
+  const spawnSkillQSuperHitFx = (
+    now: number,
+    point: THREE.Vector3,
+    direction: THREE.Vector3,
+    targetObject?: THREE.Object3D | null
+  ) => {
+    const entry = acquireSkillQSuperHitFxEntry();
+    resetSkillQSuperHitFxEntry(entry);
+    entry.active = true;
+    entry.spawnedAt = now;
+    entry.lifeMs = THREE.MathUtils.lerp(260, 380, Math.random());
+    entry.baseScale = THREE.MathUtils.lerp(2.22, 3.66, Math.random());
+    entry.root.visible = true;
+
+    const host =
+      targetObject && targetObject.parent ? targetObject : avatar.parent ?? avatar;
+    if (entry.root.parent !== host) {
+      entry.root.removeFromParent();
+      host.add(entry.root);
+    }
+    const safeDirection = direction.lengthSq() > 0.000001
+      ? direction.clone().normalize()
+      : projectileForward;
+    skillQSuperHitQuaternion.setFromUnitVectors(projectileForward, safeDirection);
+    setObjectWorldPose(entry.root, point, skillQSuperHitQuaternion);
+    entry.root.rotateZ(THREE.MathUtils.randFloatSpread(Math.PI * 0.62));
+    entry.root.scale.setScalar(entry.baseScale);
+  };
+
+  const updateSkillQSuperHitFx = (now: number) => {
+    for (let i = 0; i < skillQSuperHitFxPool.length; i += 1) {
+      const entry = skillQSuperHitFxPool[i];
+      if (!entry.active) continue;
+      const progress = THREE.MathUtils.clamp(
+        (now - entry.spawnedAt) / Math.max(1, entry.lifeMs),
+        0,
+        1
+      );
+      if (progress >= 1) {
+        resetSkillQSuperHitFxEntry(entry);
+        continue;
+      }
+      const fade = 1 - THREE.MathUtils.smoothstep(progress, 0.06, 1);
+      const pulse = 1 + Math.sin(progress * Math.PI) * 0.22;
+      entry.root.scale.setScalar(
+        entry.baseScale * THREE.MathUtils.lerp(0.96, 1.4, progress) * pulse
+      );
+      entry.slashMaterialA.opacity = 0.96 * fade;
+      entry.slashMaterialB.opacity = 0.9 * fade;
+      entry.ringMaterial.opacity = 0.84 * fade;
+      entry.ring.rotation.z = progress * Math.PI * 1.6;
     }
   };
 
@@ -2046,93 +4024,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     void point;
     void direction;
     void scaleMultiplier;
-  };
-
-  const applySkillRDanceBodyMotion = (
-    now: number,
-    avatarModel: THREE.Object3D | null,
-    legLeft: THREE.Object3D | null,
-    legRight: THREE.Object3D | null
-  ) => {
-    const active = skillRState.active;
-    const phase = (now - skillRState.startedAt) * 0.015;
-    if (avatarModel) {
-      const targetOffsetX = active ? Math.sin(phase * 1.8) * 0.08 : 0;
-      const targetOffsetY = active
-        ? Math.max(0, Math.sin(phase * 2.6)) * 0.1
-        : 0;
-      const targetOffsetZ = active ? Math.cos(phase * 1.4) * 0.035 : 0;
-      avatarModel.position.x = THREE.MathUtils.lerp(
-        avatarModel.position.x,
-        targetOffsetX,
-        active ? 0.3 : 0.14
-      );
-      avatarModel.position.y = THREE.MathUtils.lerp(
-        avatarModel.position.y,
-        targetOffsetY,
-        active ? 0.3 : 0.14
-      );
-      avatarModel.position.z = THREE.MathUtils.lerp(
-        avatarModel.position.z,
-        targetOffsetZ,
-        active ? 0.3 : 0.14
-      );
-
-      const targetPitch = active ? -0.04 + Math.sin(phase * 2.5) * 0.12 : 0;
-      const targetYaw = active ? Math.sin(phase * 2.2) * 0.35 : 0;
-      const targetRoll = active ? Math.cos(phase * 2.8) * 0.16 : 0;
-      avatarModel.rotation.x = THREE.MathUtils.lerp(
-        avatarModel.rotation.x,
-        targetPitch,
-        active ? 0.32 : 0.16
-      );
-      avatarModel.rotation.y = THREE.MathUtils.lerp(
-        avatarModel.rotation.y,
-        targetYaw,
-        active ? 0.32 : 0.16
-      );
-      avatarModel.rotation.z = THREE.MathUtils.lerp(
-        avatarModel.rotation.z,
-        targetRoll,
-        active ? 0.32 : 0.16
-      );
-    }
-
-    if (!active || !legLeft || !legRight) return;
-    const legStride = Math.sin(phase * 2.3) * 0.62;
-    const legTwist = Math.cos(phase * 1.9) * 0.2;
-    const leftLift = Math.max(0, Math.sin(phase * 2.3)) * 0.2;
-    const rightLift = Math.max(0, Math.sin(phase * 2.3 + Math.PI)) * 0.2;
-    legLeft.rotation.x = THREE.MathUtils.lerp(
-      legLeft.rotation.x,
-      -0.18 + legStride + leftLift,
-      0.36
-    );
-    legRight.rotation.x = THREE.MathUtils.lerp(
-      legRight.rotation.x,
-      -0.18 - legStride + rightLift,
-      0.36
-    );
-    legLeft.rotation.y = THREE.MathUtils.lerp(
-      legLeft.rotation.y,
-      0.12 + legTwist,
-      0.34
-    );
-    legRight.rotation.y = THREE.MathUtils.lerp(
-      legRight.rotation.y,
-      -0.12 - legTwist,
-      0.34
-    );
-    legLeft.rotation.z = THREE.MathUtils.lerp(
-      legLeft.rotation.z,
-      0.06 + Math.sin(phase * 2.1 + 0.7) * 0.14,
-      0.34
-    );
-    legRight.rotation.z = THREE.MathUtils.lerp(
-      legRight.rotation.z,
-      -0.06 + Math.sin(phase * 2.1 + 2.2) * 0.14,
-      0.34
-    );
   };
 
   const reflectProjectileByPrimarySwing: ProjectileReflector = () => {
@@ -2220,26 +4111,471 @@ export const createRuntime: CharacterRuntimeFactory = ({
     primarySwingState.rotationPhase = 0;
   };
 
+  const clearSkillQ = () => {
+    skillQState.active = false;
+    skillQState.startedAt = 0;
+    skillQState.endsAt = 0;
+    skillQState.signEndsAt = 0;
+    skillQState.summonWindowStartAt = 0;
+    skillQState.summonWindowEndAt = 0;
+    skillQState.nextGlyphSpawnAt = 0;
+    skillQState.clonesSummoned = false;
+    clearSkillQSealGlyphEntries();
+    stopActionBinding(runtimeSkillQBinding);
+    stopActionBinding(runtimeSkillQBeforeBinding);
+    stopActionBinding(runtimeSkillQAfterBinding);
+    requestArmPoseReset();
+  };
+
+  const startSkillQ = (now: number) => {
+    const durationMs = resolveRuntimeSkillQDurationMs();
+    const signEndAt =
+      now +
+      THREE.MathUtils.clamp(runtimeSkillQTiming.signEndSec * 1000, 80, durationMs);
+    const summonStartAt =
+      now +
+      THREE.MathUtils.clamp(
+        runtimeSkillQTiming.summonStartSec * 1000,
+        Math.min(durationMs - 32, 80),
+        durationMs
+      );
+    const summonEndAt =
+      now +
+      THREE.MathUtils.clamp(
+        runtimeSkillQTiming.summonEndSec * 1000,
+        Math.min(durationMs, (summonStartAt - now) + 64),
+        durationMs
+      );
+    skillQState.active = true;
+    skillQState.startedAt = now;
+    skillQState.endsAt = now + durationMs;
+    skillQState.signEndsAt = Math.min(signEndAt, skillQState.endsAt);
+    skillQState.summonWindowStartAt = Math.min(
+      Math.max(skillQState.signEndsAt, summonStartAt),
+      skillQState.endsAt
+    );
+    skillQState.summonWindowEndAt = Math.min(
+      Math.max(skillQState.summonWindowStartAt + 40, summonEndAt),
+      skillQState.endsAt
+    );
+    skillQState.nextGlyphSpawnAt = now;
+    skillQState.clonesSummoned = false;
+    clearSkillQSealGlyphEntries();
+    startSkillQAnimation();
+  };
+
+  const updateSkillQ = (now: number) => {
+    updateSkillQSealGlyphEntries(now);
+    if (!skillQState.active) return;
+    if (now >= skillQState.endsAt) {
+      if (!skillQState.clonesSummoned) {
+        spawnClones(now);
+        skillQState.clonesSummoned = true;
+      }
+      clearSkillQ();
+      return;
+    }
+
+    if (now <= skillQState.signEndsAt) {
+      let guard = 0;
+      while (skillQState.nextGlyphSpawnAt <= now && guard < 16) {
+        spawnSkillQSealGlyphBurst(skillQState.nextGlyphSpawnAt);
+        skillQState.nextGlyphSpawnAt += skillQConfig.glyphSpawnIntervalMs;
+        guard += 1;
+      }
+    }
+
+    if (
+      !skillQState.clonesSummoned &&
+      now >= skillQState.summonWindowStartAt
+    ) {
+      spawnClones(now);
+      skillQState.clonesSummoned = true;
+    }
+  };
+
+  const setObjectWorldPose = (
+    object: THREE.Object3D,
+    worldPosition: THREE.Vector3,
+    worldQuaternion: THREE.Quaternion
+  ) => {
+    const parent = object.parent;
+    if (!parent) {
+      object.position.copy(worldPosition);
+      object.quaternion.copy(worldQuaternion);
+      return;
+    }
+    parent.updateMatrixWorld(true);
+    object.position.copy(worldPosition);
+    parent.worldToLocal(object.position);
+    parent.getWorldQuaternion(skillQSuperParentQuaternion).invert();
+    object.quaternion.copy(skillQSuperParentQuaternion).multiply(worldQuaternion);
+  };
+
+  const setObjectWorldPosition = (
+    object: THREE.Object3D,
+    worldPosition: THREE.Vector3
+  ) => {
+    const parent = object.parent;
+    if (!parent) {
+      object.position.copy(worldPosition);
+      return;
+    }
+    parent.updateMatrixWorld(true);
+    object.position.copy(worldPosition);
+    parent.worldToLocal(object.position);
+  };
+
+  const restoreSkillQSuperSlashPose = (slash: SkillQSuperSlashState | null) => {
+    if (!slash) return;
+    if (slash.kind === "host") {
+      setObjectWorldPosition(avatar, slash.originPosition);
+      return;
+    }
+    const clone = cloneState.clones[slash.cloneIndex];
+    if (!clone || !clone.root.parent) return;
+    setObjectWorldPose(clone.root, slash.originPosition, slash.originQuaternion);
+  };
+
+  const captureSkillQSuperPreSlashPose = () => {
+    avatar.updateMatrixWorld(true);
+    avatar.getWorldPosition(skillQSuperState.hostReturnPosition);
+    skillQSuperState.hostReturnReady = true;
+  };
+
+  const restoreSkillQSuperPreSlashPose = () => {
+    if (!skillQSuperState.hostReturnReady) return;
+    setObjectWorldPosition(avatar, skillQSuperState.hostReturnPosition);
+  };
+
+  const clearSkillQSuper = () => {
+    restoreSkillQSuperSlashPose(skillQSuperState.slash);
+    skillQSuperState.slash = null;
+    skillQSuperState.active = false;
+    skillQSuperState.stage = "idle";
+    skillQSuperState.startedAt = 0;
+    skillQSuperState.beforeEndsAt = 0;
+    skillQSuperState.hostSlowEndsAt = 0;
+    skillQSuperState.afterEndsAt = 0;
+    skillQSuperState.nextCloneIndex = 0;
+    skillQSuperState.hostReturnReady = false;
+    skillQSuperState.hostReturnPosition.set(0, 0, 0);
+    stopActionBinding(runtimeSkillQBeforeBinding);
+    stopActionBinding(runtimeSkillQAfterBinding);
+    for (let i = 0; i < cloneState.clones.length; i += 1) {
+      const animation = cloneState.clones[i].animation;
+      if (!animation) continue;
+      clearCloneLocomotionAndShurikenLayers(animation);
+      stopActionBinding(animation.skillQBeforeBinding);
+      stopActionBinding(animation.skillQAfterBinding);
+    }
+    clearSkillQSuperHitFx();
+    clearPrimarySwing();
+    clearSkillRDanceWaves();
+    requestArmPoseReset();
+  };
+
+  const resolveSkillQSuperAnimationScale = () =>
+    skillQSuperState.active && skillQSuperState.stage === "hostSlow"
+      ? skillQSuperConfig.hostSlowAnimationScale
+      : 1;
+
+  const resolveSkillQSuperSlashPosition = (
+    slash: SkillQSuperSlashState,
+    now: number,
+    out: THREE.Vector3
+  ) => {
+    const duration = Math.max(1, slash.endsAt - slash.startedAt);
+    const progress = THREE.MathUtils.clamp((now - slash.startedAt) / duration, 0, 1);
+    if (slash.kind === "host") {
+      const advanceEnd = 0.42;
+      const returnStart = 0.68;
+      if (progress <= advanceEnd) {
+        const t = THREE.MathUtils.smootherstep(progress / advanceEnd, 0, 1);
+        out.copy(slash.originPosition).lerp(slash.slashPosition, t);
+        return out;
+      }
+      if (progress < returnStart) {
+        out.copy(slash.slashPosition);
+        return out;
+      }
+      const t = THREE.MathUtils.smootherstep(
+        (progress - returnStart) / Math.max(0.0001, 1 - returnStart),
+        0,
+        1
+      );
+      out.copy(slash.slashPosition).lerp(slash.originPosition, t);
+      return out;
+    }
+    const t = THREE.MathUtils.smootherstep(progress, 0, 1);
+    out.copy(slash.originPosition).lerp(slash.slashPosition, t);
+    return out;
+  };
+
+  const startSkillQSuperSlash = (
+    now: number,
+    kind: "clone" | "host",
+    cloneIndex: number
+  ) => {
+    const durationMs =
+      kind === "host"
+        ? skillQSuperConfig.hostSlashDurationMs
+        : skillQSuperConfig.cloneSlashDurationMs;
+    let slashObject: THREE.Object3D | null = null;
+    let slashModel: THREE.Object3D | null = null;
+
+    if (kind === "host") {
+      slashObject = avatar;
+      slashModel = runtimeAvatarModelRef ?? avatar;
+    } else {
+      const clone = cloneState.clones[cloneIndex];
+      if (!clone || !clone.root.parent) return false;
+      slashObject = clone.root;
+      slashModel = clone.model ?? clone.root;
+    }
+    if (!slashObject || !slashObject.parent) return false;
+
+    slashObject.updateMatrixWorld(true);
+    slashObject.getWorldPosition(skillQSuperSlashOrigin);
+    slashObject.getWorldQuaternion(skillQSuperSlashQuaternion);
+
+    skillQSuperSlashForward.set(0, 0, 1).applyQuaternion(skillQSuperSlashQuaternion);
+    skillQSuperSlashForward.y = 0;
+    if (kind === "host" && skillEAimDirection.lengthSq() > 0.000001) {
+      skillQSuperSlashForward.copy(skillEAimDirection);
+      skillQSuperSlashForward.y = 0;
+    }
+    if (kind === "clone") {
+      const clone = cloneState.clones[cloneIndex];
+      if (clone && clone.direction.lengthSq() > 0.000001) {
+        skillQSuperSlashForward.copy(clone.direction);
+      }
+    }
+    if (skillQSuperSlashForward.lengthSq() < 0.000001) {
+      skillQSuperSlashForward.set(0, 0, 1);
+    } else {
+      skillQSuperSlashForward.normalize();
+    }
+
+    const dashDistance =
+      kind === "host"
+        ? skillQSuperConfig.hostDashDistance
+        : skillQSuperConfig.cloneDashDistance;
+    skillQSuperSlashTarget
+      .copy(skillQSuperSlashOrigin)
+      .addScaledVector(skillQSuperSlashForward, dashDistance);
+    skillQSuperSlashTarget.y = skillQSuperSlashOrigin.y;
+
+    spawnSkillRAfterImage(now, {
+      sourceModel: slashModel,
+      lifeMs: durationMs + 120,
+      baseOpacity: 0.92,
+      scaleBoost: 0.01,
+      attachTo: avatar.parent ?? avatar,
+      preserveWorldTransform: true,
+    });
+    spawnSkillRAfterImage(now, {
+      sourceModel: slashModel,
+      lifeMs: Math.max(120, durationMs * 0.55),
+      baseOpacity: kind === "host" ? 1 : 0.9,
+      scaleBoost: kind === "host" ? 0.12 : 0.08,
+      attachTo: avatar.parent ?? avatar,
+      preserveWorldTransform: true,
+    });
+
+    const slashDamage =
+      kind === "host"
+        ? skillQSuperConfig.strikeDamage * 2
+        : skillQSuperConfig.strikeDamage;
+
+    performMeleeAttack?.({
+      damage: slashDamage,
+      maxDistance: skillQSuperConfig.strikeRadius,
+      hitRadius: skillQSuperConfig.strikeRadius,
+      maxHits: skillQSuperConfig.strikeMaxHits,
+      origin: skillQSuperSlashTarget,
+      direction: skillQSuperSlashForward,
+      contactCenter: skillQSuperSlashTarget,
+      contactRadius: skillQSuperConfig.strikeRadius,
+      onHitTargetResolved: ({ point, direction: hitDirection, targetObject, now: hitNow }) => {
+        spawnSkillQSuperHitFx(hitNow, point, hitDirection, targetObject);
+      },
+    });
+
+    if (kind === "host") {
+      startPrimarySwing(now, 1);
+      launchSkillRDanceWave(now);
+      launchSkillRDanceWave(now);
+    } else {
+      spawnCloneSmokeBurst(skillQSuperSlashOrigin, 6);
+      spawnCloneSmokeBurst(skillQSuperSlashTarget, 10);
+    }
+
+    skillQSuperState.slash = {
+      kind,
+      cloneIndex,
+      startedAt: now,
+      endsAt: now + durationMs,
+      originPosition: skillQSuperSlashOrigin.clone(),
+      originQuaternion: skillQSuperSlashQuaternion.clone(),
+      slashPosition: skillQSuperSlashTarget.clone(),
+      slashQuaternion: skillQSuperSlashQuaternion.clone(),
+      slashDirection: skillQSuperSlashForward.clone(),
+    };
+    return true;
+  };
+
+  const startSkillQSuper = (now: number) => {
+    if (!cloneState.active || !cloneState.clones.length || cloneState.consumePending) {
+      return false;
+    }
+    skillQSuperState.hostReturnReady = false;
+    cancelCharge();
+    cancelSkillECharge();
+    resetSkillEVolleyState();
+    clearPrimarySwing();
+    clearSkillQ();
+    requestArmPoseReset();
+
+    skillQSuperState.active = true;
+    skillQSuperState.stage = "before";
+    skillQSuperState.startedAt = now;
+    skillQSuperState.beforeEndsAt = now + resolveRuntimeSkillQBeforeDurationMs();
+    skillQSuperState.hostSlowEndsAt = 0;
+    skillQSuperState.afterEndsAt = 0;
+    skillQSuperState.nextCloneIndex = 0;
+    skillQSuperState.slash = null;
+
+    startSkillQBeforeAnimation();
+    for (let i = 0; i < cloneState.clones.length; i += 1) {
+      startCloneSkillQBeforeAnimation(cloneState.clones[i]);
+    }
+    return true;
+  };
+
+  const updateSkillQSuper = (now: number, deltaSeconds: number) => {
+    if (!skillQSuperState.active) return;
+
+    const animationScale = resolveSkillQSuperAnimationScale();
+    for (let i = 0; i < cloneState.clones.length; i += 1) {
+      const animation = cloneState.clones[i].animation;
+      if (!animation) continue;
+      animation.mixer.update(deltaSeconds * animationScale);
+    }
+
+    const slash = skillQSuperState.slash;
+    if (slash) {
+      resolveSkillQSuperSlashPosition(slash, now, skillQSuperSlashCurrentPosition);
+      if (slash.kind === "host") {
+        setObjectWorldPosition(avatar, skillQSuperSlashCurrentPosition);
+      } else {
+        const clone = cloneState.clones[slash.cloneIndex];
+        if (clone && clone.root.parent) {
+          setObjectWorldPose(
+            clone.root,
+            skillQSuperSlashCurrentPosition,
+            slash.slashQuaternion
+          );
+        }
+      }
+    }
+
+    if (skillQSuperState.stage === "before") {
+      if (now < skillQSuperState.beforeEndsAt) return;
+      skillQSuperState.stage = "cloneSlash";
+      skillQSuperState.nextCloneIndex = 0;
+      skillQSuperState.slash = null;
+    }
+
+    if (skillQSuperState.stage === "cloneSlash") {
+      if (!skillQSuperState.slash) {
+        let slashStarted = false;
+        while (skillQSuperState.nextCloneIndex < cloneState.clones.length) {
+          const cloneIndex = skillQSuperState.nextCloneIndex;
+          skillQSuperState.nextCloneIndex += 1;
+          if (startSkillQSuperSlash(now, "clone", cloneIndex)) {
+            slashStarted = true;
+            break;
+          }
+        }
+        if (!slashStarted) {
+          skillQSuperState.stage = "hostSlow";
+          skillQSuperState.hostSlowEndsAt = now + skillQSuperConfig.hostSlowDurationMs;
+        }
+        return;
+      }
+
+      if (now < skillQSuperState.slash.endsAt) return;
+      if (skillQSuperState.slash.kind === "clone") {
+        const clone = cloneState.clones[skillQSuperState.slash.cloneIndex];
+        if (clone) {
+          clearClone(clone, true);
+        }
+      } else {
+        restoreSkillQSuperSlashPose(skillQSuperState.slash);
+      }
+      skillQSuperState.slash = null;
+      return;
+    }
+
+    if (skillQSuperState.stage === "hostSlow") {
+      if (now < skillQSuperState.hostSlowEndsAt) return;
+      captureSkillQSuperPreSlashPose();
+      skillQSuperState.stage = "hostSlash";
+      const slashStarted = startSkillQSuperSlash(now, "host", -1);
+      if (!slashStarted) {
+        restoreSkillQSuperPreSlashPose();
+        skillQSuperState.hostReturnReady = false;
+        startSkillQAfterAnimation();
+        skillQSuperState.stage = "after";
+        skillQSuperState.afterEndsAt = now + resolveRuntimeSkillQAfterDurationMs();
+      }
+      return;
+    }
+
+    if (skillQSuperState.stage === "hostSlash") {
+      if (!skillQSuperState.slash || now < skillQSuperState.slash.endsAt) return;
+      restoreSkillQSuperPreSlashPose();
+      skillQSuperState.hostReturnReady = false;
+      skillQSuperState.slash = null;
+      startSkillQAfterAnimation();
+      skillQSuperState.stage = "after";
+      skillQSuperState.afterEndsAt = now + resolveRuntimeSkillQAfterDurationMs();
+      return;
+    }
+
+    if (skillQSuperState.stage === "after" && now >= skillQSuperState.afterEndsAt) {
+      clearAllClones(true);
+      clearSkillQSuper();
+    }
+  };
+
   const clearSkillR = () => {
     skillRState.active = false;
     skillRState.startedAt = 0;
     skillRState.endsAt = 0;
-    skillRState.nextMeleeAt = 0;
-    skillRState.nextWaveSide = 1;
+    skillRState.nextSlashIndex = 0;
+    skillRDanceWaveNextSide = 1;
     skillRReflectVolume.visible = false;
     skillRReflectVolume.position.set(0, 0, 0);
     skillRReflectVolume.scale.set(1, 1, 1);
+    if (runtimeSkillRBinding) {
+      runtimeSkillRBinding.action.setEffectiveWeight(0);
+      runtimeSkillRBinding.action.paused = true;
+    }
+    requestArmPoseReset();
   };
 
   const startSkillR = (now: number) => {
     skillRState.active = true;
     skillRState.startedAt = now;
-    skillRState.endsAt = now + skillRConfig.durationMs;
-    skillRState.nextMeleeAt = now;
-    skillRState.nextWaveSide = 1;
+    skillRState.endsAt = now + resolveRuntimeSkillRDurationMs();
+    skillRState.nextSlashIndex = 0;
+    skillRDanceWaveNextSide = 1;
     skillRReflectVolume.visible = true;
     skillRReflectVolume.position.set(0, skillRConfig.reflectCenterY, 0);
     skillRReflectVolume.scale.setScalar(skillRConfig.reflectRadius);
+    startSkillRAnimation();
   };
 
   const updateSkillR = (now: number) => {
@@ -2249,21 +4585,37 @@ export const createRuntime: CharacterRuntimeFactory = ({
       return;
     }
 
-    const danceProgress = THREE.MathUtils.clamp(
-      (now - skillRState.startedAt) / skillRConfig.durationMs,
-      0,
-      1
-    );
-    const pulse = 1 + Math.sin(now * 0.02) * 0.08;
     skillRReflectVolume.visible = true;
-    skillRReflectVolume.position.set(
-      0,
-      skillRConfig.reflectCenterY + Math.sin(danceProgress * Math.PI * 2) * 0.05,
-      0
-    );
-    skillRReflectVolume.scale.setScalar(skillRConfig.reflectRadius * pulse);
+    skillRReflectVolume.position.set(0, skillRConfig.reflectCenterY, 0);
+    skillRReflectVolume.scale.setScalar(skillRConfig.reflectRadius);
 
-    while (now >= skillRState.nextMeleeAt) {
+    const elapsedSec = Math.max(0, (now - skillRState.startedAt) * 0.001);
+    if (runtimeSkillRSlashEvents.length > 0) {
+      while (
+        skillRState.nextSlashIndex < runtimeSkillRSlashEvents.length &&
+        elapsedSec >= runtimeSkillRSlashEvents[skillRState.nextSlashIndex].timeSec
+      ) {
+        const hitCount =
+          performMeleeAttack?.({
+            damage: skillRConfig.meleeDamage,
+            maxDistance: skillRConfig.meleeRange,
+            hitRadius: skillRConfig.meleeHitRadius,
+            maxHits: skillRConfig.meleeMaxHits,
+          }) ?? 0;
+        if (hitCount > 0) {
+          applyEnergy?.(hitCount * skillRConfig.energyGainOnHit);
+        }
+        spawnSkillRAfterImage(now);
+        startPrimarySwing(now, 0.92);
+        skillRState.nextSlashIndex += 1;
+      }
+      return;
+    }
+
+    const fallbackSlashCount = Math.floor(
+      (now - skillRState.startedAt) / skillRConfig.meleeIntervalMs
+    );
+    while (skillRState.nextSlashIndex <= fallbackSlashCount) {
       const hitCount =
         performMeleeAttack?.({
           damage: skillRConfig.meleeDamage,
@@ -2274,17 +4626,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       if (hitCount > 0) {
         applyEnergy?.(hitCount * skillRConfig.energyGainOnHit);
       }
-      startPrimarySwing(now, 0.92, {
-        variant: "rDance",
-        direction: skillRState.nextWaveSide,
-        yawOffset: THREE.MathUtils.randFloatSpread(0.7),
-        pitchOffset: THREE.MathUtils.randFloatSpread(0.5),
-        rollFrom: THREE.MathUtils.randFloat(-1.75, -0.68),
-        rollTo: THREE.MathUtils.randFloat(0.74, 1.92),
-        phase: Math.random() * Math.PI * 2,
-      });
-      skillRState.nextWaveSide = (skillRState.nextWaveSide * -1) as 1 | -1;
-      skillRState.nextMeleeAt += skillRConfig.meleeIntervalMs;
+      spawnSkillRAfterImage(now);
+      startPrimarySwing(now, 0.92);
+      skillRState.nextSlashIndex += 1;
     }
   };
 
@@ -2702,6 +5046,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   };
 
+  const resolveSkillEOriginWorld = (target: THREE.Vector3) => {
+    if (runtimeWeaponConstraintWeapon) {
+      runtimeWeaponConstraintWeapon.getWorldPosition(target);
+      return target;
+    }
+    if (runtimeWeaponConstraintHand) {
+      runtimeWeaponConstraintHand.getWorldPosition(target);
+      return target;
+    }
+    return heldShuriken.getCenterWorld(target);
+  };
+
   const resolveSkillEChargeRatio = (now: number) =>
     THREE.MathUtils.clamp(
       (now - skillEChargeState.startTime) / skillEChargeConfig.maxHoldMs,
@@ -2988,6 +5344,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (!fireProjectile) return;
     if (!cloneState.active || !cloneState.clones.length) return;
     let didFireCloneShuriken = false;
+    const fireAt = performance.now();
 
     const distanceScale = THREE.MathUtils.lerp(
       skillEChargeConfig.minDistanceScale,
@@ -3010,6 +5367,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     for (let i = 0; i < cloneState.clones.length; i += 1) {
       const clone = cloneState.clones[i];
       if (!clone.root.parent || !clone.root.visible) continue;
+      startCloneSkillEShootAnimation(clone, fireAt, true);
       clone.root.updateMatrixWorld(true);
       clone.heldShuriken.group.visible = false;
       const entry = acquireShuriken();
@@ -3127,9 +5485,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       didFireCloneShuriken = true;
     }
 
-    // Consumes clones on synchronized throw.
     if (didFireCloneShuriken) {
-      clearAllClones(true);
+      cloneState.consumePending = true;
+      cloneState.consumeAfterShootAt = fireAt + 220;
     }
   };
 
@@ -3178,7 +5536,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     const ratio = resolveSkillEChargeRatio(now);
     avatar.updateMatrixWorld(true);
-    heldShuriken.getCenterWorld(skillEOrigin);
+    resolveSkillEOriginWorld(skillEOrigin);
     if (!Number.isFinite(skillEOrigin.x + skillEOrigin.y + skillEOrigin.z)) {
       avatar.getWorldPosition(skillEOrigin);
     }
@@ -3200,6 +5558,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillEVolley.cloneBoosted = isCloneShurikenBuffActive();
     skillEVolley.firedCount = 0;
     skillEVolley.nextShotAt = now;
+    startSkillEShootAnimation(now, skillEVolley.cloneBoosted);
     fireCloneSynchronizedShurikens(ratio);
   };
 
@@ -3369,12 +5728,19 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const getMovementSpeedMultiplier = () =>
-    skillRState.active ? skillRConfig.movementSpeedMultiplier : 1;
+    skillRState.active
+      ? skillRConfig.movementSpeedMultiplier
+      : skillQState.active || skillQSuperState.active
+        ? 0
+        : 1;
 
-  const isBasicAttackLocked = () => skillRState.active;
+  const isBasicAttackLocked = () =>
+    skillQState.active || skillQSuperState.active || skillRState.active;
 
   const handleSkillE = () => {
-    if (skillRState.active) return false;
+    if (skillQState.active || skillQSuperState.active || skillRState.active) {
+      return false;
+    }
     if (!fireProjectile) return false;
     if (skillEVolley.active || skillEChargeState.isCharging) return false;
     if (chargeState.isCharging || chargeState.releaseUntil > performance.now()) {
@@ -3387,6 +5753,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const beginCharge = () => {
     if (
+      skillQState.active ||
+      skillQSuperState.active ||
       skillRState.active ||
       chargeState.isCharging ||
       skillEChargeState.isCharging ||
@@ -3417,7 +5785,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const releaseCharge = () => {
-    if (skillRState.active || !chargeState.isCharging) return;
+    if (
+      skillQState.active ||
+      skillQSuperState.active ||
+      skillRState.active ||
+      !chargeState.isCharging
+    ) {
+      return;
+    }
     const now = performance.now();
     const elapsed = now - chargeState.startTime;
     if (elapsed < chargeConfig.minHoldMs) {
@@ -3469,11 +5844,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     startPrimarySwing(now, ratio);
+    startPrimaryNormalAttackAnimation(now, runtimeIsMoving);
   };
 
   const resetState = () => {
     runtimeLastUpdateAt = 0;
     runtimeAvatarModelRef = null;
+    resetRuntimeAnimationPlayback();
     chargeState.startTime = 0;
     chargeState.ratio = 0;
     chargeState.releaseUntil = 0;
@@ -3487,10 +5864,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
     cancelCharge();
     armPoseResetState.requested = false;
     clearPrimarySwing();
+    clearSkillQ();
+    clearSkillQSuper();
     clearSkillR();
+    clearSkillRAfterImages();
+    clearSkillQSuperHitFx();
     clearSkillRDanceWaves();
     clearAllClones();
     clearCloneSmoke();
+    skillQDarknessOverlay.reset();
     drawSword.setVisible(false);
     drawSword.attachTo(null);
     heldShuriken.setVisible(false);
@@ -3523,7 +5905,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const handleSkillQ = () => {
-    if (skillRState.active) return false;
+    if (skillQState.active || skillQSuperState.active || skillRState.active) {
+      return false;
+    }
+    const now = performance.now();
+    if (cloneState.active && cloneState.clones.length > 0 && !cloneState.consumePending) {
+      return startSkillQSuper(now);
+    }
     if ((getCurrentStats?.().energy ?? 1) <= 0) return false;
 
     cancelCharge();
@@ -3531,12 +5919,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetSkillEVolleyState();
     clearPrimarySwing();
     requestArmPoseReset();
-    spawnClones(performance.now());
-    return cloneState.active;
+    startSkillQ(now);
+    return true;
   };
 
   const handleSkillR = () => {
-    if (skillRState.active) return false;
+    if (skillQState.active || skillQSuperState.active || skillRState.active) {
+      return false;
+    }
     cancelCharge();
     cancelSkillECharge();
     resetSkillEVolleyState();
@@ -3545,6 +5935,19 @@ export const createRuntime: CharacterRuntimeFactory = ({
     requestArmPoseReset();
     startSkillR(performance.now());
     return true;
+  };
+
+  const beforeSkillUse: NonNullable<CharacterRuntime["beforeSkillUse"]> = ({
+    key,
+  }) => {
+    if (key !== "q") return;
+    if (skillQState.active || skillQSuperState.active || skillRState.active) {
+      return { allow: false };
+    }
+    if (cloneState.active && cloneState.clones.length > 0 && !cloneState.consumePending) {
+      // Q recast during clone phase should bypass original Q cooldown/cost.
+      return { ignoreCostAndCooldown: true };
+    }
   };
 
   return new CharacterRuntimeObject({
@@ -3560,13 +5963,19 @@ export const createRuntime: CharacterRuntimeFactory = ({
     handleProjectileBlockHit,
     getMovementSpeedMultiplier,
     isBasicAttackLocked,
+    beforeSkillUse,
     isMovementLocked: baseRuntime.isMovementLocked,
     getSkillCooldownRemainingMs: baseRuntime.getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs: baseRuntime.getSkillCooldownDurationMs,
     resetState,
     update: (args) => {
       baseRuntime.update(args);
+      if (runtimeAvatarModelRef !== args.avatarModel) {
+        restoreSkillRShadowForm();
+      }
       runtimeAvatarModelRef = args.avatarModel;
+      runtimeIsMoving = args.isMoving;
+      bindRuntimeAnimationModel(args.avatarModel);
       const deltaSeconds = resolveRuntimeDeltaSeconds(args.now);
       if (args.aimDirectionWorld && args.aimDirectionWorld.lengthSq() > 0.000001) {
         skillEAimDirection.copy(args.aimDirectionWorld).normalize();
@@ -3582,22 +5991,31 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
       updateSkillEVolley(args.now);
       updatePrimarySwing(args.now);
+      updateSkillRDanceWaves(args.now);
+      updateSkillQSuperHitFx(args.now);
+      updateSkillQ(args.now);
+      updateSkillQSuper(args.now, deltaSeconds);
+      const qSuperDarknessActive =
+        skillQSuperState.active && skillQSuperState.stage !== "after";
+      skillQDarknessOverlay.update(qSuperDarknessActive ? 0.56 : 0, deltaSeconds);
       updateSkillR(args.now);
-      updateClones(
-        args.now,
-        deltaSeconds,
-        skillEChargeState.isCharging,
-        skillEChargeState.ratio,
-        args.isMoving,
-        Boolean(args.isSprinting)
-      );
+      const animationDeltaSeconds =
+        deltaSeconds * resolveSkillQSuperAnimationScale();
+      const skillRSwingShadowActive =
+        skillRState.active && Boolean(primarySwingState.entry);
+      updateSkillRShadowForm(skillRSwingShadowActive, animationDeltaSeconds);
+      updateSkillRAfterImages(args.now);
+      if (!skillQSuperState.active) {
+        updateClones(
+          args.now,
+          deltaSeconds,
+          skillEChargeState.isCharging,
+          skillEChargeState.ratio,
+          args.isMoving,
+          Boolean(args.isSprinting)
+        );
+      }
       updateCloneSmoke(deltaSeconds);
-      applySkillRDanceBodyMotion(
-        args.now,
-        args.avatarModel,
-        args.legLeft,
-        args.legRight
-      );
 
       if (chargeState.isCharging) {
         const elapsed = args.now - chargeState.startTime;
@@ -3624,45 +6042,19 @@ export const createRuntime: CharacterRuntimeFactory = ({
         drawSword.attachTo(null);
         heldShuriken.setVisible(false);
         heldShuriken.attachTo(null);
+        updateRuntimeAnimationState({
+          now: args.now,
+          deltaSeconds: animationDeltaSeconds,
+          isMoving: args.isMoving,
+          isSprinting: Boolean(args.isSprinting),
+        });
         return;
       }
 
       const releaseActive = chargeState.releaseUntil > args.now;
-      const releaseProgress = releaseActive
-        ? THREE.MathUtils.clamp(
-            1 - (chargeState.releaseUntil - args.now) / chargeConfig.releaseMs,
-            0,
-            1
-          )
-        : 0;
-      const danceActive = skillRState.active;
-      const skillEHandActive = skillEChargeState.isCharging;
-      const cloneChargeBoostActive = skillEHandActive && isCloneShurikenBuffActive();
-      const dancePhase = (args.now - skillRState.startedAt) * 0.018;
-      const danceDraw = danceActive
-        ? THREE.MathUtils.clamp(0.62 + Math.sin(dancePhase) * 0.18, 0.4, 0.88)
-        : 0;
-      const skillEDraw = skillEHandActive
-        ? THREE.MathUtils.lerp(
-            cloneChargeBoostActive ? 0.45 : 0.28,
-            cloneChargeBoostActive ? 1 : 0.78,
-            skillEChargeState.ratio
-          )
-        : 0;
-      const targetDraw = chargeState.isCharging
-        ? chargeState.ratio
-        : releaseActive
-          ? chargeState.ratio * (1 - releaseProgress)
-          : danceActive
-            ? danceDraw
-            : skillEDraw;
-      const damp = chargeState.isCharging
-        ? 0.28
-        : danceActive
-          ? 0.24
-          : skillEHandActive
-            ? 0.26
-            : 0.18;
+      const normalAttackActive = runtimeNormalAttackEndsAt > args.now;
+      const targetDraw = 0;
+      const damp = 0.2;
       armAnim.draw = THREE.MathUtils.lerp(armAnim.draw, targetDraw, damp);
 
       const leftArm = pickArm(args.arms, "left") ?? args.arms[0];
@@ -3673,22 +6065,25 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
       captureArmNeutralIfNeeded(rightArm, leftArm);
       applyArmPoseResetIfRequested(rightArm, leftArm);
-      heldShuriken.attachTo(skillEHandActive ? rightArm : null);
-      heldShuriken.setVisible(skillEHandActive);
-      heldShuriken.setChargeRatio(
-        THREE.MathUtils.clamp(
-          skillEChargeState.ratio * (cloneChargeBoostActive ? 1.25 : 1),
-          0,
-          1
-        )
-      );
+      heldShuriken.attachTo(null);
+      heldShuriken.setVisible(false);
+      heldShuriken.setChargeRatio(0);
 
-      const poseActive =
-        danceActive ||
-        chargeState.isCharging ||
-        releaseActive ||
-        skillEHandActive ||
-        armAnim.draw > 0.02;
+      if (skillQState.active || skillQSuperState.active || skillRState.active) {
+        armAnim.draw = THREE.MathUtils.lerp(armAnim.draw, 0, 0.24);
+        armBase.captured = false;
+        drawSword.setVisible(false);
+        drawSword.attachTo(null);
+        updateRuntimeAnimationState({
+          now: args.now,
+          deltaSeconds: animationDeltaSeconds,
+          isMoving: args.isMoving,
+          isSprinting: Boolean(args.isSprinting),
+        });
+        return;
+      }
+
+      const poseActive = armAnim.draw > 0.02;
       if (!poseActive) {
         if (armBase.captured) {
           const sameTargets =
@@ -3702,6 +6097,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
         armBase.captured = false;
         drawSword.setVisible(false);
         drawSword.attachTo(null);
+        updateRuntimeAnimationState({
+          now: args.now,
+          deltaSeconds: animationDeltaSeconds,
+          isMoving: args.isMoving,
+          isSprinting: Boolean(args.isSprinting),
+        });
         return;
       }
 
@@ -3717,7 +6118,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         armBase.left.copy(leftArm.quaternion);
       }
 
-      const showDrawSword = danceActive || chargeState.isCharging || releaseActive;
+      const showDrawSword = chargeState.isCharging || releaseActive;
       if (showDrawSword) {
         drawSword.attachTo(rightArm);
         drawSword.setVisible(true);
@@ -3730,67 +6131,49 @@ export const createRuntime: CharacterRuntimeFactory = ({
       const drawBackAngle = -0.32 - armAnim.draw * 1.04;
       const drawTwist = 0.1 + armAnim.draw * 0.52;
       const drawRoll = -0.12 - armAnim.draw * 0.46;
-      const skillEBackSwing =
-        skillEHandActive &&
-        !danceActive &&
-        !chargeState.isCharging &&
-        !releaseActive
-          ? -0.26 - skillEChargeState.ratio * (cloneChargeBoostActive ? 0.58 : 0.34)
-          : 0;
-      const skillETwistSwing =
-        skillEHandActive &&
-        !danceActive &&
-        !chargeState.isCharging &&
-        !releaseActive
-          ? 0.14 + skillEChargeState.ratio * (cloneChargeBoostActive ? 0.48 : 0.26)
-          : 0;
-      const skillERollSwing =
-        skillEHandActive &&
-        !danceActive &&
-        !chargeState.isCharging &&
-        !releaseActive
-          ? -0.08 - skillEChargeState.ratio * (cloneChargeBoostActive ? 0.34 : 0.2)
-          : 0;
       const releaseSnap = releaseActive
-        ? Math.sin(releaseProgress * Math.PI) * 0.48
-        : 0;
-      const danceBackSwing = danceActive
-        ? -0.46 + Math.sin(dancePhase * 1.5) * 0.34
-        : 0;
-      const danceTwistSwing = danceActive
-        ? Math.cos(dancePhase * 1.2) * 0.52
-        : 0;
-      const danceRollSwing = danceActive
-        ? Math.sin(dancePhase * 2.1) * 0.36
+        ? Math.sin(
+            THREE.MathUtils.clamp(
+              1 - (chargeState.releaseUntil - args.now) / chargeConfig.releaseMs,
+              0,
+              1
+            ) * Math.PI
+          ) * 0.48
         : 0;
       rightQuatX.setFromAxisAngle(
         axisX,
-        drawBackAngle + releaseSnap + danceBackSwing + skillEBackSwing
+        drawBackAngle + releaseSnap
       );
-      rightQuatY.setFromAxisAngle(axisY, drawTwist + danceTwistSwing + skillETwistSwing);
-      rightQuatZ.setFromAxisAngle(axisZ, drawRoll + danceRollSwing + skillERollSwing);
+      rightQuatY.setFromAxisAngle(axisY, drawTwist);
+      rightQuatZ.setFromAxisAngle(axisZ, drawRoll);
       rightArm.quaternion
         .copy(armBase.right)
         .premultiply(rightQuatX)
         .premultiply(rightQuatY)
         .premultiply(rightQuatZ);
 
-      const leftGuard =
-        -0.06 +
-        armAnim.draw * 0.22 +
-        (danceActive ? 0.28 + Math.sin(dancePhase * 1.7 + 0.4) * 0.24 : 0) +
-        (skillEHandActive && !danceActive ? skillEChargeState.ratio * 0.16 : 0);
-      const leftRoll =
-        0.05 +
-        armAnim.draw * 0.09 +
-        (danceActive ? -0.22 + Math.cos(dancePhase * 1.45 + 0.8) * 0.2 : 0) +
-        (skillEHandActive && !danceActive ? -skillEChargeState.ratio * 0.1 : 0);
-      leftQuatX.setFromAxisAngle(axisX, leftGuard);
-      leftQuatZ.setFromAxisAngle(axisZ, leftRoll);
-      leftArm.quaternion
-        .copy(armBase.left)
-        .premultiply(leftQuatX)
-        .premultiply(leftQuatZ);
+      const movingPrimaryRightArmOnly =
+        args.isMoving &&
+        (chargeState.isCharging || releaseActive || normalAttackActive);
+      if (movingPrimaryRightArmOnly) {
+        leftArm.quaternion.copy(armBase.left);
+      } else {
+        const leftGuard = -0.06 + armAnim.draw * 0.22;
+        const leftRoll = 0.05 + armAnim.draw * 0.09;
+        leftQuatX.setFromAxisAngle(axisX, leftGuard);
+        leftQuatZ.setFromAxisAngle(axisZ, leftRoll);
+        leftArm.quaternion
+          .copy(armBase.left)
+          .premultiply(leftQuatX)
+          .premultiply(leftQuatZ);
+      }
+
+      updateRuntimeAnimationState({
+        now: args.now,
+        deltaSeconds: animationDeltaSeconds,
+        isMoving: args.isMoving,
+        isSprinting: Boolean(args.isSprinting),
+      });
     },
     dispose: () => {
       if (canBindWindowEvents) {
@@ -3798,9 +6181,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
         window.removeEventListener("blur", handleSkillEBlur);
       }
       resetState();
+      clearRuntimeAnimationBindings();
       clearAllClones();
       clearCloneSmoke();
       cloneAnchor.removeFromParent();
+      disposeSkillQSealGlyphTextures();
+      skillQDarknessOverlay.dispose();
       hud.dispose();
       drawSword.dispose();
       heldShuriken.dispose();
@@ -3810,6 +6196,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillRReflectVolume.removeFromParent();
       skillRReflectVolumeGeometry.dispose();
       skillRReflectVolumeMaterial.dispose();
+      clearSkillQSuperHitFx();
+      disposeSkillQSuperHitFx();
+      skillQSuperHitSlashGeometry.dispose();
+      skillQSuperHitRingGeometry.dispose();
       clearSkillRDanceWaves();
       skillRDanceWavePool.forEach((entry) => {
         entry.mesh.removeFromParent();

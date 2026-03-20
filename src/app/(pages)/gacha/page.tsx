@@ -15,6 +15,8 @@ const ZERO_INVENTORY: SnackInventory = {
   star_gel_essence: 0,
 };
 
+export const dynamic = "force-dynamic";
+
 async function ensureUserResourcesForUser(userId: number) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_resources (
@@ -41,10 +43,10 @@ async function ensureUserResourcesForUser(userId: number) {
 export default async function GachaPage() {
   let inventory: SnackInventory = ZERO_INVENTORY;
   let rateList: GachaRateList = DEFAULT_GACHA_RATE_LIST;
+  const cookieStore = await cookies();
+  const userIdValue = cookieStore.get("user_id")?.value;
 
   try {
-    const cookieStore = await cookies();
-    const userIdValue = cookieStore.get("user_id")?.value;
     if (userIdValue) {
       const userId = Number.parseInt(userIdValue, 10);
       if (Number.isFinite(userId)) {
@@ -71,7 +73,7 @@ export default async function GachaPage() {
   }
 
   return (
-    <main className="relative h-screen w-full overflow-hidden bg-[#05070d] text-slate-100">
+    <main className="relative h-screen h-[100dvh] w-full overflow-hidden bg-[#05070d] text-slate-100">
       {/* grid dots */}
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[length:38px_38px]" />
       {/* rainbow radial glows */}

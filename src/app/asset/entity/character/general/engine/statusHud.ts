@@ -251,6 +251,7 @@ export const createStatusHud = (
     const indicator = skillHudIndicators?.[key];
     if (indicator === "detonation-ready") {
       card.crack.style.opacity = ratio <= 0.001 ? "1" : "0.65";
+      card.crack.style.filter = "none";
       card.shell.style.borderColor = "rgba(34,197,94,0.92)";
       card.shell.style.boxShadow =
         "0 0 14px rgba(34,197,94,0.55), inset 0 0 10px rgba(16,185,129,0.38)";
@@ -258,7 +259,18 @@ export const createStatusHud = (
       return;
     }
 
+    if (indicator === "overdrive-ready") {
+      card.crack.style.opacity = ratio <= 0.001 ? "1" : "0.68";
+      card.crack.style.filter = "hue-rotate(-82deg) saturate(1.9) brightness(1.08)";
+      card.shell.style.borderColor = "rgba(251,146,60,0.95)";
+      card.shell.style.boxShadow =
+        "0 0 14px rgba(249,115,22,0.58), inset 0 0 10px rgba(251,146,60,0.4)";
+      card.keyLabel.style.color = "rgba(255,237,213,0.98)";
+      return;
+    }
+
     card.crack.style.opacity = "0";
+    card.crack.style.filter = "none";
     card.shell.style.boxShadow = "0 0 0 rgba(0,0,0,0)";
     card.keyLabel.style.color = "rgba(191,219,254,0.95)";
   };

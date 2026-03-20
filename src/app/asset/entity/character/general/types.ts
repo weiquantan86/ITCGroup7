@@ -16,7 +16,7 @@ export interface CharacterFacing {
 
 export type SkillKey = "q" | "e" | "r";
 
-export type SkillHudIndicator = "detonation-ready";
+export type SkillHudIndicator = "detonation-ready" | "overdrive-ready";
 
 export type SkillHudIndicators = Partial<Record<SkillKey, SkillHudIndicator>>;
 

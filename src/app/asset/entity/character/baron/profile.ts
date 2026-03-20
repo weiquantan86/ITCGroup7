@@ -66,20 +66,4 @@ export const profile: CharacterProfile = {
       rotationZ: 0,
     },
   },
-  animateArms: ({ arms, isMoving, now, THREE }) => {
-    const baseArm = isMoving ? 0.9 : 0.1;
-    const sway = isMoving ? Math.sin(now * 0.012) * 0.18 : 0;
-    arms.forEach((arm) => {
-      const targetArm = baseArm + sway;
-      arm.rotation.x = THREE.MathUtils.lerp(arm.rotation.x, targetArm, 0.2);
-    });
-  },
-  animateModel: ({ avatarModel, isMoving, isSprinting, THREE }) => {
-    const tiltTarget = isSprinting ? 0.72 : isMoving ? 0.38 : 0;
-    avatarModel.rotation.x = THREE.MathUtils.lerp(
-      avatarModel.rotation.x,
-      tiltTarget,
-      isSprinting ? 0.2 : 0.14
-    );
-  },
 };
