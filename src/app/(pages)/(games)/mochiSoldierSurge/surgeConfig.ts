@@ -1,10 +1,17 @@
 export const SURGE_SCENE_STATE_KEY = "mochiSoldierSurge";
 
 export const SURGE_TOTAL_MONSTERS = 50;
-export const SURGE_SPAWN_BATCH_SIZE = 5;
-export const SURGE_SPAWN_INTERVAL_MS = 1000;
-export const SURGE_EDGE_SPAWN_PADDING = 0.8;
+export const SURGE_SPAWN_BATCH_SIZE = 1;
+export const SURGE_SPAWN_INTERVAL_MS = 5000;
+export const SURGE_EDGE_SPAWN_PADDING = 0.2;
 export const SURGE_REWARD_KILL_STEP = 5;
+
+export type MochiSoldierSurgeDifficultyConfig = {
+  totalMonsters?: number;
+  healthMultiplier?: number;
+  spawnIntervalMs?: number;
+  spawnBatchSize?: number;
+};
 
 export const SURGE_SNACK_KEYS = [
   "energy_sugar",

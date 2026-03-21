@@ -87,17 +87,19 @@ export const applyDamageToSlimluThreatOrPlayer = ({
   target,
   amount,
   applyPlayerDamage,
+  fallbackToPlayerWhenNoThreat = true,
 }: {
   target: THREE.Object3D | null | undefined;
   amount: number;
   applyPlayerDamage: (amount: number) => number;
+  fallbackToPlayerWhenNoThreat?: boolean;
 }) => {
   if (!target) {
-    return applyPlayerDamage(amount);
+    return fallbackToPlayerWhenNoThreat ? applyPlayerDamage(amount) : 0;
   }
   const entry = resolveEntryByObject(target);
   if (!entry) {
-    return applyPlayerDamage(amount);
+    return fallbackToPlayerWhenNoThreat ? applyPlayerDamage(amount) : 0;
   }
   if (!isEntryActive(entry)) {
     return 0;

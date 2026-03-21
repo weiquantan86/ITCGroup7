@@ -41,6 +41,7 @@ const VICTORY_BONUS_10_MIN_SECONDS = 10 * 60;
 const VICTORY_BONUS_WITHIN_5_MIN = 2000;
 const VICTORY_BONUS_WITHIN_7_MIN = 1000;
 const VICTORY_BONUS_WITHIN_10_MIN = 500;
+const STATE_SYNC_INTERVAL_MS = 120;
 
 export type MochiGeneralBattleDifficultyConfig = {
   bossDamageMultiplier?: number;
@@ -335,12 +336,41 @@ export const createMochiGeneralBattleScene = (
     };
   };
 
-  let lastStateKey = "";
-  const emitState = (force = false) => {
+  const areStatesEqual = (
+    a: MochiSoldierSurgeState,
+    b: MochiSoldierSurgeState
+  ) => {
+    return (
+      a.totalMonsters === b.totalMonsters &&
+      a.spawnedMonsters === b.spawnedMonsters &&
+      a.aliveMonsters === b.aliveMonsters &&
+      a.defeatedMonsters === b.defeatedMonsters &&
+      a.elapsedSeconds === b.elapsedSeconds &&
+      a.score === b.score &&
+      a.damageScore === b.damageScore &&
+      a.hitPenaltyCount === b.hitPenaltyCount &&
+      a.hitPenaltyScore === b.hitPenaltyScore &&
+      a.victoryTimeBonusScore === b.victoryTimeBonusScore &&
+      a.playerDead === b.playerDead &&
+      a.gameEnded === b.gameEnded &&
+      a.victory === b.victory
+    );
+  };
+
+  let lastEmittedState: MochiSoldierSurgeState | null = null;
+  let lastStateEmitAt = 0;
+  const emitState = (force = false, nowMs = performance.now()) => {
     const nextState = buildState();
-    const stateKey = JSON.stringify(nextState);
-    if (!force && stateKey === lastStateKey) return;
-    lastStateKey = stateKey;
+    if (!force) {
+      if (lastEmittedState && areStatesEqual(nextState, lastEmittedState)) {
+        return;
+      }
+      if (nowMs - lastStateEmitAt < STATE_SYNC_INTERVAL_MS) {
+        return;
+      }
+    }
+    lastEmittedState = nextState;
+    lastStateEmitAt = nowMs;
     context?.onStateChange?.({
       [SURGE_SCENE_STATE_KEY]: nextState,
     });
@@ -356,13 +386,14 @@ export const createMochiGeneralBattleScene = (
       const bonus = resolveVictoryTimeBonus(elapsedSecondsRaw);
       victoryTimeBonusScore += addScore(bonus);
     }
-    emitState(true);
+    emitState(true, endedAtMs);
   };
 
   const bossSpawnDelayMs = 4000;
   const bossSpawnAt = performance.now() + bossSpawnDelayMs;
   const bossSpawnPosition = new THREE.Vector3(0, groundY, 0);
   const bossProjectileBlockers: THREE.Object3D[] = [];
+  const bossProjectileBlockerSet = new Set<THREE.Object3D>();
   let bossSpawned = false;
 
   const worldTick = ({
@@ -391,19 +422,22 @@ export const createMochiGeneralBattleScene = (
     }
 
     bossProjectileBlockers.length = 0;
+    bossProjectileBlockerSet.clear();
     if (Array.isArray(factoryWorld.projectileColliders)) {
       for (let i = 0; i < factoryWorld.projectileColliders.length; i += 1) {
         const collider = factoryWorld.projectileColliders[i];
         if (!collider) continue;
-        bossProjectileBlockers.push(collider);
+        bossProjectileBlockerSet.add(collider);
       }
     }
     for (let i = 0; i < projectileBlockers.length; i += 1) {
       const blocker = projectileBlockers[i];
       if (!blocker) continue;
-      if (bossProjectileBlockers.includes(blocker)) continue;
-      bossProjectileBlockers.push(blocker);
+      bossProjectileBlockerSet.add(blocker);
     }
+    bossProjectileBlockerSet.forEach((blocker) => {
+      bossProjectileBlockers.push(blocker);
+    });
 
     bossLifecycle.tick({
       now,
@@ -435,7 +469,7 @@ export const createMochiGeneralBattleScene = (
       }
     }
 
-    emitState();
+    emitState(false, now);
   };
 
   let isDisposed = false;

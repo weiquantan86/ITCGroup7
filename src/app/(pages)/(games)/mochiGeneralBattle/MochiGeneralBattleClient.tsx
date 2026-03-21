@@ -430,7 +430,7 @@ export default function MochiGeneralBattleClient({
       SURGE_SCENE_STATE_KEY
     ];
     if (!next) return;
-    setSurgeState({
+    const normalized: MochiSoldierSurgeState = {
       totalMonsters: next.totalMonsters || 0,
       spawnedMonsters: next.spawnedMonsters || 0,
       aliveMonsters: next.aliveMonsters || 0,
@@ -444,6 +444,26 @@ export default function MochiGeneralBattleClient({
       playerDead: Boolean(next.playerDead),
       gameEnded: Boolean(next.gameEnded),
       victory: Boolean(next.victory),
+    };
+    setSurgeState((previous) => {
+      if (
+        previous.totalMonsters === normalized.totalMonsters &&
+        previous.spawnedMonsters === normalized.spawnedMonsters &&
+        previous.aliveMonsters === normalized.aliveMonsters &&
+        previous.defeatedMonsters === normalized.defeatedMonsters &&
+        previous.elapsedSeconds === normalized.elapsedSeconds &&
+        previous.score === normalized.score &&
+        previous.damageScore === normalized.damageScore &&
+        previous.hitPenaltyCount === normalized.hitPenaltyCount &&
+        previous.hitPenaltyScore === normalized.hitPenaltyScore &&
+        previous.victoryTimeBonusScore === normalized.victoryTimeBonusScore &&
+        previous.playerDead === normalized.playerDead &&
+        previous.gameEnded === normalized.gameEnded &&
+        previous.victory === normalized.victory
+      ) {
+        return previous;
+      }
+      return normalized;
     });
   }, []);
 
@@ -840,6 +860,8 @@ export default function MochiGeneralBattleClient({
                     sceneLoader={loadSurgeScene}
                     deltaStartAtMs={deltaStartAtMs ?? undefined}
                     onSceneStateChange={handleSceneStateChange}
+                    maxPixelRatio={1.25}
+                    antialias={false}
                     className="h-[calc(100vh-150px)] min-h-[700px] w-full max-w-none overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
                   />
                 </div>

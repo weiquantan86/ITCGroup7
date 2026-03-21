@@ -105,8 +105,11 @@ export const createPlayerFrameUpdater = ({
   };
   const projectileSystemBlockers: THREE.Object3D[] = [];
   const cameraAimOriginWorld = new THREE.Vector3();
+  const runtimeAimDirection = new THREE.Vector3();
   const movementBlockerBounds = new THREE.Box3();
   const movementBlockerPadding = 0.24;
+  const cameraScaleSmoothRate = 10;
+  let smoothedCameraScaleMultiplier = 1;
   const hasPlayerBlockerFlag = (object: THREE.Object3D | null | undefined) => {
     let current = object ?? null;
     while (current) {
@@ -173,6 +176,33 @@ export const createPlayerFrameUpdater = ({
     const multiplier = runtime?.getCameraScaleMultiplier?.();
     if (multiplier == null || !Number.isFinite(multiplier)) return 1;
     return THREE.MathUtils.clamp(multiplier, 0.2, 6);
+  };
+
+  const resolveSmoothedCameraScaleMultiplier = (target: number, delta: number) => {
+    const safeTarget = THREE.MathUtils.clamp(target, 0.2, 6);
+    if (
+      !Number.isFinite(smoothedCameraScaleMultiplier) ||
+      smoothedCameraScaleMultiplier <= 0
+    ) {
+      smoothedCameraScaleMultiplier = safeTarget;
+      return smoothedCameraScaleMultiplier;
+    }
+    const safeDelta = Number.isFinite(delta) ? Math.max(0, delta) : 0;
+    if (safeDelta <= 0) {
+      smoothedCameraScaleMultiplier = safeTarget;
+      return smoothedCameraScaleMultiplier;
+    }
+    const alpha = THREE.MathUtils.clamp(
+      1 - Math.exp(-cameraScaleSmoothRate * safeDelta),
+      0,
+      1
+    );
+    smoothedCameraScaleMultiplier = THREE.MathUtils.lerp(
+      smoothedCameraScaleMultiplier,
+      safeTarget,
+      alpha
+    );
+    return smoothedCameraScaleMultiplier;
   };
 
   const applyPendingLookDelta = (delta: number) => {
@@ -317,11 +347,38 @@ export const createPlayerFrameUpdater = ({
       lookPivot.rotation.x = headPitch * 0.35;
     }
 
-    const cameraScaleMultiplier = getCameraScaleMultiplier(runtime);
+    const cameraScaleMultiplier = resolveSmoothedCameraScaleMultiplier(
+      getCameraScaleMultiplier(runtime),
+      delta
+    );
+    runtimeAimDirection.set(
+      Math.sin(lookState.yaw) * Math.cos(lookState.pitch),
+      Math.sin(lookState.pitch),
+      Math.cos(lookState.yaw) * Math.cos(lookState.pitch)
+    );
+
+    runtime?.update({
+      now,
+      isMoving,
+      isSprinting,
+      aimOriginWorld: camera.getWorldPosition(cameraAimOriginWorld),
+      aimDirectionWorld: runtimeAimDirection,
+      arms: visualState.arms,
+      legLeft: visualState.legLeft,
+      legRight: visualState.legRight,
+      avatarModel: visualState.avatarModel,
+    });
+    runtime?.onTick?.({
+      now,
+      delta,
+      isMoving,
+      isSprinting,
+    });
     const runtimeCameraFollowTarget = runtime?.getCameraFollowTarget?.() ?? null;
-    const cameraLookDir = cameraRig.update({
+    cameraRig.update({
       avatar,
       eyeHeight: visualState.eyeHeight * cameraScaleMultiplier,
+      delta,
       lookState,
       miniOrbitYawOffset,
       miniOrbitPitchOffset,
@@ -333,24 +390,6 @@ export const createPlayerFrameUpdater = ({
       miniUpDistance: statsState.cameraConfig.miniUpDistance * cameraScaleMultiplier,
       miniLookUpOffset: statsState.cameraConfig.miniLookUpOffset * cameraScaleMultiplier,
       headBone: visualState.headBone,
-    });
-
-    runtime?.update({
-      now,
-      isMoving,
-      isSprinting,
-      aimOriginWorld: camera.getWorldPosition(cameraAimOriginWorld),
-      aimDirectionWorld: cameraLookDir,
-      arms: visualState.arms,
-      legLeft: visualState.legLeft,
-      legRight: visualState.legRight,
-      avatarModel: visualState.avatarModel,
-    });
-    runtime?.onTick?.({
-      now,
-      delta,
-      isMoving,
-      isSprinting,
     });
 
     const runtimeProjectileBlockers = getProjectileBlockers();
@@ -400,6 +439,7 @@ export const createPlayerFrameUpdater = ({
     miniOrbitYawOffset = 0;
     miniOrbitPitchOffset = 0;
     miniOrbitDistanceOffset = 0;
+    smoothedCameraScaleMultiplier = 1;
   };
 
   const jump = (jumpVelocity: number) => {

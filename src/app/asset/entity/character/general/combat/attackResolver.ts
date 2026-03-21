@@ -54,6 +54,9 @@ type ApplyExplosionDamageArgs = {
   excludeTargetId?: string;
 };
 
+const ATTACK_SPATIAL_CELL_SIZE = 6;
+const ATTACK_SPATIAL_REBUILD_INTERVAL_MS = 50;
+
 export class AttackTargetResolver {
   readonly attackTargets: PlayerAttackTarget[];
   private readonly raycaster = new THREE.Raycaster();
@@ -71,6 +74,12 @@ export class AttackTargetResolver {
   private readonly attackTargetSegmentDelta = new THREE.Vector3();
   private readonly attackTargetCapsuleDelta = new THREE.Vector3();
   private readonly attackTargetSegmentOffset = new THREE.Vector3();
+  private readonly spatialBuckets = new Map<string, PlayerAttackTarget[]>();
+  private readonly spatialActiveTargets: PlayerAttackTarget[] = [];
+  private readonly spatialCandidateIds = new Set<string>();
+  private readonly spatialCandidates: PlayerAttackTarget[] = [];
+  private readonly spatialPoint = new THREE.Vector3();
+  private spatialLastRebuildAt = -Infinity;
 
   constructor(attackTargets: PlayerAttackTarget[]) {
     this.attackTargets = attackTargets;
@@ -94,6 +103,72 @@ export class AttackTargetResolver {
       }
     }
     return null;
+  }
+
+  private resolveSpatialCellCoord(value: number) {
+    return Math.floor(value / ATTACK_SPATIAL_CELL_SIZE);
+  }
+
+  private resolveSpatialCellKey(cellX: number, cellZ: number) {
+    return `${cellX}:${cellZ}`;
+  }
+
+  private rebuildSpatialIndex() {
+    const now = performance.now();
+    if (now - this.spatialLastRebuildAt < ATTACK_SPATIAL_REBUILD_INTERVAL_MS) {
+      return;
+    }
+    this.spatialLastRebuildAt = now;
+    this.spatialBuckets.clear();
+    this.spatialActiveTargets.length = 0;
+
+    for (let i = 0; i < this.attackTargets.length; i += 1) {
+      const target = this.attackTargets[i];
+      if (target.isActive && !target.isActive()) continue;
+      target.object.getWorldPosition(this.spatialPoint);
+      const cellX = this.resolveSpatialCellCoord(this.spatialPoint.x);
+      const cellZ = this.resolveSpatialCellCoord(this.spatialPoint.z);
+      const key = this.resolveSpatialCellKey(cellX, cellZ);
+      const bucket = this.spatialBuckets.get(key);
+      if (bucket) {
+        bucket.push(target);
+      } else {
+        this.spatialBuckets.set(key, [target]);
+      }
+      this.spatialActiveTargets.push(target);
+    }
+  }
+
+  private collectSpatialCandidatesInRadius(
+    center: THREE.Vector3,
+    radius: number,
+    excludeTargetIds?: ReadonlySet<string>
+  ) {
+    this.rebuildSpatialIndex();
+    this.spatialCandidates.length = 0;
+    this.spatialCandidateIds.clear();
+
+    const minCellX = this.resolveSpatialCellCoord(center.x - radius);
+    const maxCellX = this.resolveSpatialCellCoord(center.x + radius);
+    const minCellZ = this.resolveSpatialCellCoord(center.z - radius);
+    const maxCellZ = this.resolveSpatialCellCoord(center.z + radius);
+
+    for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
+      for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+        const key = this.resolveSpatialCellKey(cellX, cellZ);
+        const bucket = this.spatialBuckets.get(key);
+        if (!bucket) continue;
+        for (let i = 0; i < bucket.length; i += 1) {
+          const target = bucket[i];
+          if (excludeTargetIds?.has(target.id)) continue;
+          if (this.spatialCandidateIds.has(target.id)) continue;
+          this.spatialCandidateIds.add(target.id);
+          this.spatialCandidates.push(target);
+        }
+      }
+    }
+
+    return this.spatialCandidates;
   }
 
   private isMeshObject(
@@ -315,11 +390,10 @@ export class AttackTargetResolver {
     far: number
   ): AttackTargetHit | null {
     if (!this.attackTargets.length) return null;
+    this.rebuildSpatialIndex();
     this.activeRoots.length = 0;
-    for (let i = 0; i < this.attackTargets.length; i += 1) {
-      const target = this.attackTargets[i];
-      if (target.isActive && !target.isActive()) continue;
-      this.activeRoots.push(target.object);
+    for (let i = 0; i < this.spatialActiveTargets.length; i += 1) {
+      this.activeRoots.push(this.spatialActiveTargets[i].object);
     }
     if (!this.activeRoots.length) return null;
 
@@ -347,10 +421,17 @@ export class AttackTargetResolver {
   ): AttackTargetHit | null {
     if (!this.attackTargets.length) return null;
     let nearest: AttackTargetHit | null = null;
+    const broadRadius = far * 0.5 + Math.max(0, hitRadius) + ATTACK_SPATIAL_CELL_SIZE;
+    this.attackTargetPoint
+      .copy(origin)
+      .addScaledVector(direction, far * 0.5);
+    const candidates = this.collectSpatialCandidatesInRadius(
+      this.attackTargetPoint,
+      broadRadius
+    );
 
-    for (let i = 0; i < this.attackTargets.length; i += 1) {
-      const target = this.attackTargets[i];
-      if (target.isActive && !target.isActive()) continue;
+    for (let i = 0; i < candidates.length; i += 1) {
+      const target = candidates[i];
       const hit = this.getSweepHitAgainstTarget(
         target,
         origin,
@@ -391,10 +472,10 @@ export class AttackTargetResolver {
     if (!this.attackTargets.length) return null;
     if (radius <= 0) return null;
     let nearest: AttackTargetHit | null = null;
+    const candidates = this.collectSpatialCandidatesInRadius(center, radius);
 
-    for (let i = 0; i < this.attackTargets.length; i += 1) {
-      const target = this.attackTargets[i];
-      if (target.isActive && !target.isActive()) continue;
+    for (let i = 0; i < candidates.length; i += 1) {
+      const target = candidates[i];
       const hit = this.getClosestDistanceToTarget(target, center);
       if (!hit || hit.distance > radius) continue;
       if (!nearest || hit.distance < nearest.distance) {
@@ -426,11 +507,17 @@ export class AttackTargetResolver {
     const resolvedHitRadius = Math.max(0, hitRadius);
     const resolvedMaxHits = Math.max(1, Math.floor(maxHits));
     const hits: AttackTargetHit[] = [];
+    this.attackTargetPoint
+      .copy(origin)
+      .addScaledVector(direction, resolvedMaxDistance * 0.5);
+    const candidates = this.collectSpatialCandidatesInRadius(
+      this.attackTargetPoint,
+      resolvedMaxDistance * 0.5 + resolvedHitRadius + ATTACK_SPATIAL_CELL_SIZE,
+      excludeTargetIds
+    );
 
-    for (let i = 0; i < this.attackTargets.length; i += 1) {
-      const target = this.attackTargets[i];
-      if (target.isActive && !target.isActive()) continue;
-      if (excludeTargetIds?.has(target.id)) continue;
+    for (let i = 0; i < candidates.length; i += 1) {
+      const target = candidates[i];
       const hit = this.getSweepHitAgainstTarget(
         target,
         origin,
@@ -503,11 +590,14 @@ export class AttackTargetResolver {
         ? direction.clone().normalize()
         : new THREE.Vector3(0, 0, 1);
     const hits: AttackTargetHit[] = [];
+    const candidates = this.collectSpatialCandidatesInRadius(
+      center,
+      resolvedRadius,
+      excludeTargetIds
+    );
 
-    for (let i = 0; i < this.attackTargets.length; i += 1) {
-      const target = this.attackTargets[i];
-      if (target.isActive && !target.isActive()) continue;
-      if (excludeTargetIds?.has(target.id)) continue;
+    for (let i = 0; i < candidates.length; i += 1) {
+      const target = candidates[i];
       const hit = this.getClosestDistanceToTarget(target, center);
       if (!hit || hit.distance > resolvedRadius) continue;
       hits.push(hit);
@@ -567,10 +657,10 @@ export class AttackTargetResolver {
       1,
       Math.max(1, Math.round(baseDamage))
     );
+    const candidates = this.collectSpatialCandidatesInRadius(center, radius);
 
-    for (let i = 0; i < this.attackTargets.length; i += 1) {
-      const target = this.attackTargets[i];
-      if (target.isActive && !target.isActive()) continue;
+    for (let i = 0; i < candidates.length; i += 1) {
+      const target = candidates[i];
       if (excludeTargetId && target.id === excludeTargetId) continue;
       target.object.getWorldPosition(this.attackTargetPoint);
       const distSq = this.attackTargetPoint.distanceToSquared(center);

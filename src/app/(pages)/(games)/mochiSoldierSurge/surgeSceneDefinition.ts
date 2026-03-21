@@ -28,6 +28,7 @@ import {
   SURGE_SPAWN_BATCH_SIZE,
   SURGE_SPAWN_INTERVAL_MS,
   SURGE_TOTAL_MONSTERS,
+  type MochiSoldierSurgeDifficultyConfig,
   type MochiSoldierSurgeState,
 } from "./surgeConfig";
 
@@ -37,6 +38,11 @@ type SurgeMonsterEntry = {
   hitbox: THREE.Mesh;
   fallback: THREE.Mesh;
   model: THREE.Object3D | null;
+  renderMode: "model" | "instanced";
+  instanceIndex: number;
+  cachedTarget: THREE.Object3D | null;
+  nextAiUpdateAt: number;
+  nextMoveUpdateAt: number;
   monster: Monster;
   lastAttackAt: number;
   walkPhase: number;
@@ -83,10 +89,75 @@ const fallbackBounds: Bounds = {
 
 const SURGE_NAV_CELL_SIZE = 1.7;
 const SURGE_NAV_CLEARANCE = 0.62;
-const SURGE_NAV_LINE_SAMPLE_STEP = 0.55;
+const SURGE_NAV_LINE_SAMPLE_STEP = 1.1;
 const SURGE_NAV_REPATH_INTERVAL_MS = 520;
 const SURGE_NAV_TARGET_SHIFT_REPATH_DISTANCE = 1.3;
 const SURGE_NAV_MAX_EXPANSIONS = 3200;
+const SURGE_FLOW_UPDATE_INTERVAL_MS = 180;
+const SURGE_FLOW_TARGET_SHIFT_REBUILD_DISTANCE = 1.15;
+const SURGE_AI_LOD_MID_DISTANCE = 26;
+const SURGE_AI_LOD_FAR_DISTANCE = 42;
+const SURGE_AI_LOD_VERY_FAR_DISTANCE = 58;
+const SURGE_AI_LOD_MID_INTERVAL_MS = 60;
+const SURGE_AI_LOD_FAR_INTERVAL_MS = 140;
+const SURGE_AI_LOD_VERY_FAR_INTERVAL_MS = 240;
+const SURGE_MOVE_LOD_MID_INTERVAL_MS = 45;
+const SURGE_MOVE_LOD_FAR_INTERVAL_MS = 100;
+const SURGE_MOVE_LOD_VERY_FAR_INTERVAL_MS = 180;
+const SURGE_STATE_EMIT_INTERVAL_MS = 120;
+const SURGE_RENDER_FORCE_INSTANCE_COUNT = 0;
+const SURGE_RENDER_HIGH_DETAIL_CAP = 12;
+const SURGE_RENDER_NEAR_DISTANCE = 24;
+const SURGE_RENDER_FAR_DISTANCE = 34;
+const SURGE_RENDER_LOD_UPDATE_INTERVAL_MS = 120;
+const SURGE_INSTANCE_BASE_Y_OFFSET = 1.16;
+
+type ResolvedMochiSoldierSurgeDifficultyConfig = {
+  totalMonsters: number;
+  healthMultiplier: number;
+  spawnIntervalMs: number;
+  spawnBatchSize: number;
+};
+
+const normalizePositiveInt = (value: unknown, fallback: number) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.floor(parsed));
+};
+
+const normalizeClampedMultiplier = (
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number
+) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return THREE.MathUtils.clamp(parsed, min, max);
+};
+
+const resolveDifficultyConfig = (
+  config?: MochiSoldierSurgeDifficultyConfig
+): ResolvedMochiSoldierSurgeDifficultyConfig => {
+  return {
+    totalMonsters: THREE.MathUtils.clamp(
+      normalizePositiveInt(config?.totalMonsters, SURGE_TOTAL_MONSTERS),
+      1,
+      300
+    ),
+    healthMultiplier: normalizeClampedMultiplier(config?.healthMultiplier, 1, 1, 2),
+    spawnIntervalMs: THREE.MathUtils.clamp(
+      normalizePositiveInt(config?.spawnIntervalMs, SURGE_SPAWN_INTERVAL_MS),
+      1000,
+      5000
+    ),
+    spawnBatchSize: THREE.MathUtils.clamp(
+      normalizePositiveInt(config?.spawnBatchSize, SURGE_SPAWN_BATCH_SIZE),
+      1,
+      10
+    ),
+  };
+};
 
 type DaylightPresetRuntime = {
   syncSkyToPlayer: (player: THREE.Object3D) => void;
@@ -148,9 +219,9 @@ const applySurgeDaylightPreset = (scene: THREE.Scene): DaylightPresetRuntime => 
   const key = new THREE.DirectionalLight(0xffffff, 0.86);
   key.position.set(20, 26, 12);
   key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.mapSize.set(512, 512);
   key.shadow.camera.near = 0.5;
-  key.shadow.camera.far = 110;
+  key.shadow.camera.far = 90;
 
   const fill = new THREE.DirectionalLight(0xfff5df, 0.42);
   fill.position.set(-15, 11, -9);
@@ -175,16 +246,34 @@ const applySurgeDaylightPreset = (scene: THREE.Scene): DaylightPresetRuntime => 
 
 export const createMochiSoldierSurgeScene = (
   scene: THREE.Scene,
-  context?: SceneSetupContext
+  context?: SceneSetupContext,
+  difficultyConfig?: MochiSoldierSurgeDifficultyConfig
 ): SceneSetupResult => {
+  const difficulty = resolveDifficultyConfig(difficultyConfig);
   const streetSetup = createMochiStreetScene(scene);
   const streetWorld = streetSetup.world;
   if (!streetWorld) return streetSetup;
   const daylightPreset = applySurgeDaylightPreset(scene);
 
+  const totalMonsters = difficulty.totalMonsters;
+  const spawnIntervalMs = difficulty.spawnIntervalMs;
+  const spawnBatchSize = difficulty.spawnBatchSize;
+  const baseStats = mochiSoldierProfile.stats ?? {};
+  const scaledMochiSoldierProfile = {
+    ...mochiSoldierProfile,
+    stats: {
+      ...baseStats,
+      health: Math.max(1, (baseStats.health ?? 50) * difficulty.healthMultiplier),
+    },
+  };
+
   const bounds = streetWorld.bounds ?? fallbackBounds;
   const worldIsBlocked = streetWorld.isBlocked ?? (() => false);
   const groundY = streetWorld.groundY;
+  const surgePursuitRange = Math.hypot(
+    bounds.maxX - bounds.minX,
+    bounds.maxZ - bounds.minZ
+  );
 
   const monstersGroup = new THREE.Group();
   scene.add(monstersGroup);
@@ -222,19 +311,51 @@ export const createMochiSoldierSurgeScene = (
   trackMaterial(fallbackMaterialTemplate);
   trackMaterial(hitboxMaterialTemplate);
 
+  const instancedFallbackMaterial = fallbackMaterialTemplate.clone();
+  instancedFallbackMaterial.transparent = false;
+  const instancedFallbackMesh = new THREE.InstancedMesh(
+    fallbackGeometry,
+    instancedFallbackMaterial,
+    totalMonsters
+  );
+  instancedFallbackMesh.count = 0;
+  instancedFallbackMesh.castShadow = false;
+  instancedFallbackMesh.receiveShadow = false;
+  instancedFallbackMesh.frustumCulled = false;
+  instancedFallbackMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  monstersGroup.add(instancedFallbackMesh);
+  trackMaterial(instancedFallbackMaterial);
+
   const monsters: SurgeMonsterEntry[] = [];
+  const instancedEntries: SurgeMonsterEntry[] = [];
   const attackTargets: PlayerAttackTarget[] = [];
 
   let spawnedMonsters = 0;
   let aliveMonsters = 0;
   let defeatedMonsters = 0;
-  let nextSpawnAt = performance.now() + SURGE_SPAWN_INTERVAL_MS;
+  let nextSpawnAt = performance.now() + spawnIntervalMs;
   let playerDead = false;
   let gameEnded = false;
   let victory = false;
+  let nextRenderLodUpdateAt = 0;
+  let nextStateEmitAt = 0;
+  let nextFlowUpdateAt = 0;
+  let flowGoalCellIndex = -1;
+  let flowGoalTargetX = Number.NaN;
+  let flowGoalTargetZ = Number.NaN;
+
+  const lodPlayerPosition = new THREE.Vector3();
+  const instanceDummy = new THREE.Object3D();
+  const instancePitchEuler = new THREE.Euler(0, 0, 0, "XYZ");
+  const instancePitchQuaternion = new THREE.Quaternion();
+  const instanceBaseQuaternion = new THREE.Quaternion();
+  const swappedInstanceMatrix = new THREE.Matrix4();
+  const flowTargetWorld = new THREE.Vector3();
+  const flowWaypointScratch = new THREE.Vector2();
+  const targetWorldScratch = new THREE.Vector3();
 
   const buildState = (): MochiSoldierSurgeState => ({
-    totalMonsters: SURGE_TOTAL_MONSTERS,
+    totalMonsters,
     spawnedMonsters,
     aliveMonsters,
     defeatedMonsters,
@@ -245,10 +366,21 @@ export const createMochiSoldierSurgeScene = (
 
   let lastStateKey = "";
   const emitState = (force = false) => {
+    const now = performance.now();
+    if (!force && now < nextStateEmitAt) return;
     const nextState = buildState();
-    const stateKey = JSON.stringify(nextState);
+    const stateKey = [
+      nextState.totalMonsters,
+      nextState.spawnedMonsters,
+      nextState.aliveMonsters,
+      nextState.defeatedMonsters,
+      nextState.playerDead ? 1 : 0,
+      nextState.gameEnded ? 1 : 0,
+      nextState.victory ? 1 : 0,
+    ].join("|");
     if (!force && stateKey === lastStateKey) return;
     lastStateKey = stateKey;
+    nextStateEmitAt = now + SURGE_STATE_EMIT_INTERVAL_MS;
     context?.onStateChange?.({
       [SURGE_SCENE_STATE_KEY]: nextState,
     });
@@ -275,6 +407,8 @@ export const createMochiSoldierSurgeScene = (
   );
   const navCellCount = navCols * navRows;
   const navWalkable = new Uint8Array(navCellCount);
+  const flowFieldDistance = new Float32Array(navCellCount);
+  const flowInQueue = new Uint8Array(navCellCount);
   const navNeighborSteps = [
     { dx: 1, dz: 0, cost: 1 },
     { dx: -1, dz: 0, cost: 1 },
@@ -364,6 +498,118 @@ export const createMochiSoldierSurgeScene = (
     }
 
     return bestCell;
+  };
+
+  const rebuildFlowField = (targetX: number, targetZ: number) => {
+    const goalCell = resolveNearestWalkableCell(
+      targetX,
+      targetZ,
+      Math.max(navCols, navRows)
+    );
+    if (!goalCell) {
+      flowFieldDistance.fill(Number.POSITIVE_INFINITY);
+      flowGoalCellIndex = -1;
+      flowGoalTargetX = Number.NaN;
+      flowGoalTargetZ = Number.NaN;
+      return;
+    }
+
+    const goalIndex = cellIndex(goalCell.cellX, goalCell.cellZ);
+    flowFieldDistance.fill(Number.POSITIVE_INFINITY);
+    flowInQueue.fill(0);
+    flowFieldDistance[goalIndex] = 0;
+    flowInQueue[goalIndex] = 1;
+    const queue: number[] = [goalIndex];
+    let queueHead = 0;
+    let expansions = 0;
+    const maxExpansions = navCellCount * 6;
+
+    while (queueHead < queue.length && expansions < maxExpansions) {
+      const current = queue[queueHead++];
+      flowInQueue[current] = 0;
+      const currentDistance = flowFieldDistance[current];
+      const currentCellX = cellXFromIndex(current);
+      const currentCellZ = cellZFromIndex(current);
+      for (let i = 0; i < navNeighborSteps.length; i += 1) {
+        const step = navNeighborSteps[i];
+        const nextCellX = currentCellX + step.dx;
+        const nextCellZ = currentCellZ + step.dz;
+        if (!isCellWalkable(nextCellX, nextCellZ)) continue;
+        if (
+          step.dx !== 0 &&
+          step.dz !== 0 &&
+          (!isCellWalkable(currentCellX + step.dx, currentCellZ) ||
+            !isCellWalkable(currentCellX, currentCellZ + step.dz))
+        ) {
+          continue;
+        }
+        const nextIndex = cellIndex(nextCellX, nextCellZ);
+        const nextDistance = currentDistance + step.cost;
+        if (nextDistance >= flowFieldDistance[nextIndex]) continue;
+        flowFieldDistance[nextIndex] = nextDistance;
+        if (!flowInQueue[nextIndex]) {
+          queue.push(nextIndex);
+          flowInQueue[nextIndex] = 1;
+        }
+      }
+      expansions += 1;
+    }
+
+    flowGoalCellIndex = goalIndex;
+    flowGoalTargetX = targetX;
+    flowGoalTargetZ = targetZ;
+  };
+
+  const maybeUpdateFlowField = (targetX: number, targetZ: number, now: number) => {
+    const targetShift = Number.isFinite(flowGoalTargetX) && Number.isFinite(flowGoalTargetZ)
+      ? Math.hypot(targetX - flowGoalTargetX, targetZ - flowGoalTargetZ)
+      : Number.POSITIVE_INFINITY;
+    const shouldRebuild =
+      flowGoalCellIndex < 0 ||
+      now >= nextFlowUpdateAt ||
+      targetShift >= SURGE_FLOW_TARGET_SHIFT_REBUILD_DISTANCE;
+    if (!shouldRebuild) return;
+    rebuildFlowField(targetX, targetZ);
+    nextFlowUpdateAt = now + SURGE_FLOW_UPDATE_INTERVAL_MS;
+  };
+
+  const resolveFlowWaypoint = (fromX: number, fromZ: number) => {
+    if (flowGoalCellIndex < 0) return null;
+    const originCell = resolveNearestWalkableCell(fromX, fromZ, 8);
+    if (!originCell) return null;
+
+    const originIndex = cellIndex(originCell.cellX, originCell.cellZ);
+    let bestIndex = originIndex;
+    let bestDistance = flowFieldDistance[originIndex];
+
+    for (let i = 0; i < navNeighborSteps.length; i += 1) {
+      const step = navNeighborSteps[i];
+      const nextCellX = originCell.cellX + step.dx;
+      const nextCellZ = originCell.cellZ + step.dz;
+      if (!isCellWalkable(nextCellX, nextCellZ)) continue;
+      if (
+        step.dx !== 0 &&
+        step.dz !== 0 &&
+        (!isCellWalkable(originCell.cellX + step.dx, originCell.cellZ) ||
+          !isCellWalkable(originCell.cellX, originCell.cellZ + step.dz))
+      ) {
+        continue;
+      }
+      const nextIndex = cellIndex(nextCellX, nextCellZ);
+      const nextDistance = flowFieldDistance[nextIndex];
+      if (!Number.isFinite(nextDistance)) continue;
+      if (nextDistance < bestDistance - 0.0001) {
+        bestDistance = nextDistance;
+        bestIndex = nextIndex;
+      }
+    }
+
+    if (bestIndex === originIndex || !Number.isFinite(bestDistance)) return null;
+    flowWaypointScratch.set(
+      cellCenterX(cellXFromIndex(bestIndex)),
+      cellCenterZ(cellZFromIndex(bestIndex))
+    );
+    return flowWaypointScratch;
   };
 
   const isSegmentBlocked = (fromX: number, fromZ: number, toX: number, toZ: number) => {
@@ -535,10 +781,15 @@ export const createMochiSoldierSurgeScene = (
   };
 
   const resolveEdgeSpawnPosition = () => {
-    const minX = bounds.minX + SURGE_EDGE_SPAWN_PADDING;
-    const maxX = bounds.maxX - SURGE_EDGE_SPAWN_PADDING;
-    const minZ = bounds.minZ + SURGE_EDGE_SPAWN_PADDING;
-    const maxZ = bounds.maxZ - SURGE_EDGE_SPAWN_PADDING;
+    const edgeSpawnPadding = Math.max(
+      SURGE_EDGE_SPAWN_PADDING,
+      SURGE_NAV_CLEARANCE + 0.08
+    );
+    const minX = bounds.minX + edgeSpawnPadding;
+    const maxX = bounds.maxX - edgeSpawnPadding;
+    const minZ = bounds.minZ + edgeSpawnPadding;
+    const maxZ = bounds.maxZ - edgeSpawnPadding;
+    const edgeBandDepth = 3;
 
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const side = Math.floor(Math.random() * 4);
@@ -557,20 +808,50 @@ export const createMochiSoldierSurgeScene = (
         x = randomBetween(minX, maxX);
         z = maxZ;
       }
-      if (!worldIsBlocked(x, z)) {
+      if (isPointWalkable(x, z)) {
         return new THREE.Vector3(x, groundY, z);
       }
     }
 
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      const x = randomBetween(bounds.minX + 2, bounds.maxX - 2);
-      const z = randomBetween(bounds.minZ + 2, bounds.maxZ - 2);
-      if (!worldIsBlocked(x, z)) {
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const side = Math.floor(Math.random() * 4);
+      let x = 0;
+      let z = 0;
+      if (side === 0) {
+        x = randomBetween(minX, Math.min(maxX, minX + edgeBandDepth));
+        z = randomBetween(minZ, maxZ);
+      } else if (side === 1) {
+        x = randomBetween(Math.max(minX, maxX - edgeBandDepth), maxX);
+        z = randomBetween(minZ, maxZ);
+      } else if (side === 2) {
+        x = randomBetween(minX, maxX);
+        z = randomBetween(minZ, Math.min(maxZ, minZ + edgeBandDepth));
+      } else {
+        x = randomBetween(minX, maxX);
+        z = randomBetween(Math.max(minZ, maxZ - edgeBandDepth), maxZ);
+      }
+      if (isPointWalkable(x, z)) {
         return new THREE.Vector3(x, groundY, z);
       }
     }
 
-    return new THREE.Vector3(0, groundY, 0);
+    const fallbackCell = resolveNearestWalkableCell(
+      minX,
+      minZ,
+      Math.max(navCols, navRows)
+    );
+    if (fallbackCell) {
+      return new THREE.Vector3(
+        cellCenterX(fallbackCell.cellX),
+        groundY,
+        cellCenterZ(fallbackCell.cellZ)
+      );
+    }
+    return new THREE.Vector3(
+      (bounds.minX + bounds.maxX) * 0.5,
+      groundY,
+      (bounds.minZ + bounds.maxZ) * 0.5
+    );
   };
 
   let mochiSoldierPrototype: THREE.Object3D | null = null;
@@ -701,11 +982,150 @@ export const createMochiSoldierSurgeScene = (
     const model = cloneSkeleton(mochiSoldierPrototype);
     cloneObjectMaterials(model);
     entry.anchor.add(model);
-    applyObjectShadowFlags(model, { castShadow: true, receiveShadow: true });
+    applyObjectShadowFlags(model, { castShadow: false, receiveShadow: false });
     entry.model = model;
     entry.rig = resolveMonsterRig(model);
     entry.fallback.visible = false;
     entry.monster.invalidateHitFlashMaterialCache();
+  };
+
+  const removePrototypeFromMonster = (entry: SurgeMonsterEntry) => {
+    if (!entry.model) return;
+    if (entry.model.parent === entry.anchor) {
+      entry.anchor.remove(entry.model);
+    }
+    disposeObjectMaterials(entry.model);
+    entry.model = null;
+    entry.rig = null;
+  };
+
+  const removeFromInstancedEntries = (entry: SurgeMonsterEntry) => {
+    if (entry.instanceIndex < 0) return;
+    const removeIndex = entry.instanceIndex;
+    const lastIndex = instancedEntries.length - 1;
+    const lastEntry = instancedEntries[lastIndex];
+    if (removeIndex !== lastIndex && lastEntry) {
+      instancedEntries[removeIndex] = lastEntry;
+      lastEntry.instanceIndex = removeIndex;
+      instancedFallbackMesh.getMatrixAt(lastIndex, swappedInstanceMatrix);
+      instancedFallbackMesh.setMatrixAt(removeIndex, swappedInstanceMatrix);
+    }
+    instancedEntries.pop();
+    entry.instanceIndex = -1;
+    instancedFallbackMesh.count = instancedEntries.length;
+  };
+
+  const switchMonsterToInstanced = (entry: SurgeMonsterEntry) => {
+    if (entry.renderMode === "instanced" && entry.instanceIndex >= 0) {
+      return;
+    }
+    removePrototypeFromMonster(entry);
+    entry.fallback.visible = false;
+    if (entry.instanceIndex < 0) {
+      entry.instanceIndex = instancedEntries.length;
+      instancedEntries.push(entry);
+      instancedFallbackMesh.count = instancedEntries.length;
+    }
+    entry.renderMode = "instanced";
+  };
+
+  const switchMonsterToModel = (entry: SurgeMonsterEntry) => {
+    if (
+      entry.renderMode === "model" &&
+      entry.instanceIndex < 0 &&
+      Boolean(entry.model)
+    ) {
+      return;
+    }
+    if (!mochiSoldierPrototype) {
+      switchMonsterToInstanced(entry);
+      return;
+    }
+    if (entry.instanceIndex >= 0) {
+      removeFromInstancedEntries(entry);
+    }
+    attachPrototypeToMonster(entry);
+    entry.renderMode = "model";
+  };
+
+  const updateInstancedEntries = () => {
+    for (let i = 0; i < instancedEntries.length; i += 1) {
+      const entry = instancedEntries[i];
+      const swing = Math.sin(entry.walkPhase) * 0.14 * entry.walkBlend;
+      const bounce = Math.max(0, Math.sin(entry.walkPhase * 2)) * 0.03 * entry.walkBlend;
+      instanceDummy.position.copy(entry.anchor.position);
+      instanceDummy.position.y += SURGE_INSTANCE_BASE_Y_OFFSET + bounce;
+      instanceBaseQuaternion.copy(entry.anchor.quaternion);
+      if (Math.abs(swing) > 0.00001) {
+        instancePitchEuler.x = swing;
+        instancePitchQuaternion.setFromEuler(instancePitchEuler);
+        instanceBaseQuaternion.multiply(instancePitchQuaternion);
+      }
+      instanceDummy.quaternion.copy(instanceBaseQuaternion);
+      instanceDummy.scale.set(1, 1, 1);
+      instanceDummy.updateMatrix();
+      instancedFallbackMesh.setMatrixAt(i, instanceDummy.matrix);
+    }
+    instancedFallbackMesh.instanceMatrix.needsUpdate = true;
+  };
+
+  const updateMonsterRenderLod = (player: THREE.Object3D, now: number) => {
+    if (now < nextRenderLodUpdateAt) return;
+    nextRenderLodUpdateAt = now + SURGE_RENDER_LOD_UPDATE_INTERVAL_MS;
+
+    const aliveEntries = monsters.filter((entry) => entry.monster.isAlive);
+    if (!aliveEntries.length) return;
+
+    const overThreshold = aliveEntries.length > SURGE_RENDER_FORCE_INSTANCE_COUNT;
+    const nearDistanceSq = SURGE_RENDER_NEAR_DISTANCE * SURGE_RENDER_NEAR_DISTANCE;
+    const farDistanceSq = SURGE_RENDER_FAR_DISTANCE * SURGE_RENDER_FAR_DISTANCE;
+    const desiredModelEntries = new Set<SurgeMonsterEntry>();
+
+    if (!overThreshold && mochiSoldierPrototype) {
+      for (let i = 0; i < aliveEntries.length; i += 1) {
+        desiredModelEntries.add(aliveEntries[i]);
+      }
+    } else {
+      player.getWorldPosition(lodPlayerPosition);
+      const scored = aliveEntries.map((entry) => {
+        const dx = entry.anchor.position.x - lodPlayerPosition.x;
+        const dz = entry.anchor.position.z - lodPlayerPosition.z;
+        const distanceSq = dx * dx + dz * dz;
+        let priority = 0;
+        if (distanceSq <= nearDistanceSq) {
+          priority = 3;
+        } else if (entry.renderMode === "model" && distanceSq <= farDistanceSq) {
+          priority = 2;
+        } else if (distanceSq <= farDistanceSq) {
+          priority = 1;
+        }
+        return { entry, distanceSq, priority };
+      });
+
+      scored.sort((a, b) => {
+        if (a.priority !== b.priority) return b.priority - a.priority;
+        return a.distanceSq - b.distanceSq;
+      });
+
+      if (mochiSoldierPrototype) {
+        const highDetailBudget = Math.min(
+          SURGE_RENDER_HIGH_DETAIL_CAP,
+          scored.length
+        );
+        for (let i = 0; i < highDetailBudget; i += 1) {
+          desiredModelEntries.add(scored[i].entry);
+        }
+      }
+    }
+
+    for (let i = 0; i < aliveEntries.length; i += 1) {
+      const entry = aliveEntries[i];
+      if (desiredModelEntries.has(entry)) {
+        switchMonsterToModel(entry);
+      } else {
+        switchMonsterToInstanced(entry);
+      }
+    }
   };
 
   const removeAttackTarget = (id: string) => {
@@ -721,12 +1141,12 @@ export const createMochiSoldierSurgeScene = (
       deathFxRuntime.spawn(entry);
     }
     removeAttackTarget(entry.id);
-    if (entry.model) {
-      entry.anchor.remove(entry.model);
-      disposeObjectMaterials(entry.model);
-      entry.model = null;
+    if (entry.instanceIndex >= 0) {
+      removeFromInstancedEntries(entry);
     }
-    entry.rig = null;
+    removePrototypeFromMonster(entry);
+    entry.renderMode = "instanced";
+    entry.cachedTarget = null;
     if (entry.fallback.parent === entry.anchor) {
       entry.anchor.remove(entry.fallback);
     }
@@ -748,7 +1168,7 @@ export const createMochiSoldierSurgeScene = (
     defeatedMonsters += 1;
     aliveMonsters = Math.max(0, aliveMonsters - 1);
 
-    if (defeatedMonsters >= SURGE_TOTAL_MONSTERS) {
+    if (defeatedMonsters >= totalMonsters) {
       endGame(true);
       return;
     }
@@ -757,7 +1177,7 @@ export const createMochiSoldierSurgeScene = (
   };
 
   const spawnMonster = () => {
-    if (spawnedMonsters >= SURGE_TOTAL_MONSTERS) return;
+    if (spawnedMonsters >= totalMonsters) return;
 
     const spawnPosition = resolveEdgeSpawnPosition();
     const anchor = new THREE.Group();
@@ -769,13 +1189,14 @@ export const createMochiSoldierSurgeScene = (
       fallbackMaterialTemplate.clone()
     );
     fallback.position.set(0, 1.16, 0);
-    fallback.castShadow = true;
-    fallback.receiveShadow = true;
+    fallback.castShadow = false;
+    fallback.receiveShadow = false;
     anchor.add(fallback);
     trackMesh(fallback);
 
     const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterialTemplate.clone());
     hitbox.position.set(0, 1.16, 0);
+    hitbox.visible = false;
     anchor.add(hitbox);
     trackMesh(hitbox);
 
@@ -784,6 +1205,7 @@ export const createMochiSoldierSurgeScene = (
       hitboxMaterialTemplate.clone()
     );
     edgeHitbox.position.set(0, 1.2, 0);
+    edgeHitbox.visible = false;
     anchor.add(edgeHitbox);
     trackMesh(edgeHitbox);
 
@@ -793,9 +1215,14 @@ export const createMochiSoldierSurgeScene = (
       hitbox,
       fallback,
       model: null,
+      renderMode: "instanced",
+      instanceIndex: -1,
+      cachedTarget: null,
+      nextAiUpdateAt: 0,
+      nextMoveUpdateAt: 0,
       monster: new Monster({
         model: anchor,
-        profile: mochiSoldierProfile,
+        profile: scaledMochiSoldierProfile,
       }),
       lastAttackAt: 0,
       walkPhase: Math.random() * Math.PI * 2,
@@ -816,7 +1243,7 @@ export const createMochiSoldierSurgeScene = (
       object: anchor,
       isActive: () => entry.monster.isAlive,
       category: "normal",
-      label: mochiSoldierProfile.label,
+      label: scaledMochiSoldierProfile.label,
       getHealth: () => entry.monster.health,
       getMaxHealth: () => entry.monster.maxHealth,
       onHit: (hit) => {
@@ -831,19 +1258,18 @@ export const createMochiSoldierSurgeScene = (
       },
     });
 
-    attachPrototypeToMonster(entry);
+    switchMonsterToInstanced(entry);
   };
 
   const spawnWave = () => {
-    const remaining = SURGE_TOTAL_MONSTERS - spawnedMonsters;
-    const batch = Math.min(SURGE_SPAWN_BATCH_SIZE, remaining);
+    const remaining = totalMonsters - spawnedMonsters;
+    const batch = Math.min(spawnBatchSize, remaining);
     for (let i = 0; i < batch; i += 1) {
       spawnMonster();
     }
     emitState();
   };
 
-  const navTargetScratch = new THREE.Vector3();
   const clearEntryPath = (entry: SurgeMonsterEntry) => {
     entry.navWaypoints = [];
     entry.navWaypointIndex = 0;
@@ -896,23 +1322,45 @@ export const createMochiSoldierSurgeScene = (
     return movedDistance;
   };
 
-  const navigateTowardPlayer = (
-    entry: SurgeMonsterEntry,
-    player: THREE.Object3D,
-    now: number,
-    delta: number
-  ) => {
-    player.getWorldPosition(navTargetScratch);
-    const targetX = navTargetScratch.x;
-    const targetZ = navTargetScratch.z;
+  const navigateTowardTarget = ({
+    entry,
+    now,
+    delta,
+    targetX,
+    targetZ,
+    useFlowField,
+    preferDirectLine,
+  }: {
+    entry: SurgeMonsterEntry;
+    now: number;
+    delta: number;
+    targetX: number;
+    targetZ: number;
+    useFlowField: boolean;
+    preferDirectLine: boolean;
+  }) => {
     const position = entry.anchor.position;
 
-    if (!isSegmentBlocked(position.x, position.z, targetX, targetZ)) {
+    if (
+      preferDirectLine &&
+      !isSegmentBlocked(position.x, position.z, targetX, targetZ)
+    ) {
       clearEntryPath(entry);
       entry.lastNavTargetX = targetX;
       entry.lastNavTargetZ = targetZ;
       entry.nextRepathAt = now + SURGE_NAV_REPATH_INTERVAL_MS;
       return moveTowardPosition(entry, targetX, targetZ, delta);
+    }
+
+    if (useFlowField) {
+      const flowWaypoint = resolveFlowWaypoint(position.x, position.z);
+      if (flowWaypoint) {
+        clearEntryPath(entry);
+        entry.lastNavTargetX = flowWaypoint.x;
+        entry.lastNavTargetZ = flowWaypoint.y;
+        entry.nextRepathAt = now + SURGE_NAV_REPATH_INTERVAL_MS;
+        return moveTowardPosition(entry, flowWaypoint.x, flowWaypoint.y, delta);
+      }
     }
 
     const targetShifted =
@@ -974,10 +1422,18 @@ export const createMochiSoldierSurgeScene = (
       endGame(false);
     }
 
-    if (!gameEnded && now >= nextSpawnAt && spawnedMonsters < SURGE_TOTAL_MONSTERS) {
+    if (!gameEnded && now >= nextSpawnAt && spawnedMonsters < totalMonsters) {
       spawnWave();
-      nextSpawnAt = now + SURGE_SPAWN_INTERVAL_MS;
+      nextSpawnAt = now + spawnIntervalMs;
     }
+
+    player.getWorldPosition(flowTargetWorld);
+    maybeUpdateFlowField(flowTargetWorld.x, flowTargetWorld.z, now);
+    updateMonsterRenderLod(player, now);
+    const aiLodMidDistanceSq = SURGE_AI_LOD_MID_DISTANCE * SURGE_AI_LOD_MID_DISTANCE;
+    const aiLodFarDistanceSq = SURGE_AI_LOD_FAR_DISTANCE * SURGE_AI_LOD_FAR_DISTANCE;
+    const aiLodVeryFarDistanceSq =
+      SURGE_AI_LOD_VERY_FAR_DISTANCE * SURGE_AI_LOD_VERY_FAR_DISTANCE;
 
     for (let i = monsters.length - 1; i >= 0; i -= 1) {
       const entry = monsters[i];
@@ -988,46 +1444,106 @@ export const createMochiSoldierSurgeScene = (
 
       let isMoving = false;
       if (!gameEnded) {
-        const resolvedTarget = resolveSlimluThreatTargetForEnemy({
-          fallbackTarget: player,
-          enemyObject: entry.anchor,
-        });
-        const detectRange = entry.monster.stats.aggroRange;
-        let distance = entry.monster.distanceTo(resolvedTarget);
+        const toPlayerDx = entry.anchor.position.x - flowTargetWorld.x;
+        const toPlayerDz = entry.anchor.position.z - flowTargetWorld.z;
+        const distanceToPlayerSq = toPlayerDx * toPlayerDx + toPlayerDz * toPlayerDz;
+        const aiIntervalMs =
+          distanceToPlayerSq >= aiLodVeryFarDistanceSq
+            ? SURGE_AI_LOD_VERY_FAR_INTERVAL_MS
+            : distanceToPlayerSq >= aiLodFarDistanceSq
+              ? SURGE_AI_LOD_FAR_INTERVAL_MS
+              : distanceToPlayerSq >= aiLodMidDistanceSq
+                ? SURGE_AI_LOD_MID_INTERVAL_MS
+                : 0;
+        const moveIntervalMs =
+          distanceToPlayerSq >= aiLodVeryFarDistanceSq
+            ? SURGE_MOVE_LOD_VERY_FAR_INTERVAL_MS
+            : distanceToPlayerSq >= aiLodFarDistanceSq
+              ? SURGE_MOVE_LOD_FAR_INTERVAL_MS
+              : distanceToPlayerSq >= aiLodMidDistanceSq
+                ? SURGE_MOVE_LOD_MID_INTERVAL_MS
+                : 0;
+        const shouldRefreshAiDecision =
+          aiIntervalMs <= 0 ||
+          now >= entry.nextAiUpdateAt ||
+          !entry.cachedTarget ||
+          !entry.cachedTarget.parent;
+
+        let resolvedTarget = entry.cachedTarget ?? player;
+        if (shouldRefreshAiDecision) {
+          resolvedTarget = resolveSlimluThreatTargetForEnemy({
+            fallbackTarget: player,
+            enemyObject: entry.anchor,
+          });
+          entry.cachedTarget = resolvedTarget;
+          entry.nextAiUpdateAt = now + aiIntervalMs;
+        }
+
+        let targetX = flowTargetWorld.x;
+        let targetZ = flowTargetWorld.z;
+        if (resolvedTarget !== player) {
+          resolvedTarget.getWorldPosition(targetWorldScratch);
+          targetX = targetWorldScratch.x;
+          targetZ = targetWorldScratch.z;
+        }
+        const dxToTarget = targetX - entry.anchor.position.x;
+        const dzToTarget = targetZ - entry.anchor.position.z;
+        const detectRange = Math.max(entry.monster.stats.aggroRange, surgePursuitRange);
+        const distance = Math.hypot(dxToTarget, dzToTarget);
         if (distance <= detectRange) {
+          const shouldMoveUpdate =
+            moveIntervalMs <= 0 || now >= entry.nextMoveUpdateAt;
+          if (shouldMoveUpdate) {
+            entry.nextMoveUpdateAt = now + moveIntervalMs;
+          }
+
           if (distance > entry.monster.stats.attackRange + 0.15) {
-            const movedDistance = navigateTowardPlayer(
-              entry,
-              resolvedTarget,
-              now,
-              delta
-            );
-            distance = entry.monster.distanceTo(resolvedTarget);
-            isMoving = movedDistance > 0.0001;
+            if (shouldMoveUpdate) {
+              const effectiveDelta =
+                moveIntervalMs <= 0
+                  ? delta
+                  : Math.min(0.12, delta + moveIntervalMs / 1000);
+              const movedDistance = navigateTowardTarget({
+                entry,
+                now,
+                delta: effectiveDelta,
+                targetX,
+                targetZ,
+                useFlowField: resolvedTarget === player,
+                preferDirectLine:
+                  resolvedTarget !== player ||
+                  distanceToPlayerSq <= aiLodMidDistanceSq,
+              });
+              isMoving = movedDistance > 0.0001;
+            }
           } else {
             clearEntryPath(entry);
           }
 
-          entry.monster.faceTarget(resolvedTarget);
-          resolvedTarget.getWorldPosition(navTargetScratch);
-          const canMeleeAttack = !isSegmentBlocked(
-            entry.anchor.position.x,
-            entry.anchor.position.z,
-            navTargetScratch.x,
-            navTargetScratch.z
-          );
+          if (shouldRefreshAiDecision || aiIntervalMs <= 0) {
+            if (dxToTarget * dxToTarget + dzToTarget * dzToTarget > 0.000001) {
+              entry.anchor.rotation.y = Math.atan2(dxToTarget, dzToTarget);
+            }
 
-          if (
-            distance <= entry.monster.stats.attackRange + 0.15 &&
-            canMeleeAttack &&
-            now - entry.lastAttackAt >= mochiSoldierCombatConfig.attackCooldownMs
-          ) {
-            applyDamageToSlimluThreatOrPlayer({
-              target: resolvedTarget,
-              amount: entry.monster.stats.attack,
-              applyPlayerDamage: applyDamage,
-            });
-            entry.lastAttackAt = now;
+            if (
+              distance <= entry.monster.stats.attackRange + 0.15 &&
+              now - entry.lastAttackAt >= mochiSoldierCombatConfig.attackCooldownMs
+            ) {
+              const canMeleeAttack = !isSegmentBlocked(
+                entry.anchor.position.x,
+                entry.anchor.position.z,
+                targetX,
+                targetZ
+              );
+              if (canMeleeAttack) {
+                applyDamageToSlimluThreatOrPlayer({
+                  target: resolvedTarget,
+                  amount: entry.monster.stats.attack,
+                  applyPlayerDamage: applyDamage,
+                });
+                entry.lastAttackAt = now;
+              }
+            }
           }
         } else {
           clearEntryPath(entry);
@@ -1036,6 +1552,7 @@ export const createMochiSoldierSurgeScene = (
 
       applyMonsterWalkAnimation(entry, delta, isMoving);
     }
+    updateInstancedEntries();
     deathFxRuntime.update(delta);
 
     emitState();
@@ -1064,10 +1581,10 @@ export const createMochiSoldierSurgeScene = (
       mochiSoldierPrototype.updateMatrixWorld(true);
 
       trackObject(mochiSoldierPrototype, {
-        castShadow: true,
-        receiveShadow: true,
+        castShadow: false,
+        receiveShadow: false,
       });
-      monsters.forEach((monsterEntry) => attachPrototypeToMonster(monsterEntry));
+      nextRenderLodUpdateAt = 0;
     },
     undefined,
     () => {}
@@ -1115,3 +1632,4 @@ export const createMochiSoldierSurgeScene = (
 
   return { world, dispose };
 };
+

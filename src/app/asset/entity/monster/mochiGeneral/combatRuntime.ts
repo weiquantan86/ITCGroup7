@@ -18,7 +18,7 @@ type SwordThrustState = {
 };
 
 type RageTransitionSmokeParticle = {
-  entry: MochiGeneralCombatEntry;
+  entry: MochiGeneralCombatEntry | null;
   mesh: THREE.Mesh;
   material: THREE.MeshStandardMaterial;
   velocity: THREE.Vector3;
@@ -74,7 +74,10 @@ const BOSS_SWORD_THRUST_CLOSE_COMBAT_TOP_Y = 2.28;
 const BOSS_SWORD_THRUST_CLOSE_COMBAT_FORWARD_MIN = 0.52;
 const BOSS_SWORD_THRUST_CLOSE_COMBAT_FORWARD_EXTRA = 0.92;
 const BOSS_SWORD_THRUST_CLOSE_COMBAT_MIN_FORWARD_DOT = -0.42;
-const BOSS_RAGE_SMOKE_SPAWN_RATE = 132;
+const BOSS_SWORD_THRUST_EARLY_OUT_PADDING = 2.4;
+const BOSS_RAGE_SMOKE_SPAWN_RATE = 72;
+const BOSS_RAGE_SMOKE_POOL_SIZE = 128;
+const BOSS_RAGE_SMOKE_MAX_ACTIVE_PARTICLES = 112;
 const BOSS_RAGE_SMOKE_PARTICLE_LIFE_MIN = 1.9;
 const BOSS_RAGE_SMOKE_PARTICLE_LIFE_MAX = 3.1;
 const BOSS_RAGE_SMOKE_RADIUS_MIN = 0.12;
@@ -351,6 +354,7 @@ export const createMochiGeneralCombatRuntime = (
     blending: THREE.NormalBlending,
   });
   const rageSmokeParticles: RageTransitionSmokeParticle[] = [];
+  const idleRageSmokeParticles: RageTransitionSmokeParticle[] = [];
 
   const resolveSwordThrustState = (
     entry: MochiGeneralCombatEntry
@@ -368,28 +372,63 @@ export const createMochiGeneralCombatRuntime = (
     return state;
   };
 
-  const removeRageSmokeParticleAt = (index: number) => {
+  const releaseRageSmokeParticleAt = (index: number) => {
     const particle = rageSmokeParticles[index];
     if (!particle) return;
-    if (particle.mesh.parent) {
-      particle.mesh.parent.remove(particle.mesh);
-    }
-    particle.material.dispose();
+    particle.mesh.visible = false;
+    particle.entry = null;
+    particle.age = 0;
+    particle.life = 1;
+    particle.startScale = 1;
+    particle.endScale = 1;
+    particle.velocity.set(0, 0, 0);
+    particle.spin.set(0, 0, 0);
     rageSmokeParticles.splice(index, 1);
+    idleRageSmokeParticles.push(particle);
   };
 
   const clearRageSmokeForEntry = (entry: MochiGeneralCombatEntry) => {
     for (let i = rageSmokeParticles.length - 1; i >= 0; i -= 1) {
       if (rageSmokeParticles[i]?.entry !== entry) continue;
-      removeRageSmokeParticleAt(i);
+      releaseRageSmokeParticleAt(i);
     }
     rageSmokeSpawnCarryByEntry.delete(entry);
   };
+
+  const createIdleRageSmokeParticle = (): RageTransitionSmokeParticle => {
+    const material = rageSmokeMaterialTemplate.clone();
+    const mesh = new THREE.Mesh(rageSmokeGeometry, material);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.visible = false;
+    scene.add(mesh);
+    return {
+      entry: null,
+      mesh,
+      material,
+      velocity: new THREE.Vector3(),
+      spin: new THREE.Vector3(),
+      age: 0,
+      life: 1,
+      startScale: 1,
+      endScale: 1,
+    };
+  };
+
+  for (let i = 0; i < BOSS_RAGE_SMOKE_POOL_SIZE; i += 1) {
+    idleRageSmokeParticles.push(createIdleRageSmokeParticle());
+  }
 
   const spawnRageSmokeParticle = (
     entry: MochiGeneralCombatEntry,
     rageBlend: number
   ) => {
+    if (rageSmokeParticles.length >= BOSS_RAGE_SMOKE_MAX_ACTIVE_PARTICLES) {
+      return false;
+    }
+    const particle = idleRageSmokeParticles.pop();
+    if (!particle) return false;
+
     entry.anchor.getWorldPosition(rageSmokeCenterWorld);
     const angle = Math.random() * Math.PI * 2;
     const radius = THREE.MathUtils.lerp(
@@ -415,7 +454,11 @@ export const createMochiGeneralCombatRuntime = (
         Math.random()
       );
 
-    const material = rageSmokeMaterialTemplate.clone();
+    const { material, mesh, velocity, spin } = particle;
+    material.color.set(0xb91c1c);
+    material.emissive.set(0x7f1d1d);
+    material.emissiveIntensity = 0.42;
+    material.opacity = 0.86;
     material.opacity *= THREE.MathUtils.lerp(0.95, 1.28, rageBlend);
     material.emissiveIntensity *= THREE.MathUtils.lerp(0.8, 1.35, rageBlend);
     if (Math.random() < 0.38) {
@@ -423,7 +466,6 @@ export const createMochiGeneralCombatRuntime = (
       material.emissive.set(0x3f0a0a);
     }
 
-    const mesh = new THREE.Mesh(rageSmokeGeometry, material);
     rageSmokeSpawnWorld.set(
       rageSmokeCenterWorld.x + Math.cos(angle) * radius,
       rageSmokeCenterWorld.y +
@@ -435,10 +477,8 @@ export const createMochiGeneralCombatRuntime = (
       rageSmokeCenterWorld.z + Math.sin(angle) * radius
     );
     mesh.position.copy(rageSmokeSpawnWorld);
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
+    mesh.visible = true;
     mesh.scale.setScalar(startScale);
-    scene.add(mesh);
 
     const outwardSpeed = THREE.MathUtils.lerp(
       BOSS_RAGE_SMOKE_OUTWARD_SPEED_MIN,
@@ -451,27 +491,25 @@ export const createMochiGeneralCombatRuntime = (
       Math.random()
     );
     const blendSpeedMultiplier = THREE.MathUtils.lerp(0.8, 1.3, rageBlend);
-    rageSmokeParticles.push({
-      entry,
-      mesh,
-      material,
-      velocity: new THREE.Vector3(
-        Math.cos(angle) * outwardSpeed * blendSpeedMultiplier +
-          (Math.random() - 0.5) * 0.45,
-        upwardSpeed * blendSpeedMultiplier,
-        Math.sin(angle) * outwardSpeed * blendSpeedMultiplier +
-          (Math.random() - 0.5) * 0.45
-      ),
-      spin: new THREE.Vector3(
-        (Math.random() - 0.5) * BOSS_RAGE_SMOKE_SPIN_SPEED,
-        (Math.random() - 0.5) * BOSS_RAGE_SMOKE_SPIN_SPEED,
-        (Math.random() - 0.5) * BOSS_RAGE_SMOKE_SPIN_SPEED
-      ),
-      age: 0,
-      life,
-      startScale,
-      endScale,
-    });
+    particle.entry = entry;
+    velocity.set(
+      Math.cos(angle) * outwardSpeed * blendSpeedMultiplier +
+        (Math.random() - 0.5) * 0.45,
+      upwardSpeed * blendSpeedMultiplier,
+      Math.sin(angle) * outwardSpeed * blendSpeedMultiplier +
+        (Math.random() - 0.5) * 0.45
+    );
+    spin.set(
+      (Math.random() - 0.5) * BOSS_RAGE_SMOKE_SPIN_SPEED,
+      (Math.random() - 0.5) * BOSS_RAGE_SMOKE_SPIN_SPEED,
+      (Math.random() - 0.5) * BOSS_RAGE_SMOKE_SPIN_SPEED
+    );
+    particle.age = 0;
+    particle.life = life;
+    particle.startScale = startScale;
+    particle.endScale = endScale;
+    rageSmokeParticles.push(particle);
+    return true;
   };
 
   const emitRageSmoke = (entry: MochiGeneralCombatEntry, delta: number) => {
@@ -488,7 +526,10 @@ export const createMochiGeneralCombatRuntime = (
         THREE.MathUtils.lerp(0.5, 1.35, entry.rageTransitionBlend);
     while (carry >= 1) {
       carry -= 1;
-      spawnRageSmokeParticle(entry, entry.rageTransitionBlend);
+      if (!spawnRageSmokeParticle(entry, entry.rageTransitionBlend)) {
+        carry = 0;
+        break;
+      }
     }
     rageSmokeSpawnCarryByEntry.set(entry, carry);
   };
@@ -499,7 +540,7 @@ export const createMochiGeneralCombatRuntime = (
       particle.age += delta;
       const t = particle.life > 0 ? particle.age / particle.life : 1;
       if (t >= 1) {
-        removeRageSmokeParticleAt(i);
+        releaseRageSmokeParticleAt(i);
         continue;
       }
 
@@ -563,12 +604,23 @@ export const createMochiGeneralCombatRuntime = (
     state.previousBladeBase.copy(swordBaseWorld);
     state.previousBladeTip.copy(swordTipWorld);
     state.hasPreviousBladeSample = true;
+    entry.anchor.getWorldPosition(bossAnchorWorld);
+    const earlyOutDistance =
+      Math.max(0.5, entry.monster.stats.attackRange) +
+      BOSS_SWORD_THRUST_CLOSE_COMBAT_FORWARD_EXTRA +
+      BOSS_SWORD_THRUST_TARGET_RADIUS_MAX +
+      BOSS_SWORD_THRUST_EARLY_OUT_PADDING;
+    const earlyOutDistanceSq = earlyOutDistance * earlyOutDistance;
 
     for (let i = 0; i < targets.length; i += 1) {
       const target = targets[i];
       if (!target?.parent) continue;
       const targetId = target.uuid;
       if (state.hitTargetIds.has(targetId)) continue;
+      target.getWorldPosition(targetAnchorWorld);
+      if (targetAnchorWorld.distanceToSquared(bossAnchorWorld) > earlyOutDistanceSq) {
+        continue;
+      }
 
       const targetCapsule = resolveMochiGeneralMeleeHitCapsule(target);
       let distanceSq = resolveMochiGeneralSegmentDistanceSq(
@@ -738,8 +790,23 @@ export const createMochiGeneralCombatRuntime = (
       skill4Runtime.dispose();
       skill5Runtime.dispose();
       for (let i = rageSmokeParticles.length - 1; i >= 0; i -= 1) {
-        removeRageSmokeParticleAt(i);
+        const particle = rageSmokeParticles[i];
+        if (!particle) continue;
+        if (particle.mesh.parent) {
+          particle.mesh.parent.remove(particle.mesh);
+        }
+        particle.material.dispose();
       }
+      rageSmokeParticles.length = 0;
+      for (let i = idleRageSmokeParticles.length - 1; i >= 0; i -= 1) {
+        const particle = idleRageSmokeParticles[i];
+        if (!particle) continue;
+        if (particle.mesh.parent) {
+          particle.mesh.parent.remove(particle.mesh);
+        }
+        particle.material.dispose();
+      }
+      idleRageSmokeParticles.length = 0;
       rageSmokeGeometry.dispose();
       rageSmokeMaterialTemplate.dispose();
     },

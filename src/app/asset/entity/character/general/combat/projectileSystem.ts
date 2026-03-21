@@ -99,6 +99,33 @@ export const createProjectileSystem = ({
   const cameraAimOrigin = new THREE.Vector3();
   const cameraAimDirection = new THREE.Vector3();
   const cameraAimPoint = new THREE.Vector3();
+  const flattenedProjectileColliders: THREE.Object3D[] = [];
+  const flattenedProjectileColliderUuids = new Set<string>();
+  let lastProjectileColliderRootCount = -1;
+
+  const collectProjectileColliderMeshes = () => {
+    flattenedProjectileColliders.length = 0;
+    flattenedProjectileColliderUuids.clear();
+    const tryPush = (object: THREE.Object3D) => {
+      const maybeMesh = object as THREE.Object3D & { isMesh?: boolean; isInstancedMesh?: boolean };
+      if (!maybeMesh.isMesh && !maybeMesh.isInstancedMesh) return;
+      if (flattenedProjectileColliderUuids.has(object.uuid)) return;
+      flattenedProjectileColliderUuids.add(object.uuid);
+      flattenedProjectileColliders.push(object);
+    };
+    for (let i = 0; i < projectileColliders.length; i += 1) {
+      const root = projectileColliders[i];
+      if (!root) continue;
+      tryPush(root);
+      root.traverse((child) => {
+        if (child === root) return;
+        tryPush(child);
+      });
+    }
+    lastProjectileColliderRootCount = projectileColliders.length;
+  };
+
+  collectProjectileColliderMeshes();
 
   const retainSharedHitGroup = (groupId: string | null) => {
     if (!groupId) return;
@@ -316,6 +343,9 @@ export const createProjectileSystem = ({
     projectileBlockers,
     handleProjectileBlockHit,
   }: UpdateProjectileSystemArgs) => {
+    if (projectileColliders.length !== lastProjectileColliderRootCount) {
+      collectProjectileColliderMeshes();
+    }
     for (let i = 0; i < projectileBlockers.length; i += 1) {
       projectileBlockers[i].updateMatrixWorld(true);
     }
@@ -380,10 +410,10 @@ export const createProjectileSystem = ({
         );
 
         let worldHit: THREE.Intersection | null = null;
-        if (projectileColliders.length) {
+        if (flattenedProjectileColliders.length) {
           raycaster.set(origin, direction);
           raycaster.far = reach;
-          const hits = raycaster.intersectObjects(projectileColliders, true);
+          const hits = raycaster.intersectObjects(flattenedProjectileColliders, false);
           if (hits.length) {
             worldHit = hits[0];
           }

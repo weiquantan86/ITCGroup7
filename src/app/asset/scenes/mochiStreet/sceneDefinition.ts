@@ -13,7 +13,7 @@ export const createMochiStreetScene = (scene: THREE.Scene): SceneSetupResult => 
   scene.fog = new THREE.Fog(0x0b1020, 24, 95);
 
   const groundY = -1.4;
-  const streetSize = { width: 74, depth: 98 };
+  const streetSize = { width: 148, depth: 196 };
   const bounds = {
     minX: -streetSize.width / 2 + 2,
     maxX: streetSize.width / 2 - 2,
@@ -24,6 +24,16 @@ export const createMochiStreetScene = (scene: THREE.Scene): SceneSetupResult => 
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
   const buildingColliders: BoxCollider[] = [];
+  const projectileColliderMeshes: THREE.Object3D[] = [];
+  const projectileColliderGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const projectileColliderMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  geometries.add(projectileColliderGeometry);
+  materials.add(projectileColliderMaterial);
   const mochiStreetGroup = new THREE.Group();
   scene.add(mochiStreetGroup);
 
@@ -173,6 +183,17 @@ export const createMochiStreetScene = (scene: THREE.Scene): SceneSetupResult => 
       minZ: z - depth / 2 - 0.4,
       maxZ: z + depth / 2 + 0.4,
     });
+
+    const projectileCollider = new THREE.Mesh(
+      projectileColliderGeometry,
+      projectileColliderMaterial
+    );
+    projectileCollider.position.set(x, groundY + height / 2, z);
+    projectileCollider.scale.set(width + 0.8, Math.max(0.5, height), depth + 0.8);
+    projectileCollider.visible = false;
+    projectileCollider.updateMatrix();
+    projectileCollider.updateMatrixWorld(true);
+    projectileColliderMeshes.push(projectileCollider);
   };
 
   for (let i = 0; i < 7; i += 1) {
@@ -224,7 +245,10 @@ export const createMochiStreetScene = (scene: THREE.Scene): SceneSetupResult => 
     sceneId: "mochiStreet",
     groundY,
     bounds,
-    projectileColliders: [mochiStreetGroup] as THREE.Object3D[],
+    projectileColliders:
+      projectileColliderMeshes.length > 0
+        ? projectileColliderMeshes
+        : ([mochiStreetGroup] as THREE.Object3D[]),
     isBlocked: (x: number, z: number) => {
       if (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ) {
         return true;

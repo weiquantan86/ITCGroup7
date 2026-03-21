@@ -107,15 +107,21 @@ export async function POST(request: Request) {
     const defeatedMonsters = normalizeDefeatedCount(body.defeatedMonsters);
     const isVictory =
       Boolean(body.victory) && defeatedMonsters >= SURGE_TOTAL_MONSTERS;
+    const rewardMultiplier = normalizeRewardMultiplier(body.rewardMultiplier);
     const killRewardPacks = resolveSurgeRewardPacksFromKills(defeatedMonsters);
     const victoryBonus = isVictory ? 3 : 0;
-    obtainedSnackRewards = rollRewards(killRewardPacks);
-    winBonusRewards = rollRewards(victoryBonus);
+    const scaledKillRewardPacks = Math.floor(killRewardPacks * rewardMultiplier);
+    const scaledVictoryBonus = Math.floor(victoryBonus * rewardMultiplier);
+    obtainedSnackRewards = rollRewards(scaledKillRewardPacks);
+    winBonusRewards = rollRewards(scaledVictoryBonus);
     rewards = mergeRewards(obtainedSnackRewards, winBonusRewards);
     settlementPayload = {
       defeatedMonsters,
       killRewardPacks,
+      scaledKillRewardPacks,
       victoryBonus,
+      scaledVictoryBonus,
+      rewardMultiplier,
       victory: isVictory,
     };
   }

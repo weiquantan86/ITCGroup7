@@ -583,11 +583,14 @@ export const createMochiGeneralBossLifecycle = ({
               applyPlayerDamage: applyDamage,
             }),
           applyDamageToTarget: (target, amount) =>
-            applyDamageToSlimluThreatOrPlayer({
-              target,
-              amount: scaleOutgoingDamage(amount),
-              applyPlayerDamage: applyDamage,
-            }),
+            target === player
+              ? applyDamage(scaleOutgoingDamage(amount))
+              : applyDamageToSlimluThreatOrPlayer({
+                  target,
+                  amount: scaleOutgoingDamage(amount),
+                  applyPlayerDamage: applyDamage,
+                  fallbackToPlayerWhenNoThreat: false,
+                }),
           summonSkill3Soldier: ({ position }) => {
             onSummonSoldier(position);
           },
@@ -607,11 +610,14 @@ export const createMochiGeneralBossLifecycle = ({
             applyPlayerDamage: applyDamage,
           }),
         applyDamageToTarget: (target, amount) =>
-          applyDamageToSlimluThreatOrPlayer({
-            target,
-            amount: scaleOutgoingDamage(amount),
-            applyPlayerDamage: applyDamage,
-          }),
+          target === player
+            ? applyDamage(scaleOutgoingDamage(amount))
+            : applyDamageToSlimluThreatOrPlayer({
+                target,
+                amount: scaleOutgoingDamage(amount),
+                applyPlayerDamage: applyDamage,
+                fallbackToPlayerWhenNoThreat: false,
+              }),
         applyStatusEffect: (effect) =>
           resolvedUpdateTarget === player ? applyStatusEffect(effect) : false,
         gameEnded: isGameEnded(),

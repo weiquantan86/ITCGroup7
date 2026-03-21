@@ -11,6 +11,7 @@ type CreatePlayerCameraRigArgs = {
 type UpdatePlayerCameraRigArgs = {
   avatar: THREE.Object3D;
   eyeHeight: number;
+  delta: number;
   lookState: PlayerLookState;
   miniOrbitYawOffset: number;
   miniOrbitPitchOffset: number;
@@ -65,6 +66,7 @@ export const createPlayerCameraRig = ({
 
   const miniViewport = { size: 0, margin: 14 };
   const cameraTarget = new THREE.Vector3();
+  const cameraTargetSmoothed = new THREE.Vector3();
   const cameraLookDir = new THREE.Vector3();
   const cameraLookAt = new THREE.Vector3();
   const headWorldTarget = new THREE.Vector3();
@@ -72,6 +74,10 @@ export const createPlayerCameraRig = ({
   const miniOffset = new THREE.Vector3();
   const miniPitchMin = THREE.MathUtils.degToRad(-20);
   const miniPitchMax = THREE.MathUtils.degToRad(80);
+  const cameraTargetSmoothRate = 12;
+  const cameraTargetSnapDistance = 6;
+  const cameraTargetSnapDistanceSq = cameraTargetSnapDistance ** 2;
+  let hasSmoothedCameraTarget = false;
 
   const updateMiniViewport = (width: number, height: number) => {
     if (!showMiniMap || !miniMapVisible) {
@@ -87,6 +93,7 @@ export const createPlayerCameraRig = ({
   const update = ({
     avatar,
     eyeHeight,
+    delta,
     lookState,
     miniOrbitYawOffset,
     miniOrbitPitchOffset,
@@ -114,13 +121,29 @@ export const createPlayerCameraRig = ({
         avatar.position.z
       );
     }
+    const safeDelta = Number.isFinite(delta) ? Math.max(0, delta) : 0;
+    const shouldSnapTarget =
+      !hasSmoothedCameraTarget ||
+      cameraTargetSmoothed.distanceToSquared(cameraTarget) >
+        cameraTargetSnapDistanceSq;
+    if (shouldSnapTarget || safeDelta <= 0) {
+      cameraTargetSmoothed.copy(cameraTarget);
+      hasSmoothedCameraTarget = true;
+    } else {
+      const alpha = THREE.MathUtils.clamp(
+        1 - Math.exp(-cameraTargetSmoothRate * safeDelta),
+        0,
+        1
+      );
+      cameraTargetSmoothed.lerp(cameraTarget, alpha);
+    }
     cameraLookDir.set(
       Math.sin(lookState.yaw) * Math.cos(lookState.pitch),
       Math.sin(lookState.pitch),
       Math.cos(lookState.yaw) * Math.cos(lookState.pitch)
     );
-    camera.position.copy(cameraTarget).addScaledVector(cameraLookDir, 0.05);
-    cameraLookAt.copy(cameraTarget).add(cameraLookDir);
+    camera.position.copy(cameraTargetSmoothed).addScaledVector(cameraLookDir, 0.05);
+    cameraLookAt.copy(cameraTargetSmoothed).add(cameraLookDir);
     camera.lookAt(cameraLookAt);
 
     miniTarget.set(
