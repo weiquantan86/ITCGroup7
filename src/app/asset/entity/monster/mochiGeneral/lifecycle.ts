@@ -8,7 +8,7 @@ import {
   collectActiveSlimluThreatTargets,
   resolveSlimluThreatTargetForEnemy,
 } from "../../character/slimlu/threatRegistry";
-import { Monster } from "../general";
+import { Monster, type MonsterProfile } from "../general";
 import type { MochiGeneralCombatEntry } from "./combatBehavior";
 import {
   createMochiGeneralCombatState,
@@ -74,6 +74,18 @@ const BOSS_ENTRANCE_SMOKE_POOL_SIZE = 96;
 const BOSS_ENTRANCE_SMOKE_EMIT_WINDOW = 0.18;
 const BOSS_ENTRANCE_SMOKE_MAX_PER_FRAME = 12;
 
+const normalizePositiveMultiplier = (value: unknown, fallback = 1) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+};
+
+const normalizeDefenseRatio = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return THREE.MathUtils.clamp(parsed, 0, 1);
+};
+
 const cloneObjectMaterials = (object: THREE.Object3D) => {
   object.traverse((child) => {
     const mesh = child as THREE.Mesh;
@@ -133,6 +145,9 @@ export const createMochiGeneralBossLifecycle = ({
   fallbackMaterialTemplate,
   hitboxGeometry,
   hitboxMaterialTemplate,
+  damageMultiplier,
+  defenseRatio,
+  tempoMultiplier,
   onBossDamaged,
 }: {
   scene: THREE.Scene;
@@ -148,8 +163,23 @@ export const createMochiGeneralBossLifecycle = ({
   fallbackMaterialTemplate: THREE.Material;
   hitboxGeometry: THREE.BufferGeometry;
   hitboxMaterialTemplate: THREE.Material;
+  damageMultiplier?: number;
+  defenseRatio?: number;
+  tempoMultiplier?: number;
   onBossDamaged?: (appliedDamage: number) => void;
 }): MochiGeneralBossLifecycle => {
+  const resolvedDamageMultiplier = normalizePositiveMultiplier(damageMultiplier, 1);
+  const resolvedDefenseRatio = normalizeDefenseRatio(defenseRatio);
+  const resolvedTempoMultiplier = normalizePositiveMultiplier(tempoMultiplier, 1);
+  const baseStats = mochiGeneralProfile.stats ?? {};
+  const monsterProfile: MonsterProfile = {
+    ...mochiGeneralProfile,
+    stats: {
+      ...baseStats,
+      attack: Math.max(0, (baseStats.attack ?? 0) * resolvedDamageMultiplier),
+      defense: resolvedDefenseRatio,
+    },
+  };
   const entries: MochiGeneralBossEntry[] = [];
   const combatRuntime = createMochiGeneralCombatRuntime(scene);
   const smokeGroup = new THREE.Group();
@@ -456,7 +486,7 @@ export const createMochiGeneralBossLifecycle = ({
 
       const monster = new Monster({
         model: anchor,
-        profile: mochiGeneralProfile,
+        profile: monsterProfile,
         spawn: {
           position: position.clone(),
           yaw: Math.PI,
@@ -481,7 +511,7 @@ export const createMochiGeneralBossLifecycle = ({
         object: hitbox,
         isActive: () => !isGameEnded() && entry.monster.isAlive,
         category: "boss",
-        label: mochiGeneralProfile.label,
+        label: monsterProfile.label,
         getHealth: () => entry.monster.health,
         getMaxHealth: () => entry.monster.maxHealth,
         onHit: (hit) => {
@@ -523,6 +553,8 @@ export const createMochiGeneralBossLifecycle = ({
       if (!meleeTargets.includes(player)) {
         meleeTargets.push(player);
       }
+      const scaleOutgoingDamage = (amount: number) =>
+        Math.max(0, amount * resolvedDamageMultiplier);
       for (let i = entries.length - 1; i >= 0; i -= 1) {
         const entry = entries[i];
         if (!entry.monster.isAlive) {
@@ -539,6 +571,7 @@ export const createMochiGeneralBossLifecycle = ({
         combatRuntime.tickBoss({
           entry,
           delta,
+          tempoMultiplier: resolvedTempoMultiplier,
           player: resolvedTarget,
           meleeTargets,
           gameEnded: isGameEnded(),
@@ -546,13 +579,13 @@ export const createMochiGeneralBossLifecycle = ({
           applyDamage: (amount) =>
             applyDamageToSlimluThreatOrPlayer({
               target: resolvedTarget,
-              amount,
+              amount: scaleOutgoingDamage(amount),
               applyPlayerDamage: applyDamage,
             }),
           applyDamageToTarget: (target, amount) =>
             applyDamageToSlimluThreatOrPlayer({
               target,
-              amount,
+              amount: scaleOutgoingDamage(amount),
               applyPlayerDamage: applyDamage,
             }),
           summonSkill3Soldier: ({ position }) => {
@@ -570,13 +603,13 @@ export const createMochiGeneralBossLifecycle = ({
         applyDamage: (amount) =>
           applyDamageToSlimluThreatOrPlayer({
             target: resolvedUpdateTarget,
-            amount,
+            amount: scaleOutgoingDamage(amount),
             applyPlayerDamage: applyDamage,
           }),
         applyDamageToTarget: (target, amount) =>
           applyDamageToSlimluThreatOrPlayer({
             target,
-            amount,
+            amount: scaleOutgoingDamage(amount),
             applyPlayerDamage: applyDamage,
           }),
         applyStatusEffect: (effect) =>

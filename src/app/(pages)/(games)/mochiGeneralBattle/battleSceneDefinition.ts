@@ -42,6 +42,40 @@ const VICTORY_BONUS_WITHIN_5_MIN = 2000;
 const VICTORY_BONUS_WITHIN_7_MIN = 1000;
 const VICTORY_BONUS_WITHIN_10_MIN = 500;
 
+export type MochiGeneralBattleDifficultyConfig = {
+  bossDamageMultiplier?: number;
+  bossDefenseRatio?: number;
+  bossTempoMultiplier?: number;
+};
+
+type ResolvedMochiGeneralBattleDifficultyConfig = {
+  bossDamageMultiplier: number;
+  bossDefenseRatio: number;
+  bossTempoMultiplier: number;
+};
+
+const normalizePositiveMultiplier = (value: unknown, fallback = 1) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+};
+
+const normalizeDefenseRatio = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return THREE.MathUtils.clamp(parsed, 0, 1);
+};
+
+const resolveDifficultyConfig = (
+  config?: MochiGeneralBattleDifficultyConfig
+): ResolvedMochiGeneralBattleDifficultyConfig => {
+  return {
+    bossDamageMultiplier: normalizePositiveMultiplier(config?.bossDamageMultiplier, 1),
+    bossDefenseRatio: normalizeDefenseRatio(config?.bossDefenseRatio),
+    bossTempoMultiplier: normalizePositiveMultiplier(config?.bossTempoMultiplier, 1),
+  };
+};
+
 type DaylightPresetRuntime = {
   syncSkyToPlayer: (player: THREE.Object3D) => void;
   dispose: () => void;
@@ -129,8 +163,10 @@ const applyBattleDaylightPreset = (scene: THREE.Scene): DaylightPresetRuntime =>
 
 export const createMochiGeneralBattleScene = (
   scene: THREE.Scene,
-  context?: SceneSetupContext
+  context?: SceneSetupContext,
+  difficultyConfig?: MochiGeneralBattleDifficultyConfig
 ): SceneSetupResult => {
+  const difficulty = resolveDifficultyConfig(difficultyConfig);
   const factorySetup = createMochiFactoryScene(scene);
   const factoryWorld = factorySetup.world;
   if (!factoryWorld) return factorySetup;
@@ -270,6 +306,9 @@ export const createMochiGeneralBattleScene = (
     fallbackMaterialTemplate: bossFallbackMaterialTemplate,
     hitboxGeometry: bossHitboxGeometry,
     hitboxMaterialTemplate,
+    damageMultiplier: difficulty.bossDamageMultiplier,
+    defenseRatio: difficulty.bossDefenseRatio,
+    tempoMultiplier: difficulty.bossTempoMultiplier,
     onBossDamaged: (appliedDamage) => {
       if (gameEnded || appliedDamage <= 0) return;
       const gained = addScore(appliedDamage);

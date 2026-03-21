@@ -15,6 +15,7 @@ type RewardRequestBody = {
   elapsedSeconds?: number;
   defeatedMonsters?: number;
   victory?: boolean;
+  rewardMultiplier?: number;
 };
 
 const MOCHI_GENERAL_VICTORY_SCORE_STEP = 100;
@@ -30,6 +31,12 @@ const normalizeScore = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 0;
   return Math.max(0, Math.min(1_000_000, Math.floor(parsed)));
+};
+
+const normalizeRewardMultiplier = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(1, Math.min(5, parsed));
 };
 
 const rollRewards = (count: number): SurgeSnackRewards => {
@@ -81,10 +88,11 @@ export async function POST(request: Request) {
   if (isMochiGeneralBattleMode) {
     const score = normalizeScore(body.score);
     const isVictory = Boolean(body.victory);
+    const rewardMultiplier = normalizeRewardMultiplier(body.rewardMultiplier);
     const scoreStep = isVictory
       ? MOCHI_GENERAL_VICTORY_SCORE_STEP
       : MOCHI_GENERAL_DEFEAT_SCORE_STEP;
-    const rewardPacks = Math.floor(score / scoreStep);
+    const rewardPacks = Math.floor((score * rewardMultiplier) / scoreStep);
     obtainedSnackRewards = rollRewards(rewardPacks);
     winBonusRewards = createEmptySurgeSnackRewards();
     rewards = mergeRewards(obtainedSnackRewards, winBonusRewards);
@@ -92,6 +100,7 @@ export async function POST(request: Request) {
       score,
       scoreStep,
       rewardPacks,
+      rewardMultiplier,
       victory: isVictory,
     };
   } else {

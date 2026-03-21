@@ -7,7 +7,7 @@ export const mochiGeneralProfile: MonsterProfile = {
   stats: {
     health: 10000,
     attack: 30,
-    defense: 0.25,
+    defense: 0,
     speed: 4.004,
     aggroRange: 200,
     attackRange: 2.2,

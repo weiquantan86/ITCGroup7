@@ -1860,29 +1860,38 @@ const applyBossAnimation = (
 export const tickMochiGeneralCombat = ({
   entry,
   delta,
+  tempoMultiplier = 1,
   player,
   gameEnded,
   isBlocked,
 }: {
   entry: MochiGeneralCombatEntry;
   delta: number;
+  tempoMultiplier?: number;
   player: THREE.Object3D;
   gameEnded: boolean;
   isBlocked: (x: number, z: number) => boolean;
 }) => {
   let isMoving = false;
-  const rageState = resolveBossRageState(entry, delta);
+  const resolvedTempoMultiplier =
+    Number.isFinite(tempoMultiplier) && tempoMultiplier > 0
+      ? tempoMultiplier
+      : 1;
+  const effectiveDelta = delta * resolvedTempoMultiplier;
+  const rageState = resolveBossRageState(entry, effectiveDelta);
   const rageActive = rageState.rageActive;
   const rageTransitioning = rageState.rageTransitioning;
   const rageTransitionActive = rageState.rageTransitionActive;
   const moveSpeedMultiplier = rageActive
     ? MOCHI_GENERAL_RAGE_MOVE_SPEED_MULTIPLIER
     : 1;
-  const attackDelta = delta * (rageActive ? MOCHI_GENERAL_RAGE_ATTACK_SPEED_MULTIPLIER : 1);
+  const attackDelta =
+    effectiveDelta * (rageActive ? MOCHI_GENERAL_RAGE_ATTACK_SPEED_MULTIPLIER : 1);
   const skillCastDelta =
-    delta * (rageActive ? MOCHI_GENERAL_RAGE_SKILL_CAST_SPEED_MULTIPLIER : 1);
+    effectiveDelta * (rageActive ? MOCHI_GENERAL_RAGE_SKILL_CAST_SPEED_MULTIPLIER : 1);
   const skillCooldownDelta =
-    delta * (rageActive ? MOCHI_GENERAL_RAGE_SKILL_COOLDOWN_RECOVER_MULTIPLIER : 1);
+    effectiveDelta *
+    (rageActive ? MOCHI_GENERAL_RAGE_SKILL_COOLDOWN_RECOVER_MULTIPLIER : 1);
   const attackRange = Math.max(3.2, entry.monster.stats.attackRange + 0.7);
   let distance = entry.monster.distanceTo(player);
   const trackingActive =
@@ -1901,7 +1910,7 @@ export const tickMochiGeneralCombat = ({
 
   updateBossSkill1State({
     entry,
-    delta,
+    delta: effectiveDelta,
     castDelta: skillCastDelta,
     cooldownDelta: skillCooldownDelta,
     canAttemptStart:
@@ -1917,7 +1926,7 @@ export const tickMochiGeneralCombat = ({
 
   updateBossSkill2State({
     entry,
-    delta,
+    delta: effectiveDelta,
     castDelta: skillCastDelta,
     cooldownDelta: skillCooldownDelta,
     canAttemptStart:
@@ -1936,7 +1945,7 @@ export const tickMochiGeneralCombat = ({
 
   updateBossSkill3State({
     entry,
-    delta,
+    delta: effectiveDelta,
     castDelta: skillCastDelta,
     cooldownDelta: skillCooldownDelta,
     canAttemptStart:
@@ -1955,7 +1964,7 @@ export const tickMochiGeneralCombat = ({
 
   updateBossSkill4State({
     entry,
-    delta,
+    delta: effectiveDelta,
     castDelta: skillCastDelta,
     cooldownDelta: skillCooldownDelta,
     canAttemptStart:
@@ -1974,7 +1983,7 @@ export const tickMochiGeneralCombat = ({
 
   updateBossSkill5State({
     entry,
-    delta,
+    delta: effectiveDelta,
     castDelta: skillCastDelta,
     cooldownDelta: skillCooldownDelta,
     canAttemptStart:
@@ -2007,7 +2016,7 @@ export const tickMochiGeneralCombat = ({
       const movedDistance = moveBossTowardPlayer(
         entry,
         player,
-        delta,
+        effectiveDelta,
         isBlocked,
         moveSpeedMultiplier
       );
@@ -2020,6 +2029,6 @@ export const tickMochiGeneralCombat = ({
     resetSwordFeintState(entry);
   }
 
-  updateBossHeadLook(entry, player, delta, trackingActive);
-  applyBossAnimation(entry, delta, isMoving);
+  updateBossHeadLook(entry, player, effectiveDelta, trackingActive);
+  applyBossAnimation(entry, effectiveDelta, isMoving);
 };

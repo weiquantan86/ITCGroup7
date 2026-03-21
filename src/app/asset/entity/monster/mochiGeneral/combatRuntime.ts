@@ -33,6 +33,7 @@ export type MochiGeneralCombatRuntime = {
   tickBoss: (args: {
     entry: MochiGeneralCombatEntry;
     delta: number;
+    tempoMultiplier?: number;
     player: THREE.Object3D;
     meleeTargets: THREE.Object3D[];
     gameEnded: boolean;
@@ -626,6 +627,7 @@ export const createMochiGeneralCombatRuntime = (
     tickBoss: ({
       entry,
       delta,
+      tempoMultiplier,
       player,
       meleeTargets,
       gameEnded,
@@ -637,6 +639,7 @@ export const createMochiGeneralCombatRuntime = (
       tickMochiGeneralCombat({
         entry,
         delta,
+        tempoMultiplier,
         player,
         gameEnded,
         isBlocked,

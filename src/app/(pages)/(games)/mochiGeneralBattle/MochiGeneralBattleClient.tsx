@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import SceneLauncher from "../../../asset/scenes/general/SceneLauncher";
 import type { SceneUiState } from "../../../asset/scenes/general/sceneTypes";
 import MochiGeneralPreview from "./MochiGeneralPreview";
+import type { MochiGeneralBattleDifficultyConfig } from "./battleSceneDefinition";
 import {
   SURGE_SCENE_STATE_KEY,
   SURGE_SNACK_KEYS,
@@ -65,6 +66,92 @@ const MOCHI_GENERAL_VICTORY_SCORE_STEP = 100;
 const MOCHI_GENERAL_DEFEAT_SCORE_STEP = 400;
 const END_SCENE_FADE_OUT_MS = 950;
 
+const DAMAGE_RATE_OPTIONS = [
+  { value: 1, label: "x1.00", rewardBonus: 0 },
+  { value: 1.25, label: "x1.25", rewardBonus: 0.25 },
+  { value: 1.5, label: "x1.50", rewardBonus: 0.5 },
+  { value: 2, label: "x2.00", rewardBonus: 1 },
+] as const;
+
+const DEFENSE_RATE_OPTIONS = [
+  { value: 0, label: "0%", rewardBonus: 0 },
+  { value: 0.1, label: "10%", rewardBonus: 0.1 },
+  { value: 0.2, label: "20%", rewardBonus: 0.2 },
+  { value: 0.3, label: "30%", rewardBonus: 0.3 },
+  { value: 0.4, label: "40%", rewardBonus: 0.4 },
+  { value: 0.5, label: "50%", rewardBonus: 0.5 },
+  { value: 0.6, label: "60%", rewardBonus: 0.6 },
+  { value: 0.7, label: "70%", rewardBonus: 0.7 },
+] as const;
+
+const SPEED_RATE_OPTIONS = [
+  { value: 0, label: "+0%", rewardBonus: 0 },
+  { value: 5, label: "+5%", rewardBonus: 0.1 },
+  { value: 10, label: "+10%", rewardBonus: 0.2 },
+  { value: 15, label: "+15%", rewardBonus: 0.3 },
+  { value: 20, label: "+20%", rewardBonus: 0.4 },
+  { value: 25, label: "+25%", rewardBonus: 0.5 },
+  { value: 30, label: "+30%", rewardBonus: 0.6 },
+  { value: 35, label: "+35%", rewardBonus: 0.7 },
+  { value: 40, label: "+40%", rewardBonus: 0.8 },
+] as const;
+
+const MAX_DIFFICULTY_REWARD_BONUS =
+  DAMAGE_RATE_OPTIONS[DAMAGE_RATE_OPTIONS.length - 1].rewardBonus +
+  DEFENSE_RATE_OPTIONS[DEFENSE_RATE_OPTIONS.length - 1].rewardBonus +
+  SPEED_RATE_OPTIONS[SPEED_RATE_OPTIONS.length - 1].rewardBonus;
+
+const CHARACTER_CARD_THEMES = [
+  {
+    accent: "rgba(96,165,250,0.86)",
+    selectedBg:
+      "linear-gradient(152deg, rgba(30,58,138,0.68) 0%, rgba(59,130,246,0.34) 46%, rgba(236,72,153,0.3) 100%)",
+    idleBg:
+      "linear-gradient(152deg, rgba(15,23,42,0.88) 0%, rgba(30,64,175,0.2) 52%, rgba(79,70,229,0.16) 100%)",
+    glow: "0 0 34px rgba(96,165,250,0.32)",
+    chipBg: "rgba(37,99,235,0.24)",
+    chipColor: "rgba(219,234,254,0.92)",
+  },
+  {
+    accent: "rgba(74,222,128,0.86)",
+    selectedBg:
+      "linear-gradient(152deg, rgba(20,83,45,0.68) 0%, rgba(74,222,128,0.28) 46%, rgba(16,185,129,0.28) 100%)",
+    idleBg:
+      "linear-gradient(152deg, rgba(15,23,42,0.88) 0%, rgba(21,128,61,0.2) 52%, rgba(6,182,212,0.15) 100%)",
+    glow: "0 0 34px rgba(74,222,128,0.3)",
+    chipBg: "rgba(22,163,74,0.24)",
+    chipColor: "rgba(220,252,231,0.92)",
+  },
+  {
+    accent: "rgba(251,113,133,0.86)",
+    selectedBg:
+      "linear-gradient(152deg, rgba(136,19,55,0.7) 0%, rgba(244,63,94,0.3) 46%, rgba(251,146,60,0.28) 100%)",
+    idleBg:
+      "linear-gradient(152deg, rgba(15,23,42,0.88) 0%, rgba(159,18,57,0.2) 52%, rgba(249,115,22,0.15) 100%)",
+    glow: "0 0 34px rgba(251,113,133,0.32)",
+    chipBg: "rgba(190,24,93,0.24)",
+    chipColor: "rgba(255,228,230,0.94)",
+  },
+] as const;
+
+const SKILL_TAB_THEME = {
+  q: {
+    border: "rgba(129,140,248,0.7)",
+    bg: "linear-gradient(145deg, rgba(79,70,229,0.5) 0%, rgba(56,189,248,0.35) 100%)",
+    text: "rgba(224,231,255,0.98)",
+  },
+  e: {
+    border: "rgba(45,212,191,0.72)",
+    bg: "linear-gradient(145deg, rgba(13,148,136,0.5) 0%, rgba(74,222,128,0.32) 100%)",
+    text: "rgba(204,251,241,0.98)",
+  },
+  r: {
+    border: "rgba(251,113,133,0.76)",
+    bg: "linear-gradient(145deg, rgba(190,24,93,0.52) 0%, rgba(251,146,60,0.32) 100%)",
+    text: "rgba(255,228,230,0.98)",
+  },
+} as const;
+
 const cloneRewards = (rewards: SurgeSnackRewards): SurgeSnackRewards => ({
   energy_sugar: rewards.energy_sugar || 0,
   dream_fruit_dust: rewards.dream_fruit_dust || 0,
@@ -92,6 +179,16 @@ export default function MochiGeneralBattleClient({
     characterOptions[0]?.id ?? ""
   );
   const [activeSkillKey, setActiveSkillKey] = useState<"q" | "e" | "r">("q");
+  const [hasConfiguredDifficulty, setHasConfiguredDifficulty] = useState(false);
+  const [bossDamageRate, setBossDamageRate] = useState<
+    (typeof DAMAGE_RATE_OPTIONS)[number]["value"]
+  >(1);
+  const [bossDefenseRate, setBossDefenseRate] = useState<
+    (typeof DEFENSE_RATE_OPTIONS)[number]["value"]
+  >(0);
+  const [bossSpeedRate, setBossSpeedRate] = useState<
+    (typeof SPEED_RATE_OPTIONS)[number]["value"]
+  >(0);
   const [isStarting, setIsStarting] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [deltaStartAtMs, setDeltaStartAtMs] = useState<number | null>(null);
@@ -161,6 +258,121 @@ export default function MochiGeneralBattleClient({
     );
   }, [activeSkillKey, selectedCharacter]);
 
+  const selectedDamageOption = useMemo(() => {
+    return (
+      DAMAGE_RATE_OPTIONS.find((option) => option.value === bossDamageRate) ??
+      DAMAGE_RATE_OPTIONS[0]
+    );
+  }, [bossDamageRate]);
+
+  const selectedDefenseOption = useMemo(() => {
+    return (
+      DEFENSE_RATE_OPTIONS.find((option) => option.value === bossDefenseRate) ??
+      DEFENSE_RATE_OPTIONS[0]
+    );
+  }, [bossDefenseRate]);
+
+  const selectedSpeedOption = useMemo(() => {
+    return (
+      SPEED_RATE_OPTIONS.find((option) => option.value === bossSpeedRate) ??
+      SPEED_RATE_OPTIONS[0]
+    );
+  }, [bossSpeedRate]);
+
+  const rewardMultiplier = useMemo(() => {
+    const value =
+      1 +
+      selectedDamageOption.rewardBonus +
+      selectedDefenseOption.rewardBonus +
+      selectedSpeedOption.rewardBonus;
+    return Math.round(value * 100) / 100;
+  }, [selectedDamageOption, selectedDefenseOption, selectedSpeedOption]);
+
+  const difficultyHeatRatio = useMemo(() => {
+    const normalized =
+      (rewardMultiplier - 1) / Math.max(0.00001, MAX_DIFFICULTY_REWARD_BONUS);
+    return Math.min(1, Math.max(0, normalized));
+  }, [rewardMultiplier]);
+
+  const difficultyShellStyle = useMemo<CSSProperties>(() => {
+    const upperRed = 0.05 + difficultyHeatRatio * 0.22;
+    const sideRed = 0.04 + difficultyHeatRatio * 0.26;
+    const lowerRed = 0.12 + difficultyHeatRatio * 0.42;
+    const borderRed = 0.1 + difficultyHeatRatio * 0.55;
+    const glowRed = 0.08 + difficultyHeatRatio * 0.34;
+    return {
+      borderColor: `rgba(248,113,113,${borderRed.toFixed(3)})`,
+      backgroundImage: [
+        `radial-gradient(circle at 14% 12%, rgba(251,113,133,${upperRed.toFixed(3)}), transparent 44%)`,
+        `radial-gradient(circle at 84% 18%, rgba(220,38,38,${sideRed.toFixed(3)}), transparent 46%)`,
+        `linear-gradient(180deg, rgba(11,17,25,0.96) 0%, rgba(69,10,10,${lowerRed.toFixed(3)}) 100%)`,
+      ].join(", "),
+      boxShadow: `0 30px 80px -40px rgba(2,6,23,0.85), 0 0 58px rgba(220,38,38,${glowRed.toFixed(3)})`,
+    };
+  }, [difficultyHeatRatio]);
+
+  const difficultySectionStyle = useMemo<CSSProperties>(() => {
+    const borderRed = 0.14 + difficultyHeatRatio * 0.4;
+    const bgRed = 0.04 + difficultyHeatRatio * 0.14;
+    const sectionGlow = 0.05 + difficultyHeatRatio * 0.22;
+    return {
+      borderColor: `rgba(248,113,113,${borderRed.toFixed(3)})`,
+      backgroundColor: `rgba(30,41,59,${(0.62 - bgRed).toFixed(3)})`,
+      boxShadow: `0 0 26px rgba(127,29,29,${sectionGlow.toFixed(3)})`,
+    };
+  }, [difficultyHeatRatio]);
+
+  const difficultyMultiplierCardStyle = useMemo<CSSProperties>(() => {
+    const borderRed = 0.26 + difficultyHeatRatio * 0.48;
+    const bgRed = 0.18 + difficultyHeatRatio * 0.34;
+    const glowRed = 0.1 + difficultyHeatRatio * 0.38;
+    return {
+      borderColor: `rgba(252,165,165,${borderRed.toFixed(3)})`,
+      backgroundColor: `rgba(127,29,29,${bgRed.toFixed(3)})`,
+      boxShadow: `0 0 30px rgba(220,38,38,${glowRed.toFixed(3)})`,
+    };
+  }, [difficultyHeatRatio]);
+
+  const characterSelectionShellStyle = useMemo<CSSProperties>(() => {
+    const intensity = Math.min(1, Math.max(0, (rewardMultiplier - 1) / 2.5));
+    const borderAlpha = 0.22 + intensity * 0.3;
+    const glowAlpha = 0.16 + intensity * 0.28;
+    return {
+      borderColor: `rgba(125,211,252,${borderAlpha.toFixed(3)})`,
+      backgroundImage: [
+        "radial-gradient(circle at 12% 8%, rgba(56,189,248,0.22), transparent 44%)",
+        "radial-gradient(circle at 88% 18%, rgba(244,114,182,0.2), transparent 45%)",
+        "radial-gradient(circle at 50% 110%, rgba(74,222,128,0.16), transparent 44%)",
+        "linear-gradient(180deg, rgba(11,17,25,0.95) 0%, rgba(9,18,36,0.97) 100%)",
+      ].join(", "),
+      boxShadow: `0 30px 90px -42px rgba(2,6,23,0.88), 0 0 44px rgba(56,189,248,${glowAlpha.toFixed(3)})`,
+    };
+  }, [rewardMultiplier]);
+
+  const skillPanelStyle = useMemo<CSSProperties>(() => {
+    return {
+      borderColor: "rgba(125,211,252,0.34)",
+      backgroundImage: [
+        "radial-gradient(circle at 14% 16%, rgba(99,102,241,0.2), transparent 44%)",
+        "radial-gradient(circle at 84% 24%, rgba(45,212,191,0.18), transparent 44%)",
+        "linear-gradient(180deg, rgba(15,23,42,0.86) 0%, rgba(30,41,59,0.82) 100%)",
+      ].join(", "),
+      boxShadow: "0 0 34px rgba(14,116,144,0.2)",
+    };
+  }, []);
+
+  const bossTempoMultiplier = useMemo(() => {
+    return 1 + bossSpeedRate / 100;
+  }, [bossSpeedRate]);
+
+  const battleDifficultyConfig = useMemo<MochiGeneralBattleDifficultyConfig>(() => {
+    return {
+      bossDamageMultiplier: bossDamageRate,
+      bossDefenseRatio: bossDefenseRate,
+      bossTempoMultiplier: bossTempoMultiplier,
+    };
+  }, [bossDamageRate, bossDefenseRate, bossTempoMultiplier]);
+
   const buildRewardEntries = useCallback((rewards: SurgeSnackRewards): RewardEntry[] => {
     return SURGE_SNACK_KEYS.filter((key) => rewards[key] > 0).map((key) => ({
       key,
@@ -191,13 +403,13 @@ export default function MochiGeneralBattleClient({
       return Math.max(0, Math.floor(rewardPackTarget));
     }
     const scoreStep = Math.max(1, Math.floor(resolvedRewardScoreStep));
-    return Math.floor(Math.max(0, surgeState.score) / scoreStep);
-  }, [rewardPackTarget, resolvedRewardScoreStep, surgeState.score]);
+    return Math.floor((Math.max(0, surgeState.score) * rewardMultiplier) / scoreStep);
+  }, [rewardPackTarget, resolvedRewardScoreStep, surgeState.score, rewardMultiplier]);
 
   const rewardConvertedScoreTarget = useMemo(() => {
     const rawTarget = resolvedRewardPackTarget * resolvedRewardScoreStep;
-    return Math.max(0, Math.min(Math.floor(surgeState.score), Math.floor(rawTarget)));
-  }, [resolvedRewardPackTarget, resolvedRewardScoreStep, surgeState.score]);
+    return Math.max(0, Math.floor(rawTarget));
+  }, [resolvedRewardPackTarget, resolvedRewardScoreStep]);
 
   const rewardConvertedScoreAnimated = useMemo(() => {
     const rawAnimated = animatedRewardPackCount * resolvedRewardScoreStep;
@@ -205,8 +417,9 @@ export default function MochiGeneralBattleClient({
   }, [animatedRewardPackCount, resolvedRewardScoreStep, rewardConvertedScoreTarget]);
 
   const rewardScoreRemainder = useMemo(() => {
-    return Math.max(0, Math.floor(surgeState.score) - rewardConvertedScoreTarget);
-  }, [surgeState.score, rewardConvertedScoreTarget]);
+    const effectiveScore = Math.floor(Math.max(0, surgeState.score) * rewardMultiplier);
+    return Math.max(0, effectiveScore - rewardConvertedScoreTarget);
+  }, [surgeState.score, rewardConvertedScoreTarget, rewardMultiplier]);
 
   const rewardConversionInProgress =
     rewardClaimStatus === "claimed" &&
@@ -256,7 +469,7 @@ export default function MochiGeneralBattleClient({
   }, [clearEndTransitionTimer, clearScoreDeltaTimers]);
 
   const startGame = async () => {
-    if (isStarting || !selectedCharacter) return;
+    if (isStarting || !selectedCharacter || !hasConfiguredDifficulty) return;
     setDeltaStartAtMs(performance.now());
     setIsStarting(true);
     try {
@@ -279,9 +492,10 @@ export default function MochiGeneralBattleClient({
     const { createMochiGeneralBattleScene } = await import("./battleSceneDefinition");
     return {
       id: "mochiGeneralBattle",
-      setupScene: createMochiGeneralBattleScene,
+      setupScene: (scene, context) =>
+        createMochiGeneralBattleScene(scene, context, battleDifficultyConfig),
     };
-  }, []);
+  }, [battleDifficultyConfig]);
 
   useEffect(() => {
     if (!hasStarted || !surgeState.gameEnded || rewardSubmittedRef.current) return;
@@ -301,6 +515,7 @@ export default function MochiGeneralBattleClient({
             elapsedSeconds: surgeState.elapsedSeconds,
             defeatedMonsters: surgeState.defeatedMonsters,
             victory: surgeState.victory,
+            rewardMultiplier,
           }),
         });
         const data = (await response.json()) as RewardClaimResponse;
@@ -331,7 +546,7 @@ export default function MochiGeneralBattleClient({
             ? Math.max(1, Math.floor(normalizedScoreStepRaw))
             : fallbackScoreStep;
         const fallbackPackCount = Math.floor(
-          Math.max(0, surgeState.score) / normalizedScoreStep
+          (Math.max(0, surgeState.score) * rewardMultiplier) / normalizedScoreStep
         );
         const normalizedPackCountRaw = Number(data.rewardPacks);
         const normalizedPackCount =
@@ -368,6 +583,7 @@ export default function MochiGeneralBattleClient({
     surgeState.elapsedSeconds,
     surgeState.defeatedMonsters,
     surgeState.victory,
+    rewardMultiplier,
   ]);
 
   useEffect(() => {
@@ -533,8 +749,8 @@ export default function MochiGeneralBattleClient({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.4),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.62)_48%,rgba(2,6,23,0.86)_68%,rgba(2,6,23,0.95)_100%)]" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1800px] flex-col justify-start px-6 pb-6 pt-20">
-        <section className="w-full rounded-[32px] border border-white/10 bg-white/[0.04] p-8 text-center shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-none flex-col justify-start px-3 pb-2 pt-2 md:px-4">
+        <section className="w-full rounded-[32px] border border-white/10 bg-white/[0.04] p-6 text-center shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
           <h1 className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-4xl font-bold text-transparent md:text-5xl">
             Mochi General Battle
           </h1>
@@ -544,13 +760,78 @@ export default function MochiGeneralBattleClient({
           <>
             {shouldRenderBattleSection ? (
               <section
-                className={`mt-4 grid w-full gap-4 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(0,1fr)_390px] ${
+                className={`mt-2 grid min-h-[calc(100vh-150px)] w-full items-stretch gap-3 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
                   surgeState.gameEnded
                     ? "pointer-events-none opacity-0 blur-[8px] scale-[0.985]"
                     : "opacity-100 blur-0 scale-100"
                 }`}
                 style={{ transitionDuration: `${END_SCENE_FADE_OUT_MS}ms` }}
               >
+                <aside className="flex min-h-0 flex-col rounded-[24px] border border-cyan-200/20 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
+                  <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+                    Boss Modifiers
+                  </h2>
+
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-xl border border-cyan-200/20 bg-slate-950/65 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-200/80">
+                        Damage Rate
+                      </p>
+                      <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
+                        x{bossDamageRate.toFixed(2)}
+                      </p>
+                      <p className="mt-1 text-xs text-emerald-300">
+                        Reward +{selectedDamageOption.rewardBonus.toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-cyan-200/20 bg-slate-950/65 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-200/80">
+                        Damage Reduction
+                      </p>
+                      <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
+                        {(bossDefenseRate * 100).toFixed(0)}%
+                      </p>
+                      <p className="mt-1 text-xs text-emerald-300">
+                        Reward +{selectedDefenseOption.rewardBonus.toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-cyan-200/20 bg-slate-950/65 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-200/80">
+                        Move + Animation Speed
+                      </p>
+                      <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
+                        +{bossSpeedRate}%
+                      </p>
+                      <p className="mt-1 text-xs text-sky-200">
+                        Tempo x{bossTempoMultiplier.toFixed(2)}
+                      </p>
+                      <p className="mt-1 text-xs text-emerald-300">
+                        Reward +{selectedSpeedOption.rewardBonus.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-xl border border-pink-200/25 bg-[linear-gradient(145deg,rgba(30,41,59,0.88)_0%,rgba(190,24,93,0.2)_100%)] p-3">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-pink-100/80">
+                      Reward Summary
+                    </p>
+                    <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                      <span className="text-pink-100/80">Total Bonus</span>
+                      <span className="font-semibold tabular-nums text-pink-100">
+                        +{Math.max(0, rewardMultiplier - 1).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                      <span className="text-pink-100/80">Reward Multiplier</span>
+                      <span className="font-semibold tabular-nums text-pink-100">
+                        x{rewardMultiplier.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </aside>
+
                 <div className="relative flex w-full justify-center">
                   <SceneLauncher
                     key={sceneSessionId}
@@ -559,7 +840,7 @@ export default function MochiGeneralBattleClient({
                     sceneLoader={loadSurgeScene}
                     deltaStartAtMs={deltaStartAtMs ?? undefined}
                     onSceneStateChange={handleSceneStateChange}
-                    className="h-[72vh] min-h-[560px] w-full max-w-[1680px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
+                    className="h-[calc(100vh-150px)] min-h-[700px] w-full max-w-none overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
                   />
                 </div>
 
@@ -703,6 +984,12 @@ export default function MochiGeneralBattleClient({
                             </span>
                           </li>
                           <li className="flex items-center justify-between gap-4">
+                            <span className="text-cyan-200/80">Difficulty Multiplier</span>
+                            <span className="font-semibold tabular-nums">
+                              x{rewardMultiplier.toFixed(2)}
+                            </span>
+                          </li>
+                          <li className="flex items-center justify-between gap-4">
                             <span className="text-cyan-200/80">Converted Score</span>
                             <span
                               className={`font-semibold tabular-nums ${
@@ -727,7 +1014,7 @@ export default function MochiGeneralBattleClient({
                             </span>
                           </li>
                           <li className="flex items-center justify-between gap-4">
-                            <span className="text-cyan-200/80">Remaining Score</span>
+                            <span className="text-cyan-200/80">Remaining Effective Score</span>
                             <span className="font-semibold tabular-nums text-cyan-100">
                               {rewardScoreRemainder}
                             </span>
@@ -810,21 +1097,186 @@ export default function MochiGeneralBattleClient({
           </>
         ) : (
           <section className="mt-4 flex w-full justify-center">
-            <div className="w-full max-w-[1400px] rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-6 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] backdrop-blur-xl md:p-8">
-              {characterOptions.length === 0 ? (
+            <div
+              className="w-full max-w-[1400px] rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-6 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] backdrop-blur-xl md:p-8"
+              style={!hasConfiguredDifficulty ? difficultyShellStyle : undefined}
+            >
+              {!hasConfiguredDifficulty ? (
+                <div className="mx-auto w-full max-w-[1120px]">
+                  <p
+                    className="text-center text-sm font-semibold uppercase tracking-[0.24em] text-slate-300 md:text-base"
+                    style={{ color: `rgba(254,226,226,${(0.58 + difficultyHeatRatio * 0.34).toFixed(3)})` }}
+                  >
+                    Battle Difficulty
+                  </p>
+                  <div className="mt-6 space-y-4">
+                    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4" style={difficultySectionStyle}>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                        1. Mochi General Damage Rate
+                      </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        {DAMAGE_RATE_OPTIONS.map((option) => {
+                          const selected = option.value === bossDamageRate;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setBossDamageRate(option.value)}
+                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                                selected
+                                  ? "border-amber-300/70 bg-amber-400/15 shadow-[0_0_20px_rgba(251,191,36,0.22)]"
+                                  : "border-white/10 bg-slate-950/65 hover:border-white/30"
+                              }`}
+                            >
+                              <p className="text-base font-semibold text-slate-100">
+                                {option.label}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-300">
+                                {option.rewardBonus > 0
+                                  ? `Reward +${option.rewardBonus.toFixed(2)}`
+                                  : "No reward bonus"}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4" style={difficultySectionStyle}>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                        2. Mochi General Damage Reduction Rate
+                      </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        {DEFENSE_RATE_OPTIONS.map((option) => {
+                          const selected = option.value === bossDefenseRate;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setBossDefenseRate(option.value)}
+                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                                selected
+                                  ? "border-emerald-300/70 bg-emerald-400/15 shadow-[0_0_20px_rgba(52,211,153,0.22)]"
+                                  : "border-white/10 bg-slate-950/65 hover:border-white/30"
+                              }`}
+                            >
+                              <p className="text-base font-semibold text-slate-100">
+                                {option.label}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-300">
+                                {option.rewardBonus > 0
+                                  ? `Reward +${option.rewardBonus.toFixed(2)}`
+                                  : "No reward bonus"}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4" style={difficultySectionStyle}>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                        3. Mochi General Move + Animation Speed
+                      </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {SPEED_RATE_OPTIONS.map((option) => {
+                          const selected = option.value === bossSpeedRate;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setBossSpeedRate(option.value)}
+                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                                selected
+                                  ? "border-sky-300/70 bg-sky-400/15 shadow-[0_0_20px_rgba(56,189,248,0.22)]"
+                                  : "border-white/10 bg-slate-950/65 hover:border-white/30"
+                              }`}
+                            >
+                              <p className="text-base font-semibold text-slate-100">
+                                {option.label}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-300">
+                                {option.rewardBonus > 0
+                                  ? `Reward +${option.rewardBonus.toFixed(2)}`
+                                  : "No reward bonus"}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="mt-7 rounded-2xl border border-cyan-300/35 bg-cyan-950/30 px-4 py-5 text-center"
+                    style={difficultyMultiplierCardStyle}
+                  >
+                    <p
+                      className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200"
+                      style={{ color: `rgba(254,226,226,${(0.72 + difficultyHeatRatio * 0.24).toFixed(3)})` }}
+                    >
+                      Reward Multiplier
+                    </p>
+                    <p
+                      className="mt-2 text-4xl font-bold tabular-nums text-cyan-100 md:text-5xl"
+                      style={{ color: `rgba(255,241,242,${(0.88 + difficultyHeatRatio * 0.12).toFixed(3)})` }}
+                    >
+                      x{rewardMultiplier.toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div className="mt-6 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setHasConfiguredDifficulty(true)}
+                      className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-8 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105"
+                    >
+                      Continue to Character Selection
+                    </button>
+                  </div>
+                </div>
+              ) : characterOptions.length === 0 ? (
                 <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-5 text-sm text-rose-200">
                   No available characters to start this game.
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-col items-center gap-6">
+                  <div
+                    className="mb-5 flex items-center justify-between gap-3 rounded-2xl border px-4 py-3"
+                    style={{
+                      borderColor: "rgba(125,211,252,0.34)",
+                      backgroundImage:
+                        "linear-gradient(90deg, rgba(30,64,175,0.24) 0%, rgba(14,116,144,0.2) 38%, rgba(190,24,93,0.2) 100%)",
+                    }}
+                  >
+                    <p className="text-sm text-cyan-50">
+                      Difficulty set. Reward multiplier:{" "}
+                      <span className="bg-gradient-to-r from-cyan-100 via-sky-200 to-pink-200 bg-clip-text font-semibold tabular-nums text-transparent">
+                        x{rewardMultiplier.toFixed(2)}
+                      </span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setHasConfiguredDifficulty(false)}
+                      className="inline-flex h-9 items-center justify-center rounded-full border border-cyan-100/35 bg-slate-900/40 px-4 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-50 transition hover:border-cyan-100/55 hover:bg-cyan-100/10"
+                    >
+                      Edit Difficulty
+                    </button>
+                  </div>
+
+                  <div
+                    className="flex flex-col items-center gap-6 rounded-[26px] border px-4 py-5 md:px-6"
+                    style={characterSelectionShellStyle}
+                  >
                     <div className="w-full max-w-[1120px] space-y-4 text-center">
-                      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-300 md:text-base">
+                      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-100 md:text-base">
                         Choose Character
                       </p>
                       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        {characterOptions.map((option) => {
+                        {characterOptions.map((option, index) => {
                           const selected = option.id === selectedCharacter?.id;
+                          const theme =
+                            CHARACTER_CARD_THEMES[index % CHARACTER_CARD_THEMES.length];
                           return (
                             <button
                               key={option.id}
@@ -833,16 +1285,38 @@ export default function MochiGeneralBattleClient({
                                 setSelectedCharacterId(option.id);
                                 setActiveSkillKey("q");
                               }}
-                              className={`rounded-2xl border px-6 py-6 text-center transition ${
+                              className={`rounded-2xl border px-6 py-6 text-center transition duration-300 ${
                                 selected
-                                  ? "border-sky-300/70 bg-sky-500/15 shadow-[0_0_26px_rgba(56,189,248,0.28)]"
-                                  : "border-white/10 bg-slate-900/60 hover:border-white/30"
+                                  ? "scale-[1.02]"
+                                  : "hover:scale-[1.01]"
                               }`}
+                              style={
+                                selected
+                                  ? {
+                                      borderColor: theme.accent,
+                                      backgroundImage: theme.selectedBg,
+                                      boxShadow: `${theme.glow}, inset 0 0 0 1px rgba(255,255,255,0.08)`,
+                                    }
+                                  : {
+                                      borderColor: "rgba(255,255,255,0.16)",
+                                      backgroundImage: theme.idleBg,
+                                    }
+                              }
                             >
-                              <p className="text-xl font-semibold text-slate-100 md:text-2xl">
+                              <p className="text-xl font-semibold text-slate-50 md:text-2xl">
                                 {option.label}
                               </p>
-                              <p className="mt-2 text-sm uppercase tracking-[0.22em] text-slate-400">
+                              <p
+                                className="mt-2 text-sm uppercase tracking-[0.22em]"
+                                style={{
+                                  color: theme.chipColor,
+                                  backgroundColor: theme.chipBg,
+                                  border: "1px solid rgba(255,255,255,0.14)",
+                                  borderRadius: "9999px",
+                                  display: "inline-block",
+                                  padding: "4px 10px",
+                                }}
+                              >
                                 {option.id}
                               </p>
                             </button>
@@ -851,14 +1325,18 @@ export default function MochiGeneralBattleClient({
                       </div>
                     </div>
 
-                    <aside className="w-full max-w-[760px] rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    <aside
+                      className="w-full max-w-[760px] rounded-2xl border p-4"
+                      style={skillPanelStyle}
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100">
                         Skill Info
                       </p>
 
                       <div className="mt-3 grid grid-cols-3 gap-2">
                         {(["q", "e", "r"] as const).map((key) => {
                           const isActive = activeSkill?.key === key;
+                          const tabTheme = SKILL_TAB_THEME[key];
                           return (
                             <button
                               key={key}
@@ -866,9 +1344,19 @@ export default function MochiGeneralBattleClient({
                               onClick={() => setActiveSkillKey(key)}
                               className={`rounded-lg border px-2 py-2 text-xs font-semibold uppercase transition ${
                                 isActive
-                                  ? "border-sky-300/70 bg-sky-500/20 text-sky-100"
-                                  : "border-white/15 bg-slate-950/60 text-slate-200 hover:border-white/35"
+                                  ? ""
+                                  : "border-white/15 bg-slate-950/65 text-slate-200 hover:border-white/35"
                               }`}
+                              style={
+                                isActive
+                                  ? {
+                                      borderColor: tabTheme.border,
+                                      backgroundImage: tabTheme.bg,
+                                      color: tabTheme.text,
+                                      boxShadow: "0 0 20px rgba(255,255,255,0.08)",
+                                    }
+                                  : undefined
+                              }
                             >
                               {key.toUpperCase()}
                             </button>
@@ -876,18 +1364,32 @@ export default function MochiGeneralBattleClient({
                         })}
                       </div>
 
-                      <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                        <p className="text-sm font-semibold text-slate-100">
+                      <div
+                        className="mt-3 rounded-xl border p-3"
+                        style={{
+                          borderColor: "rgba(129,140,248,0.3)",
+                          backgroundImage:
+                            "linear-gradient(145deg, rgba(30,41,59,0.84) 0%, rgba(49,46,129,0.34) 100%)",
+                        }}
+                      >
+                        <p className="text-sm font-semibold text-indigo-100">
                           {activeSkill?.label ?? "Skill"}
                         </p>
-                        <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-300">
+                        <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-200">
                           {activeSkill?.description || "No description."}
                         </p>
                       </div>
 
-                      <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Basic Attack</p>
-                        <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                      <div
+                        className="mt-3 rounded-xl border p-3"
+                        style={{
+                          borderColor: "rgba(45,212,191,0.3)",
+                          backgroundImage:
+                            "linear-gradient(145deg, rgba(15,23,42,0.84) 0%, rgba(13,148,136,0.26) 100%)",
+                        }}
+                      >
+                        <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">Basic Attack</p>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-100">
                           {selectedCharacter?.basicAttackDescription || "No description."}
                         </p>
                       </div>
@@ -897,9 +1399,9 @@ export default function MochiGeneralBattleClient({
                   <div className="mt-6 flex justify-center">
                     <button
                       type="button"
-                      disabled={!selectedCharacter || isStarting}
+                      disabled={!selectedCharacter || isStarting || !hasConfiguredDifficulty}
                       onClick={() => void startGame()}
-                      className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-8 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-cyan-400 to-pink-500 px-8 text-sm font-semibold text-white shadow-[0_12px_34px_rgba(56,189,248,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isStarting ? "Starting..." : "Start"}
                     </button>
