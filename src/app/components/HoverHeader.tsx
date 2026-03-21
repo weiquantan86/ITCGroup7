@@ -7,9 +7,10 @@ import ChatbotWindow from "./chatbot/ChatbotWindow";
 
 export default function HoverHeader() {
   const pathname = usePathname();
-  const isUserHome = pathname === "/userSystem/user";
-  const hideHeader =
-    pathname === "/" || (pathname.startsWith("/userSystem") && !isUserHome);
+  const normalizedPath = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
+  const isUserHome = normalizedPath.endsWith("/userSystem/user");
+  const isUserSystemPage = normalizedPath.includes("/userSystem");
+  const hideHeader = normalizedPath === "/" || (isUserSystemPage && !isUserHome);
   const [chatOpen, setChatOpen] = useState(false);
 
   if (hideHeader) {
@@ -39,7 +40,7 @@ export default function HoverHeader() {
           </button>
         </header>
         {/* Pull-down indicator strip */}
-        <div className="h-2 w-full bg-pink-800/70 transition-colors duration-300 group-hover:bg-pink-800/0" />
+        <div className="h-2 w-full bg-transparent transition-colors duration-300 group-hover:bg-pink-800/0" />
       </div>
 
       {/* Draggable chatbot window */}

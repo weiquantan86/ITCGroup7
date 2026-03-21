@@ -277,15 +277,15 @@ export default async function UserPage() {
   }
 
   return (
-    <main className="relative h-screen w-full overflow-hidden bg-[#05070d] text-slate-100">
+    <main className="relative min-h-[100dvh] w-full overflow-hidden bg-[#05070d] text-slate-100">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[length:38px_38px]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_25%,rgba(251,146,60,0.46),transparent_44%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.4),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.62)_48%,rgba(2,6,23,0.86)_68%,rgba(2,6,23,0.95)_100%)]" />
 
-      <div className="relative mx-auto flex h-full w-full max-w-[1920px] items-stretch px-6 py-6 lg:px-12 xl:px-16">
-        <div className="h-full w-full rounded-[36px] border border-white/10 bg-white/[0.03] py-10 px-12 shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md lg:py-12 lg:px-14">
-          <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[1fr_1.5fr_1fr] lg:grid-rows-[280px_minmax(0,1fr)] xl:grid-rows-[320px_minmax(0,1fr)]">
+      <div className="relative mx-auto flex h-[100dvh] w-full max-w-[1920px] items-stretch px-[clamp(0.75rem,2.3vw,4rem)] py-[clamp(0.75rem,2.1vh,2rem)]">
+        <div className="h-full w-full rounded-[36px] border border-white/10 bg-white/[0.03] px-[clamp(1rem,2.1vw,3.5rem)] py-[clamp(1rem,2.8vh,3rem)] shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
+          <div className="grid h-full min-h-0 gap-[clamp(0.75rem,1.3vw,1.5rem)] lg:grid-cols-[1fr_1.5fr_1fr] lg:grid-rows-[clamp(280px,30vh,320px)_minmax(0,1fr)]">
             <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
               <div className="relative flex h-full min-h-0 items-center justify-center">
                 <div className="absolute left-0 top-1/2 z-10 -translate-y-1/2">
