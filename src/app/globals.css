@@ -25,19 +25,6 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Keep desktop rendering at 75% scale after deployment. */
-html {
-  zoom: 0.75;
-}
-
-@supports not (zoom: 1) {
-  html {
-    transform: scale(0.75);
-    transform-origin: top left;
-    width: calc(100% / 0.75);
-  }
-}
-
 /* Normalize full-height utilities across environments (local vs hosted). */
 .h-screen {
   height: 100dvh;
