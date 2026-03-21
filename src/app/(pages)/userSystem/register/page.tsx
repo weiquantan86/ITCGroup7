@@ -18,7 +18,7 @@ export default function Register() {
       body: JSON.stringify({ email, phone, username, password }),
     });
     const data = await res.json();
-    setMessage(data.error || data.success ? 'Registration successful' : 'Registration failed');
+    setMessage(data.error || (data.success ? 'Registration successful' : 'Registration failed'));
   };
 
   return (
