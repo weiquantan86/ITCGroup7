@@ -377,11 +377,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     verticalSpawnOffset: 1.4,
     speed: 12.9,
     lifetime: 2.8,
-    damage: 34,
+    damage: 150,
     radius: 0.6,
     targetHitRadius: 0.55,
     explosionRadius: 2.6,
-    explosionDamage: 22,
+    explosionDamage: 80,
     sweepForwardMs: 150,
     sweepReturnMs: 180,
     sweepOffsetX: -0.58,
@@ -418,6 +418,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     projectileSpeed: 24,
     projectileLifetime: 2.2,
     projectileDamage: 50,
+    projectileDamageMultiplier: 1.4,
     projectileRadius: 0.24,
     projectileTargetHitRadius: 1.12,
     projectileScale: 2.8,
@@ -427,6 +428,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     projectileExplosionRadius: 2.6,
     projectileExplosionDamage: 50,
     projectileExplosionMinDamage: 20,
+    projectileExplosionRadiusMultiplier: 2.5,
+    projectileExplosionDamageMultiplier: 1.4,
     projectileExplosionColor: 0xd8b4fe,
     projectileExplosionEmissive: 0x9333ea,
     projectileExplosionEmissiveIntensity: 1.42,
@@ -1104,8 +1107,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   };
 
-  const isDemonTransitionInvincible = () => demonFormState.transitionPhase !== "none";
-
   const isDemonFormTransitionActive = (now = performance.now()) => {
     updateDemonFormState(now);
     return demonFormState.transitionPhase !== "none";
@@ -1266,13 +1267,34 @@ export const createRuntime: CharacterRuntimeFactory = ({
       );
       demonProjectileSpawnOrigin.y += demonFormConfig.projectileVerticalSpawnOffset;
     }
+    const directDamage = Math.max(
+      1,
+      Math.round(demonFormConfig.projectileDamage * demonFormConfig.projectileDamageMultiplier)
+    );
+    const explosionDamage = Math.max(
+      1,
+      Math.round(
+        demonFormConfig.projectileExplosionDamage *
+          demonFormConfig.projectileExplosionDamageMultiplier
+      )
+    );
+    const explosionMinDamage = Math.max(
+      1,
+      Math.round(
+        demonFormConfig.projectileExplosionMinDamage *
+          demonFormConfig.projectileExplosionDamageMultiplier
+      )
+    );
+    const explosionRadius =
+      demonFormConfig.projectileExplosionRadius *
+      demonFormConfig.projectileExplosionRadiusMultiplier;
     fireProjectile({
       projectileType: "catronDemonVolleyOrb",
       origin: demonProjectileSpawnOrigin.clone(),
       direction: direction.clone(),
       speed: demonFormConfig.projectileSpeed,
       lifetime: demonFormConfig.projectileLifetime,
-      damage: demonFormConfig.projectileDamage,
+      damage: directDamage,
       radius: demonFormConfig.projectileRadius,
       targetHitRadius: demonFormConfig.projectileTargetHitRadius,
       gravity: 0,
@@ -1280,10 +1302,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       color: demonFormConfig.projectileColor,
       emissive: demonFormConfig.projectileEmissive,
       emissiveIntensity: demonFormConfig.projectileEmissiveIntensity,
-      splitOnImpact: false,
-      explosionRadius: demonFormConfig.projectileExplosionRadius,
-      explosionDamage: demonFormConfig.projectileExplosionDamage,
-      explosionMinDamage: demonFormConfig.projectileExplosionMinDamage,
+      splitOnImpact: true,
+      explosionRadius,
+      explosionDamage,
+      explosionMinDamage,
       explosionColor: demonFormConfig.projectileExplosionColor,
       explosionEmissive: demonFormConfig.projectileExplosionEmissive,
       explosionEmissiveIntensity: demonFormConfig.projectileExplosionEmissiveIntensity,
@@ -1884,6 +1906,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       targetHitRadius: skillRConfig.targetHitRadius * resolvedCollisionScale,
       gravity: 0,
       splitOnImpact: true,
+      singleHitPerTarget: true,
+      removeOnTargetHit: false,
       explosionRadius: skillRConfig.explosionRadius * resolvedCollisionScale,
       explosionDamage: skillRConfig.explosionDamage,
       explosionColor: isDeepVariant ? 0xe9d5ff : 0xf8fafc,
@@ -2280,7 +2304,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const beforeDamage = ({ amount, now }: { amount: number; now: number }) => {
     updateDemonFormState(now);
-    const demonTransitionInvincible = isDemonTransitionInvincible();
     const wasDeepActive = phantomModifier.isDeepPhaseActive(now);
     const modifier = phantomModifier.beforeDamage({ amount, now });
     const isDeepActiveNow = phantomModifier.isDeepPhaseActive(now);
@@ -2296,7 +2319,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const demonAdjustedAmount = demonFormState.active
       ? baseAmount * demonFormConfig.damageTakenMultiplier
       : baseAmount;
-    const resolvedAmount = demonTransitionInvincible ? 0 : demonAdjustedAmount;
+    const resolvedAmount = demonAdjustedAmount;
     if (typeof modifier === "number") {
       return resolvedAmount;
     }

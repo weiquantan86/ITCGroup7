@@ -35,7 +35,7 @@ const drainAcGainPerDamageHit = 0.02;
 const drainBaseDamage = 2;
 const drainDamageBonusBase = 0;
 const drainDamageBonusAcStep = 5;
-const drainDamageBonusPerStep = 0.5;
+const drainDamageBonusPerStep = 0.8;
 const drainLinkTubeRadius = 0.22;
 const drainLinkControlPointCount = 10;
 const drainLinkSegmentRadialSegments = 10;
@@ -61,7 +61,8 @@ const slimeCloneDissolveLifeMin = 0.42;
 const slimeCloneDissolveLifeMax = 0.92;
 const slimeCloneAttachPulseLife = 0.5;
 const skillRBeamChargeDurationMs = 2000;
-const skillRBeamDurationSec = 0.46;
+const skillRBeamDurationSec = 2;
+const skillRBeamHitIntervalMs = 400;
 const skillRMouthOpenStartNormalized = 0.46;
 const skillRChargeFrontOffset = 1.3;
 const skillRChargeVerticalOffset = -0.3;
@@ -204,6 +205,9 @@ type SkillRBeamState = {
   ringOffsets: number[];
   startedAt: number;
   durationSec: number;
+  endsAt: number;
+  nextHitAt: number;
+  hitIntervalMs: number;
   length: number;
 };
 
@@ -1367,19 +1371,111 @@ export const createRuntime: CharacterRuntimeFactory = ({
       ringOffsets,
       startedAt: now,
       durationSec: skillRBeamDurationSec,
+      endsAt: now + skillRBeamDurationSec * 1000,
+      nextHitAt: now,
+      hitIntervalMs: skillRBeamHitIntervalMs,
       length: localLength,
     };
   };
 
+  const updateSkillRBeamPose = (
+    beamState: SkillRBeamState,
+    beamOriginWorld: THREE.Vector3,
+    beamDirectionWorld: THREE.Vector3
+  ) => {
+    const fxParent = avatar.parent ?? avatar;
+    lineStartLocal.copy(beamOriginWorld);
+    lineEndLocal.copy(beamDirectionWorld).multiplyScalar(skillRBeamLength).add(beamOriginWorld);
+    fxParent.worldToLocal(lineStartLocal);
+    fxParent.worldToLocal(lineEndLocal);
+    segmentDirection.copy(lineEndLocal).sub(lineStartLocal);
+    const localLength = segmentDirection.length();
+    if (localLength <= 0.0001) return;
+    segmentDirection.multiplyScalar(1 / localLength);
+    segmentMidpoint.copy(lineStartLocal).add(lineEndLocal).multiplyScalar(0.5);
+    beamState.root.position.copy(segmentMidpoint);
+    beamState.root.quaternion.setFromUnitVectors(segmentUpAxis, segmentDirection);
+    beamState.length = localLength;
+  };
+
+  const applySkillRBeamHitScan = (
+    now: number,
+    beamOriginWorld: THREE.Vector3,
+    beamDirectionWorld: THREE.Vector3
+  ) => {
+    skillRBeamEndWorldPos
+      .copy(beamDirectionWorld)
+      .multiplyScalar(skillRBeamLength)
+      .add(beamOriginWorld);
+
+    const beamDamage = skillRBeamDamageBase + skillRBeamDamageAcScale * absorptionCoefficient;
+    const targets = getAttackTargets?.() ?? [];
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      if (!target?.object) continue;
+      if (target.isActive && !target.isActive()) continue;
+      resolveTargetCenterHeightWorldPosition(target.object, targetWorldPos);
+      const hitSample = distanceSqAndTravelOnBeamSegment(
+        targetWorldPos,
+        beamOriginWorld,
+        skillRBeamEndWorldPos
+      );
+      const distanceAlongBeam = hitSample.t * skillRBeamLength;
+      const beamHitRadiusAtTarget = resolveSkillRBeamRadiusAtDistance(
+        skillRBeamHitStartRadius,
+        skillRBeamHitEndRadius,
+        distanceAlongBeam
+      );
+      const maxDistance =
+        beamHitRadiusAtTarget + resolveSkillRTargetRadius(target.object);
+      if (hitSample.distanceSq > maxDistance * maxDistance) {
+        continue;
+      }
+      drainDirection.copy(targetWorldPos).sub(beamOriginWorld);
+      if (drainDirection.lengthSq() <= 0.000001) {
+        drainDirection.copy(beamDirectionWorld);
+      } else {
+        drainDirection.normalize();
+      }
+      target.onHit({
+        now,
+        source: "slash",
+        damage: beamDamage,
+        point: targetWorldPos.clone(),
+        direction: drainDirection.clone(),
+      });
+      applyEnergy?.(skillRBeamEnergyGainOnHit);
+    }
+  };
+
   const updateSkillRBeamFx = (now: number) => {
     if (!activeSkillRBeam) return;
-    const elapsedSec = Math.max(0, (now - activeSkillRBeam.startedAt) / 1000);
-    const progress = elapsedSec / Math.max(0.001, activeSkillRBeam.durationSec);
-    if (progress >= 1) {
+    resolveSkillRAimDirection(skillRAimDirection);
+    resolveSkillREffectOriginWorldPosition(skillRBeamOriginWorldPos, skillRAimDirection);
+    updateSkillRBeamPose(activeSkillRBeam, skillRBeamOriginWorldPos, skillRAimDirection);
+
+    let scanGuard = 0;
+    while (
+      now + 0.001 >= activeSkillRBeam.nextHitAt &&
+      activeSkillRBeam.nextHitAt <= activeSkillRBeam.endsAt + 0.001
+    ) {
+      applySkillRBeamHitScan(
+        activeSkillRBeam.nextHitAt,
+        skillRBeamOriginWorldPos,
+        skillRAimDirection
+      );
+      activeSkillRBeam.nextHitAt += activeSkillRBeam.hitIntervalMs;
+      scanGuard += 1;
+      if (scanGuard >= 24) break;
+    }
+
+    if (now >= activeSkillRBeam.endsAt) {
       clearSkillRBeamFx();
       return;
     }
 
+    const elapsedSec = Math.max(0, (now - activeSkillRBeam.startedAt) / 1000);
+    const progress = elapsedSec / Math.max(0.001, activeSkillRBeam.durationSec);
     const fade = 1 - progress;
     activeSkillRBeam.aura.material.opacity =
       (0.14 + Math.sin(now * 0.022) * 0.06) * fade;
@@ -2042,50 +2138,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillRBeamOriginWorldPos,
       skillRAimDirection
     );
-    skillRBeamEndWorldPos
-      .copy(skillRAimDirection)
-      .multiplyScalar(skillRBeamLength)
-      .add(skillRBeamOriginWorldPos);
     spawnSkillRBeamFx(now, skillRBeamOriginWorldPos, skillRAimDirection);
-
-    const beamDamage = skillRBeamDamageBase + skillRBeamDamageAcScale * absorptionCoefficient;
-    const targets = getAttackTargets?.() ?? [];
-    for (let i = 0; i < targets.length; i += 1) {
-      const target = targets[i];
-      if (!target?.object) continue;
-      if (target.isActive && !target.isActive()) continue;
-      resolveTargetCenterHeightWorldPosition(target.object, targetWorldPos);
-      const hitSample = distanceSqAndTravelOnBeamSegment(
-        targetWorldPos,
-        skillRBeamOriginWorldPos,
-        skillRBeamEndWorldPos
-      );
-      const distanceAlongBeam = hitSample.t * skillRBeamLength;
-      const beamHitRadiusAtTarget = resolveSkillRBeamRadiusAtDistance(
-        skillRBeamHitStartRadius,
-        skillRBeamHitEndRadius,
-        distanceAlongBeam
-      );
-      const maxDistance =
-        beamHitRadiusAtTarget + resolveSkillRTargetRadius(target.object);
-      if (hitSample.distanceSq > maxDistance * maxDistance) {
-        continue;
-      }
-      drainDirection.copy(targetWorldPos).sub(skillRBeamOriginWorldPos);
-      if (drainDirection.lengthSq() <= 0.000001) {
-        drainDirection.copy(skillRAimDirection);
-      } else {
-        drainDirection.normalize();
-      }
-      target.onHit({
-        now,
-        source: "slash",
-        damage: beamDamage,
-        point: targetWorldPos.clone(),
-        direction: drainDirection.clone(),
-      });
-      applyEnergy?.(skillRBeamEnergyGainOnHit);
-    }
   };
 
   const startSkillRBeamCharge = (now: number) => {

@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import SceneLauncher from "../../../asset/scenes/general/SceneLauncher";
 import type { SceneUiState } from "../../../asset/scenes/general/sceneTypes";
 import MochiSoldierPreview from "./MochiSoldierPreview";
@@ -41,6 +50,16 @@ type RewardEntry = {
   count: number;
 };
 type EndTransitionPhase = "idle" | "fadingScene" | "showingResult";
+type RewardClaimResponse = {
+  error?: string;
+  granted?: Partial<SurgeSnackRewards>;
+  obtainedSnack?: Partial<SurgeSnackRewards>;
+  obtainedSnackBase?: Partial<SurgeSnackRewards>;
+  obtainedSnackMultiplierBonus?: Partial<SurgeSnackRewards>;
+  winBonus?: Partial<SurgeSnackRewards>;
+  winBonusBase?: Partial<SurgeSnackRewards>;
+  winBonusMultiplierBonus?: Partial<SurgeSnackRewards>;
+};
 
 const REWARD_LINE_STAGGER_MS = 280;
 const REWARD_COUNT_STEP_MS = 90;
@@ -123,9 +142,20 @@ export default function MochiSoldierSurgeClient({
   const [obtainedSnackRewards, setObtainedSnackRewards] = useState<SurgeSnackRewards>(
     createEmptySurgeSnackRewards()
   );
+  const [obtainedSnackBaseRewards, setObtainedSnackBaseRewards] =
+    useState<SurgeSnackRewards>(createEmptySurgeSnackRewards());
+  const [
+    obtainedSnackMultiplierBonusRewards,
+    setObtainedSnackMultiplierBonusRewards,
+  ] = useState<SurgeSnackRewards>(createEmptySurgeSnackRewards());
   const [winBonusRewards, setWinBonusRewards] = useState<SurgeSnackRewards>(
     createEmptySurgeSnackRewards()
   );
+  const [winBonusBaseRewards, setWinBonusBaseRewards] = useState<SurgeSnackRewards>(
+    createEmptySurgeSnackRewards()
+  );
+  const [winBonusMultiplierBonusRewards, setWinBonusMultiplierBonusRewards] =
+    useState<SurgeSnackRewards>(createEmptySurgeSnackRewards());
   const [revealedObtainedLines, setRevealedObtainedLines] = useState(0);
   const [revealedWinBonusLines, setRevealedWinBonusLines] = useState(0);
   const [obtainedAnimatedCounts, setObtainedAnimatedCounts] = useState<
@@ -207,6 +237,46 @@ export default function MochiSoldierSurgeClient({
       (rewardMultiplier - 1) / Math.max(0.00001, MAX_DIFFICULTY_REWARD_BONUS);
     return Math.min(1, Math.max(0, normalized));
   }, [rewardMultiplier]);
+
+  const rewardGoldRatio = useMemo(() => {
+    const normalized =
+      (rewardMultiplier - 1) / Math.max(0.00001, MAX_DIFFICULTY_REWARD_BONUS);
+    return Math.min(1, Math.max(0, normalized));
+  }, [rewardMultiplier]);
+
+  const rewardGoldLineStyle = useMemo<CSSProperties>(() => {
+    return {
+      borderColor: `rgba(251,191,36,${(0.28 + rewardGoldRatio * 0.36).toFixed(3)})`,
+      backgroundColor: `rgba(245,158,11,${(0.1 + rewardGoldRatio * 0.18).toFixed(3)})`,
+      color: `rgba(255,248,220,${(0.88 + rewardGoldRatio * 0.12).toFixed(3)})`,
+      boxShadow: `0 0 28px rgba(251,191,36,${(0.14 + rewardGoldRatio * 0.36).toFixed(3)})`,
+    };
+  }, [rewardGoldRatio]);
+
+  const rewardGoldLineActiveStyle = useMemo<CSSProperties>(() => {
+    return {
+      borderColor: `rgba(252,211,77,${(0.45 + rewardGoldRatio * 0.42).toFixed(3)})`,
+      backgroundColor: `rgba(245,158,11,${(0.2 + rewardGoldRatio * 0.24).toFixed(3)})`,
+      color: "rgba(255,251,235,0.98)",
+      boxShadow: `0 0 34px rgba(251,191,36,${(0.24 + rewardGoldRatio * 0.44).toFixed(3)})`,
+    };
+  }, [rewardGoldRatio]);
+
+  const rewardGoldPillStyle = useMemo<CSSProperties>(() => {
+    return {
+      backgroundColor: `rgba(234,179,8,${(0.2 + rewardGoldRatio * 0.26).toFixed(3)})`,
+      color: "rgba(255,251,235,0.98)",
+      boxShadow: `0 0 16px rgba(251,191,36,${(0.16 + rewardGoldRatio * 0.3).toFixed(3)})`,
+    };
+  }, [rewardGoldRatio]);
+
+  const rewardGoldPillActiveStyle = useMemo<CSSProperties>(() => {
+    return {
+      backgroundColor: `rgba(250,204,21,${(0.3 + rewardGoldRatio * 0.34).toFixed(3)})`,
+      color: "rgba(255,255,255,0.98)",
+      boxShadow: `0 0 20px rgba(252,211,77,${(0.24 + rewardGoldRatio * 0.36).toFixed(3)})`,
+    };
+  }, [rewardGoldRatio]);
 
   const difficultyShellStyle = useMemo<CSSProperties>(() => {
     const upperRed = 0.04 + difficultyHeatRatio * 0.2;
@@ -331,7 +401,11 @@ export default function MochiSoldierSurgeClient({
     setRewardClaimStatus("idle");
     setRewardClaimMessage("");
     setObtainedSnackRewards(createEmptySurgeSnackRewards());
+    setObtainedSnackBaseRewards(createEmptySurgeSnackRewards());
+    setObtainedSnackMultiplierBonusRewards(createEmptySurgeSnackRewards());
     setWinBonusRewards(createEmptySurgeSnackRewards());
+    setWinBonusBaseRewards(createEmptySurgeSnackRewards());
+    setWinBonusMultiplierBonusRewards(createEmptySurgeSnackRewards());
     setRevealedObtainedLines(0);
     setRevealedWinBonusLines(0);
     setObtainedAnimatedCounts({});
@@ -390,12 +464,7 @@ export default function MochiSoldierSurgeClient({
             rewardMultiplier,
           }),
         });
-        const data = (await response.json()) as {
-          error?: string;
-          granted?: Partial<SurgeSnackRewards>;
-          obtainedSnack?: Partial<SurgeSnackRewards>;
-          winBonus?: Partial<SurgeSnackRewards>;
-        };
+        const data = (await response.json()) as RewardClaimResponse;
         if (!response.ok) {
           throw new Error(data.error || "Failed to claim rewards.");
         }
@@ -408,16 +477,36 @@ export default function MochiSoldierSurgeClient({
           ...createEmptySurgeSnackRewards(),
           ...(data.obtainedSnack ?? {}),
         });
+        const obtainedSnackBase = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.obtainedSnackBase ?? data.obtainedSnack ?? {}),
+        });
+        const obtainedSnackMultiplierBonus = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.obtainedSnackMultiplierBonus ?? {}),
+        });
         const winBonus = cloneRewards({
           ...createEmptySurgeSnackRewards(),
           ...(data.winBonus ?? {}),
+        });
+        const winBonusBase = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.winBonusBase ?? data.winBonus ?? {}),
+        });
+        const winBonusMultiplierBonus = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.winBonusMultiplierBonus ?? {}),
         });
         const grantedCount = SURGE_SNACK_KEYS.reduce(
           (total, key) => total + granted[key],
           0
         );
         setObtainedSnackRewards(obtainedSnack);
+        setObtainedSnackBaseRewards(obtainedSnackBase);
+        setObtainedSnackMultiplierBonusRewards(obtainedSnackMultiplierBonus);
         setWinBonusRewards(winBonus);
+        setWinBonusBaseRewards(winBonusBase);
+        setWinBonusMultiplierBonusRewards(winBonusMultiplierBonus);
         setRewardClaimStatus("claimed");
         if (grantedCount <= 0) {
           setRewardClaimMessage("No snack reward earned in this run.");
@@ -486,51 +575,62 @@ export default function MochiSoldierSurgeClient({
 
     if (!isSettlementVisible || rewardClaimStatus !== "claimed") return;
 
-    obtainedSnackEntries.forEach((entry, index) => {
-      const revealTimer = window.setTimeout(() => {
-        setRevealedObtainedLines((prev) => Math.max(prev, index + 1));
-        if (entry.count <= 1) {
-          setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
-          return;
-        }
-        let currentCount = 1;
-        setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-        const countTimer = window.setInterval(() => {
-          currentCount += 1;
-          if (currentCount >= entry.count) {
-            currentCount = entry.count;
-            window.clearInterval(countTimer);
-          }
-          setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-        }, REWARD_COUNT_STEP_MS);
-        rewardAnimationTimersRef.current.push(countTimer);
-      }, index * REWARD_LINE_STAGGER_MS);
-      rewardAnimationTimersRef.current.push(revealTimer);
-    });
+    const animateRewardEntries = (
+      entries: RewardEntry[],
+      baseRewards: SurgeSnackRewards,
+      multiplierBonusRewards: SurgeSnackRewards,
+      setRevealedLines: Dispatch<SetStateAction<number>>,
+      setAnimatedCounts: Dispatch<SetStateAction<Record<string, number>>>,
+      startDelayMs: number
+    ) => {
+      entries.forEach((entry, index) => {
+        const revealTimer = window.setTimeout(() => {
+          const baseCount = Math.max(0, Math.floor(baseRewards[entry.key] ?? 0));
+          const multiplierBonusCount = Math.max(
+            0,
+            Math.floor(multiplierBonusRewards[entry.key] ?? 0)
+          );
+          setRevealedLines((prev) => Math.max(prev, index + 1));
+          setAnimatedCounts((prev) => ({ ...prev, [entry.key]: baseCount }));
+          if (multiplierBonusCount <= 0) return;
+
+          let appliedBonus = 0;
+          const countTimer = window.setInterval(() => {
+            appliedBonus += 1;
+            if (appliedBonus >= multiplierBonusCount) {
+              appliedBonus = multiplierBonusCount;
+              window.clearInterval(countTimer);
+            }
+            setAnimatedCounts((prev) => ({
+              ...prev,
+              [entry.key]: baseCount + appliedBonus,
+            }));
+          }, REWARD_COUNT_STEP_MS);
+          rewardAnimationTimersRef.current.push(countTimer);
+        }, startDelayMs + index * REWARD_LINE_STAGGER_MS);
+        rewardAnimationTimersRef.current.push(revealTimer);
+      });
+    };
+
+    animateRewardEntries(
+      obtainedSnackEntries,
+      obtainedSnackBaseRewards,
+      obtainedSnackMultiplierBonusRewards,
+      setRevealedObtainedLines,
+      setObtainedAnimatedCounts,
+      0
+    );
 
     const winStartDelay =
       Math.max(1, obtainedSnackEntries.length) * REWARD_LINE_STAGGER_MS + 220;
-    winBonusEntries.forEach((entry, index) => {
-      const revealTimer = window.setTimeout(() => {
-        setRevealedWinBonusLines((prev) => Math.max(prev, index + 1));
-        if (entry.count <= 1) {
-          setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
-          return;
-        }
-        let currentCount = 1;
-        setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-        const countTimer = window.setInterval(() => {
-          currentCount += 1;
-          if (currentCount >= entry.count) {
-            currentCount = entry.count;
-            window.clearInterval(countTimer);
-          }
-          setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-        }, REWARD_COUNT_STEP_MS);
-        rewardAnimationTimersRef.current.push(countTimer);
-      }, winStartDelay + index * REWARD_LINE_STAGGER_MS);
-      rewardAnimationTimersRef.current.push(revealTimer);
-    });
+    animateRewardEntries(
+      winBonusEntries,
+      winBonusBaseRewards,
+      winBonusMultiplierBonusRewards,
+      setRevealedWinBonusLines,
+      setWinBonusAnimatedCounts,
+      winStartDelay
+    );
 
     return () => {
       rewardAnimationTimersRef.current.forEach((timer) => {
@@ -543,7 +643,11 @@ export default function MochiSoldierSurgeClient({
     isSettlementVisible,
     rewardClaimStatus,
     obtainedSnackEntries,
+    obtainedSnackBaseRewards,
+    obtainedSnackMultiplierBonusRewards,
     winBonusEntries,
+    winBonusBaseRewards,
+    winBonusMultiplierBonusRewards,
   ]);
 
   return (
@@ -564,7 +668,7 @@ export default function MochiSoldierSurgeClient({
           <>
             {shouldRenderBattleSection ? (
               <section
-                className={`mt-2 grid min-h-[calc(100vh-150px)] w-full items-stretch gap-3 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
+                className={`mt-2 grid min-h-[calc(100dvh-150px)] w-full items-stretch gap-3 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
                   surgeState.gameEnded
                     ? "pointer-events-none opacity-0 blur-[8px] scale-[0.985]"
                     : "opacity-100 blur-0 scale-100"
@@ -654,7 +758,7 @@ export default function MochiSoldierSurgeClient({
                     onSceneStateChange={handleSceneStateChange}
                     maxPixelRatio={1.25}
                     antialias={false}
-                    className="h-[calc(100vh-150px)] min-h-[700px] w-full max-w-none overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
+                    className="h-[calc(100dvh-150px)] min-h-[700px] w-full max-w-none overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
                   />
                 </div>
 
@@ -745,6 +849,9 @@ export default function MochiSoldierSurgeClient({
                     </p>
 
                     <p className="mt-8 text-2xl font-semibold text-slate-200 md:text-3xl">Obtained Snack:</p>
+                    <p className="mt-2 text-sm text-slate-300">
+                      Base x1.00 first, then multiplier x{rewardMultiplier.toFixed(2)} adds bonus one by one.
+                    </p>
                     {rewardClaimStatus === "claiming" ? (
                       <p className="mt-3 text-xl text-slate-300">Calculating...</p>
                     ) : obtainedSnackEntries.length === 0 ? (
@@ -752,24 +859,52 @@ export default function MochiSoldierSurgeClient({
                     ) : (
                       <ul className="mt-4 space-y-3 text-xl md:text-2xl">
                         {obtainedSnackEntries.slice(0, revealedObtainedLines).map((entry) => {
-                          const shownCount = obtainedAnimatedCounts[entry.key] ?? 1;
-                          const isCounting = shownCount < entry.count;
+                          const baseCount = obtainedSnackBaseRewards[entry.key] ?? 0;
+                          const multiplierBonusCount =
+                            obtainedSnackMultiplierBonusRewards[entry.key] ?? 0;
+                          const shownCount = obtainedAnimatedCounts[entry.key] ?? baseCount;
+                          const isApplyingMultiplier =
+                            multiplierBonusCount > 0 && shownCount < entry.count;
+                          const hasMultiplierBonus =
+                            rewardMultiplier > 1 && multiplierBonusCount > 0;
                           return (
                             <li
                               key={entry.key}
                               className={`mx-auto flex max-w-[680px] items-center justify-center gap-3 rounded-xl border px-5 py-3 transition ${
-                                isCounting
+                                !hasMultiplierBonus && isApplyingMultiplier
                                   ? "border-cyan-300/45 bg-cyan-500/12 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.24)]"
                                   : "border-white/12 bg-white/[0.03] text-slate-100"
                               }`}
+                              style={
+                                hasMultiplierBonus
+                                  ? isApplyingMultiplier
+                                    ? rewardGoldLineActiveStyle
+                                    : rewardGoldLineStyle
+                                  : undefined
+                              }
                             >
-                              <span className="font-semibold">{entry.label}</span>
+                              <span className="font-semibold">
+                                {entry.label}
+                                {hasMultiplierBonus ? (
+                                  <span className="ml-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-100/85">
+                                    base {baseCount} + bonus{" "}
+                                    {Math.max(0, shownCount - baseCount)}/{multiplierBonusCount}
+                                  </span>
+                                ) : null}
+                              </span>
                               <span
                                 className={`inline-flex min-w-[96px] items-center justify-center rounded-full px-3 py-1 text-lg font-bold tabular-nums ${
-                                  isCounting
+                                  !hasMultiplierBonus && isApplyingMultiplier
                                     ? "animate-pulse bg-cyan-300/25 text-cyan-100"
                                     : "bg-slate-100/12 text-slate-100"
                                 }`}
+                                style={
+                                  hasMultiplierBonus
+                                    ? isApplyingMultiplier
+                                      ? rewardGoldPillActiveStyle
+                                      : rewardGoldPillStyle
+                                    : undefined
+                                }
                               >
                                 x {shownCount}
                               </span>
@@ -780,6 +915,9 @@ export default function MochiSoldierSurgeClient({
                     )}
 
                     <p className="mt-8 text-2xl font-semibold text-slate-200 md:text-3xl">Win Bonus:</p>
+                    <p className="mt-2 text-sm text-slate-300">
+                      Base x1.00 first, then multiplier x{rewardMultiplier.toFixed(2)} adds bonus one by one.
+                    </p>
                     {rewardClaimStatus === "claiming" ? (
                       <p className="mt-3 text-xl text-slate-300">Calculating...</p>
                     ) : winBonusEntries.length === 0 ? (
@@ -787,24 +925,52 @@ export default function MochiSoldierSurgeClient({
                     ) : (
                       <ul className="mt-4 space-y-3 text-xl md:text-2xl">
                         {winBonusEntries.slice(0, revealedWinBonusLines).map((entry) => {
-                          const shownCount = winBonusAnimatedCounts[entry.key] ?? 1;
-                          const isCounting = shownCount < entry.count;
+                          const baseCount = winBonusBaseRewards[entry.key] ?? 0;
+                          const multiplierBonusCount =
+                            winBonusMultiplierBonusRewards[entry.key] ?? 0;
+                          const shownCount = winBonusAnimatedCounts[entry.key] ?? baseCount;
+                          const isApplyingMultiplier =
+                            multiplierBonusCount > 0 && shownCount < entry.count;
+                          const hasMultiplierBonus =
+                            rewardMultiplier > 1 && multiplierBonusCount > 0;
                           return (
                             <li
                               key={entry.key}
                               className={`mx-auto flex max-w-[680px] items-center justify-center gap-3 rounded-xl border px-5 py-3 transition ${
-                                isCounting
+                                !hasMultiplierBonus && isApplyingMultiplier
                                   ? "border-amber-300/45 bg-amber-500/12 text-amber-100 shadow-[0_0_28px_rgba(251,191,36,0.2)]"
                                   : "border-white/12 bg-white/[0.03] text-slate-100"
                               }`}
+                              style={
+                                hasMultiplierBonus
+                                  ? isApplyingMultiplier
+                                    ? rewardGoldLineActiveStyle
+                                    : rewardGoldLineStyle
+                                  : undefined
+                              }
                             >
-                              <span className="font-semibold">{entry.label}</span>
+                              <span className="font-semibold">
+                                {entry.label}
+                                {hasMultiplierBonus ? (
+                                  <span className="ml-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-100/85">
+                                    base {baseCount} + bonus{" "}
+                                    {Math.max(0, shownCount - baseCount)}/{multiplierBonusCount}
+                                  </span>
+                                ) : null}
+                              </span>
                               <span
                                 className={`inline-flex min-w-[96px] items-center justify-center rounded-full px-3 py-1 text-lg font-bold tabular-nums ${
-                                  isCounting
+                                  !hasMultiplierBonus && isApplyingMultiplier
                                     ? "animate-pulse bg-amber-300/25 text-amber-100"
                                     : "bg-slate-100/12 text-slate-100"
                                 }`}
+                                style={
+                                  hasMultiplierBonus
+                                    ? isApplyingMultiplier
+                                      ? rewardGoldPillActiveStyle
+                                      : rewardGoldPillStyle
+                                    : undefined
+                                }
                               >
                                 x {shownCount}
                               </span>

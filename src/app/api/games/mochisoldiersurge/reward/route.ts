@@ -36,7 +36,7 @@ const normalizeScore = (value: unknown) => {
 const normalizeRewardMultiplier = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 1;
-  return Math.max(1, Math.min(5, parsed));
+  return Math.max(1, parsed);
 };
 
 const rollRewards = (count: number): SurgeSnackRewards => {
@@ -82,6 +82,10 @@ export async function POST(request: Request) {
 
   let obtainedSnackRewards = createEmptySurgeSnackRewards();
   let winBonusRewards = createEmptySurgeSnackRewards();
+  let obtainedSnackBaseRewards = createEmptySurgeSnackRewards();
+  let obtainedSnackMultiplierBonusRewards = createEmptySurgeSnackRewards();
+  let winBonusBaseRewards = createEmptySurgeSnackRewards();
+  let winBonusMultiplierBonusRewards = createEmptySurgeSnackRewards();
   let rewards = createEmptySurgeSnackRewards();
   let settlementPayload: Record<string, number | boolean> = {};
 
@@ -92,14 +96,25 @@ export async function POST(request: Request) {
     const scoreStep = isVictory
       ? MOCHI_GENERAL_VICTORY_SCORE_STEP
       : MOCHI_GENERAL_DEFEAT_SCORE_STEP;
+    const baseRewardPacks = Math.floor(score / scoreStep);
     const rewardPacks = Math.floor((score * rewardMultiplier) / scoreStep);
-    obtainedSnackRewards = rollRewards(rewardPacks);
+    const multiplierBonusRewardPacks = Math.max(0, rewardPacks - baseRewardPacks);
+    obtainedSnackBaseRewards = rollRewards(baseRewardPacks);
+    obtainedSnackMultiplierBonusRewards = rollRewards(multiplierBonusRewardPacks);
+    obtainedSnackRewards = mergeRewards(
+      obtainedSnackBaseRewards,
+      obtainedSnackMultiplierBonusRewards
+    );
+    winBonusBaseRewards = createEmptySurgeSnackRewards();
+    winBonusMultiplierBonusRewards = createEmptySurgeSnackRewards();
     winBonusRewards = createEmptySurgeSnackRewards();
     rewards = mergeRewards(obtainedSnackRewards, winBonusRewards);
     settlementPayload = {
       score,
       scoreStep,
+      baseRewardPacks,
       rewardPacks,
+      multiplierBonusRewardPacks,
       rewardMultiplier,
       victory: isVictory,
     };
@@ -112,15 +127,37 @@ export async function POST(request: Request) {
     const victoryBonus = isVictory ? 3 : 0;
     const scaledKillRewardPacks = Math.floor(killRewardPacks * rewardMultiplier);
     const scaledVictoryBonus = Math.floor(victoryBonus * rewardMultiplier);
-    obtainedSnackRewards = rollRewards(scaledKillRewardPacks);
-    winBonusRewards = rollRewards(scaledVictoryBonus);
+    const multiplierBonusKillRewardPacks = Math.max(
+      0,
+      scaledKillRewardPacks - killRewardPacks
+    );
+    const multiplierBonusVictoryBonus = Math.max(
+      0,
+      scaledVictoryBonus - victoryBonus
+    );
+    obtainedSnackBaseRewards = rollRewards(killRewardPacks);
+    obtainedSnackMultiplierBonusRewards = rollRewards(
+      multiplierBonusKillRewardPacks
+    );
+    obtainedSnackRewards = mergeRewards(
+      obtainedSnackBaseRewards,
+      obtainedSnackMultiplierBonusRewards
+    );
+    winBonusBaseRewards = rollRewards(victoryBonus);
+    winBonusMultiplierBonusRewards = rollRewards(multiplierBonusVictoryBonus);
+    winBonusRewards = mergeRewards(
+      winBonusBaseRewards,
+      winBonusMultiplierBonusRewards
+    );
     rewards = mergeRewards(obtainedSnackRewards, winBonusRewards);
     settlementPayload = {
       defeatedMonsters,
       killRewardPacks,
       scaledKillRewardPacks,
+      multiplierBonusKillRewardPacks,
       victoryBonus,
       scaledVictoryBonus,
+      multiplierBonusVictoryBonus,
       rewardMultiplier,
       victory: isVictory,
     };
@@ -135,7 +172,11 @@ export async function POST(request: Request) {
       success: true,
       granted: rewards,
       obtainedSnack: obtainedSnackRewards,
+      obtainedSnackBase: obtainedSnackBaseRewards,
+      obtainedSnackMultiplierBonus: obtainedSnackMultiplierBonusRewards,
       winBonus: winBonusRewards,
+      winBonusBase: winBonusBaseRewards,
+      winBonusMultiplierBonus: winBonusMultiplierBonusRewards,
       ...settlementPayload,
       skipped: true,
     });
@@ -178,7 +219,11 @@ export async function POST(request: Request) {
       success: true,
       granted: rewards,
       obtainedSnack: obtainedSnackRewards,
+      obtainedSnackBase: obtainedSnackBaseRewards,
+      obtainedSnackMultiplierBonus: obtainedSnackMultiplierBonusRewards,
       winBonus: winBonusRewards,
+      winBonusBase: winBonusBaseRewards,
+      winBonusMultiplierBonus: winBonusMultiplierBonusRewards,
       ...settlementPayload,
       resources: {
         energy_sugar: Number(resources.energy_sugar) || 0,

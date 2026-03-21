@@ -6,6 +6,9 @@ const defaultScale = 6.2;
 const fallbackColor = 0x22093f;
 const fallbackEmissive = 0x120a2f;
 const fallbackEmissiveIntensity = 1.05;
+const shockwaveRingMajorRadius = 1;
+const shockwaveRingTubeRadius = 0.11;
+const shockwaveRingOuterRadiusFactor = shockwaveRingMajorRadius + shockwaveRingTubeRadius;
 const shockwaveRingBaseAxis = new THREE.Vector3(0, 0, 1);
 const shockwaveUpAxis = new THREE.Vector3(0, 1, 0);
 const shockwaveForwardFlat = new THREE.Vector3();
@@ -33,7 +36,12 @@ const spawnShockwaveRingFx = ({
   travelDirection: THREE.Vector3;
   style: ShockwaveRingStyle;
 }) => {
-  const geometry = new THREE.TorusGeometry(1, 0.11, 10, 52);
+  const geometry = new THREE.TorusGeometry(
+    shockwaveRingMajorRadius,
+    shockwaveRingTubeRadius,
+    10,
+    52
+  );
   const material = new THREE.MeshStandardMaterial({
     color: style.color,
     roughness: 0.34,
@@ -133,6 +141,13 @@ export const catronDemonVolleyOrbProjectileType: ProjectileTypeDefinition = {
       spawnDefaultExplosionFx();
       const scene = projectile.mesh.parent;
       if (!scene) return;
+      const damageRadius = Math.max(0.05, projectile.explosionRadius);
+      const visualEndScale = Math.max(
+        0.05,
+        damageRadius / shockwaveRingOuterRadiusFactor
+      );
+      const visualStartScalePrimary = Math.max(0.05, visualEndScale * 0.26);
+      const visualStartScaleSecondary = Math.max(0.05, visualEndScale * 0.38);
       shockwaveForwardFlat.set(direction.x, 0, direction.z);
       if (shockwaveForwardFlat.lengthSq() < 0.000001) {
         shockwaveForwardFlat.set(0, 0, 1);
@@ -160,9 +175,9 @@ export const catronDemonVolleyOrbProjectileType: ProjectileTypeDefinition = {
           ),
           opacity: 0.76,
           lifeSec: 0.42,
-          startScale: Math.max(0.42, projectile.explosionRadius * 0.34),
-          endScale: Math.max(1.3, projectile.explosionRadius * 1.75),
-          lateralSpeed: 4.2,
+          startScale: visualStartScalePrimary,
+          endScale: visualEndScale,
+          lateralSpeed: 0,
         },
       });
       spawnShockwaveRingFx({
@@ -178,9 +193,9 @@ export const catronDemonVolleyOrbProjectileType: ProjectileTypeDefinition = {
           ),
           opacity: 0.52,
           lifeSec: 0.6,
-          startScale: Math.max(0.58, projectile.explosionRadius * 0.5),
-          endScale: Math.max(1.8, projectile.explosionRadius * 2.2),
-          lateralSpeed: 3.2,
+          startScale: visualStartScaleSecondary,
+          endScale: visualEndScale,
+          lateralSpeed: 0,
         },
       });
     },

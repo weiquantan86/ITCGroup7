@@ -75,7 +75,7 @@ export default function TrainingScenePage({
               infiniteFire={infiniteFire}
               onSceneStateChange={handleSceneStateChange}
               useDefaultLights={false}
-              className="relative h-[86vh] min-h-[700px] w-full max-w-[1920px] overflow-hidden rounded-[32px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
+              className="relative h-[86dvh] min-h-[700px] w-full max-w-[1920px] overflow-hidden rounded-[32px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
             />
           </div>
           <aside className="rounded-2xl border border-white/10 bg-slate-900/70 p-4 shadow-[0_20px_50px_-30px_rgba(2,6,23,0.7)]">

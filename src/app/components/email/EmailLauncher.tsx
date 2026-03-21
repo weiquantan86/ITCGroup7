@@ -367,7 +367,7 @@ export default function EmailLauncher({
                 }
               }}
             >
-              <div className="relative flex h-[min(84vh,760px)] w-[min(1180px,96vw)] min-h-[620px] flex-col overflow-hidden rounded-[44px] border border-white/20 bg-[linear-gradient(160deg,#060a13_0%,#090f1c_52%,#060912_100%)] p-6 shadow-[0_0_76px_rgba(56,189,248,0.25)] md:p-8">
+              <div className="relative flex h-[min(84dvh,760px)] w-[min(1180px,96vw)] min-h-[620px] flex-col overflow-hidden rounded-[44px] border border-white/20 bg-[linear-gradient(160deg,#060a13_0%,#090f1c_52%,#060912_100%)] p-6 shadow-[0_0_76px_rgba(56,189,248,0.25)] md:p-8">
                 <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-cyan-400/12 blur-3xl" />
                 <div className="pointer-events-none absolute -bottom-28 -right-20 h-80 w-80 rounded-full bg-orange-400/12 blur-3xl" />
 

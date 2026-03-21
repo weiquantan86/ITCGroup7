@@ -13,6 +13,13 @@ import {
 } from "../../../object/projectile/reflection";
 import { characterGltfAnimationClipsKey } from "../general/engine/characterLoader";
 import type { CharacterRuntime, CharacterRuntimeFactory } from "../general/types";
+import {
+  applyDamageToBaronCloneThreatTarget,
+  createBaronCloneThreatTarget,
+  registerBaronCloneThreatTarget,
+  unregisterBaronCloneThreatTarget,
+  type BaronCloneThreatTarget,
+} from "./cloneThreat";
 import { profile } from "./profile";
 
 type ChargeHud = {
@@ -474,6 +481,7 @@ type BaronClone = {
   legLeft: THREE.Object3D | null;
   legRight: THREE.Object3D | null;
   walkPhase: number;
+  threatTarget: BaronCloneThreatTarget;
   hp: number;
   speed: number;
   direction: THREE.Vector3;
@@ -515,7 +523,6 @@ type SkillQSuperStage =
   | "idle"
   | "before"
   | "cloneSlash"
-  | "hostSlow"
   | "hostSlash"
   | "after";
 
@@ -1663,8 +1670,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillQSuperConfig = {
     cloneSlashDurationMs: 300,
     hostSlashDurationMs: 600,
-    hostSlowDurationMs: 180,
-    hostSlowAnimationScale: 0.32,
     strikeDamage: 150,
     strikeRadius: 100,
     strikeMaxHits: 96,
@@ -1676,7 +1681,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     stage: "idle" as SkillQSuperStage,
     startedAt: 0,
     beforeEndsAt: 0,
-    hostSlowEndsAt: 0,
     afterEndsAt: 0,
     nextCloneIndex: 0,
     slash: null as SkillQSuperSlashState | null,
@@ -1726,6 +1730,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     consumeAfterShootAt: 0,
     clones: [] as BaronClone[],
   };
+  let cloneThreatIdCounter = 0;
   const cloneAnchor = new THREE.Group();
   cloneAnchor.name = "baron-clones";
   (avatar.parent ?? avatar).add(cloneAnchor);
@@ -1771,6 +1776,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const runtimeWeaponFirstPersonProxyEntries: WeaponFirstPersonProxyEntry[] = [];
   let runtimeNormalAttackEndsAt = 0;
   let runtimeIsMoving = false;
+  let runtimeIsSprinting = false;
   let runtimeWeaponConstraintHand: THREE.Object3D | null = null;
   let runtimeWeaponConstraintWeapon: THREE.Object3D | null = null;
   let runtimeWeaponConstraintOffsetReady = false;
@@ -1823,12 +1829,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     maxExplosionScale: 1.28,
     minExplosionDamageScale: 0.9,
     maxExplosionDamageScale: 1.2,
-    minArcHeight: 0.24,
-    maxArcHeight: 2.35,
-    minOutwardPhaseScale: 1,
-    maxOutwardPhaseScale: 1.95,
-    minOutwardBiasScale: 1,
-    maxOutwardBiasScale: 1.7,
   };
   const skillEChargeState = {
     isCharging: false,
@@ -1839,7 +1839,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     shotCount: 3,
     shotIntervalMs: 72,
     speed: 20,
-    lifetime: 0.62,
+    lifetime: 1.24,
     damage: 17,
     radius: 0.27,
     targetHitRadius: 0,
@@ -1847,13 +1847,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     lateralSpawn: 0.28,
     verticalSpawn: 0,
     spreadRad: THREE.MathUtils.degToRad(16),
-    outwardLateralBias: 0.28,
-    outwardPhaseRatio: 0.36,
-    turnRateMin: 4.8,
-    turnRateMax: 9.2,
     focusDistance: 8.8,
-    focusHeight: 0,
-    convergeSnapPadding: 0.12,
+    superHomingSearchRadius: 9,
+    superHomingTurnRate: 7.2,
     explosionRadius: 5.2,
     explosionDamage: 48,
   };
@@ -1876,15 +1872,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     origin: new THREE.Vector3(),
     baseDirection: new THREE.Vector3(0, 0, 1),
     right: new THREE.Vector3(1, 0, 0),
-    focusPoint: new THREE.Vector3(),
     speed: skillEConfig.speed,
     lifetime: skillEConfig.lifetime,
     radius: skillEConfig.radius,
     targetHitRadius: skillEConfig.targetHitRadius,
     shurikenScale: 1,
-    outwardPhaseRatio: skillEConfig.outwardPhaseRatio,
-    outwardLateralBias: skillEConfig.outwardLateralBias,
-    arcHeight: skillEChargeConfig.minArcHeight,
     explosionRadius: skillEConfig.explosionRadius,
     explosionDamage: skillEConfig.explosionDamage,
   };
@@ -2053,6 +2045,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     runtimeAnimationClips = [];
     runtimeNormalAttackEndsAt = 0;
     runtimeIsMoving = false;
+    runtimeIsSprinting = false;
     runtimeWeaponConstraintHand = null;
     runtimeWeaponConstraintWeapon = null;
     runtimeWeaponConstraintOffsetReady = false;
@@ -2085,6 +2078,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     runtimeSkillEShootSuper = false;
     runtimeNormalAttackEndsAt = 0;
     runtimeIsMoving = false;
+    runtimeIsSprinting = false;
   };
 
   const bindRuntimeAnimationModel = (model: THREE.Object3D | null) => {
@@ -2656,6 +2650,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const holdActive = chargeState.isCharging;
     const skillPoseActive =
       skillQState.active || skillQSuperState.active || skillRState.active;
+    const skillPoseBlocksLocomotion = skillQSuperState.active || skillRState.active;
     const normalAttackActive = runtimeNormalAttackEndsAt > now;
     const stationaryChargeState = holdActive && !isMoving && !skillPoseActive;
     const movingChargeState = holdActive && isMoving && !skillPoseActive;
@@ -2689,9 +2684,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     const blockLocomotion =
-      skillPoseActive || (!isMoving && (holdActive || normalAttackActive));
-    const runActive = !blockLocomotion && isMoving && isSprinting;
-    const walkActive = !blockLocomotion && isMoving && !isSprinting;
+      skillPoseBlocksLocomotion || (!isMoving && (holdActive || normalAttackActive));
+    const forceWalkOnly =
+      skillQState.active && !skillQSuperState.active && !skillRState.active;
+    const runActive = !blockLocomotion && !forceWalkOnly && isMoving && isSprinting;
+    const walkActive = !blockLocomotion && isMoving && (!isSprinting || forceWalkOnly);
     const fullBodyHoldActive =
       holdActive && !normalAttackActive && !useRightArmHoldOnly;
     const rightArmHoldActive =
@@ -3035,7 +3032,20 @@ export const createRuntime: CharacterRuntimeFactory = ({
     return fallbackMesh;
   };
 
+  const resetCloneStateWhenEmpty = () => {
+    if (cloneState.clones.length > 0) return;
+    cloneState.active = false;
+    cloneState.startedAt = 0;
+    cloneState.endsAt = 0;
+    cloneState.consumePending = false;
+    cloneState.consumeAfterShootAt = 0;
+  };
+
   const clearClone = (clone: BaronClone, spawnSmoke: boolean) => {
+    clone.threatTarget.active = false;
+    clone.threatTarget.health = 0;
+    unregisterBaronCloneThreatTarget(clone.threatTarget.id);
+    clone.hp = 0;
     if (spawnSmoke && clone.root.parent && clone.root.visible) {
       clone.root.updateMatrixWorld(true);
       clone.root.getWorldPosition(cloneScratchTemp);
@@ -3053,16 +3063,39 @@ export const createRuntime: CharacterRuntimeFactory = ({
     clone.geometries.length = 0;
   };
 
+  const removeCloneFromState = (clone: BaronClone, spawnSmoke: boolean) => {
+    clearClone(clone, spawnSmoke);
+    const cloneIndex = cloneState.clones.indexOf(clone);
+    if (cloneIndex >= 0) {
+      cloneState.clones.splice(cloneIndex, 1);
+    }
+    resetCloneStateWhenEmpty();
+  };
+
   const clearAllClones = (spawnSmoke: boolean = false) => {
     for (let i = 0; i < cloneState.clones.length; i += 1) {
       clearClone(cloneState.clones[i], spawnSmoke);
     }
     cloneState.clones.length = 0;
-    cloneState.active = false;
-    cloneState.startedAt = 0;
-    cloneState.endsAt = 0;
-    cloneState.consumePending = false;
-    cloneState.consumeAfterShootAt = 0;
+    resetCloneStateWhenEmpty();
+  };
+
+  const applyDamageToClone = (clone: BaronClone, amount: number) => {
+    if (amount <= 0) return 0;
+    if (!clone.root.parent || clone.hp <= 0 || !clone.threatTarget.active) return 0;
+    const requested = Math.min(clone.hp, Math.max(0, amount));
+    if (requested <= 0) return 0;
+    const applied = applyDamageToBaronCloneThreatTarget(clone.threatTarget, requested);
+    if (applied <= 0) return 0;
+    clone.hp = Math.max(0, clone.hp - applied);
+    if (clone.hp <= 0) {
+      if (skillQSuperState.active) {
+        clearClone(clone, true);
+      } else {
+        removeCloneFromState(clone, true);
+      }
+    }
+    return applied;
   };
 
   const updateCloneDirection = (clone: BaronClone, now: number) => {
@@ -3588,6 +3621,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
         cloneScratchDirection.normalize();
       }
 
+      const cloneHp = Math.max(1, baseHealth * cloneConfig.hpRatio);
+      const threatTarget = createBaronCloneThreatTarget({
+        id: `baron-clone-threat-${++cloneThreatIdCounter}`,
+        object: root,
+        maxHealth: cloneHp,
+        spawnedAt: now,
+        lifetimeMs: cloneConfig.durationMs,
+      });
+
       const clone: BaronClone = {
         root,
         model,
@@ -3598,7 +3640,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
         legLeft,
         legRight,
         walkPhase: Math.random() * Math.PI * 2,
-        hp: Math.max(1, baseHealth * cloneConfig.hpRatio),
+        threatTarget,
+        hp: cloneHp,
         speed: cloneBaseSpeed * THREE.MathUtils.lerp(0.85, 1.18, Math.random()),
         direction: cloneScratchDirection.clone(),
         nextTurnAt: now + THREE.MathUtils.lerp(300, 900, Math.random()),
@@ -3608,6 +3651,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       };
       cloneAnchor.add(root);
       cloneState.clones.push(clone);
+      registerBaronCloneThreatTarget(clone.threatTarget, (amount) =>
+        applyDamageToClone(clone, amount)
+      );
       spawnCloneSmokeBurst(root.position, 5);
     }
 
@@ -4255,7 +4301,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillQSuperState.stage = "idle";
     skillQSuperState.startedAt = 0;
     skillQSuperState.beforeEndsAt = 0;
-    skillQSuperState.hostSlowEndsAt = 0;
     skillQSuperState.afterEndsAt = 0;
     skillQSuperState.nextCloneIndex = 0;
     skillQSuperState.hostReturnReady = false;
@@ -4274,11 +4319,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     clearSkillRDanceWaves();
     requestArmPoseReset();
   };
-
-  const resolveSkillQSuperAnimationScale = () =>
-    skillQSuperState.active && skillQSuperState.stage === "hostSlow"
-      ? skillQSuperConfig.hostSlowAnimationScale
-      : 1;
 
   const resolveSkillQSuperSlashPosition = (
     slash: SkillQSuperSlashState,
@@ -4441,7 +4481,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillQSuperState.stage = "before";
     skillQSuperState.startedAt = now;
     skillQSuperState.beforeEndsAt = now + resolveRuntimeSkillQBeforeDurationMs();
-    skillQSuperState.hostSlowEndsAt = 0;
     skillQSuperState.afterEndsAt = 0;
     skillQSuperState.nextCloneIndex = 0;
     skillQSuperState.slash = null;
@@ -4456,11 +4495,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const updateSkillQSuper = (now: number, deltaSeconds: number) => {
     if (!skillQSuperState.active) return;
 
-    const animationScale = resolveSkillQSuperAnimationScale();
     for (let i = 0; i < cloneState.clones.length; i += 1) {
       const animation = cloneState.clones[i].animation;
       if (!animation) continue;
-      animation.mixer.update(deltaSeconds * animationScale);
+      animation.mixer.update(deltaSeconds);
     }
 
     const slash = skillQSuperState.slash;
@@ -4499,8 +4537,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
           }
         }
         if (!slashStarted) {
-          skillQSuperState.stage = "hostSlow";
-          skillQSuperState.hostSlowEndsAt = now + skillQSuperConfig.hostSlowDurationMs;
+          captureSkillQSuperPreSlashPose();
+          skillQSuperState.stage = "hostSlash";
+          const hostSlashStarted = startSkillQSuperSlash(now, "host", -1);
+          if (!hostSlashStarted) {
+            restoreSkillQSuperPreSlashPose();
+            skillQSuperState.hostReturnReady = false;
+            startSkillQAfterAnimation();
+            skillQSuperState.stage = "after";
+            skillQSuperState.afterEndsAt = now + resolveRuntimeSkillQAfterDurationMs();
+          }
         }
         return;
       }
@@ -4515,21 +4561,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
         restoreSkillQSuperSlashPose(skillQSuperState.slash);
       }
       skillQSuperState.slash = null;
-      return;
-    }
-
-    if (skillQSuperState.stage === "hostSlow") {
-      if (now < skillQSuperState.hostSlowEndsAt) return;
-      captureSkillQSuperPreSlashPose();
-      skillQSuperState.stage = "hostSlash";
-      const slashStarted = startSkillQSuperSlash(now, "host", -1);
-      if (!slashStarted) {
-        restoreSkillQSuperPreSlashPose();
-        skillQSuperState.hostReturnReady = false;
-        startSkillQAfterAnimation();
-        skillQSuperState.stage = "after";
-        skillQSuperState.afterEndsAt = now + resolveRuntimeSkillQAfterDurationMs();
-      }
       return;
     }
 
@@ -5066,11 +5097,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     );
 
   const configureSkillEVolleyForCharge = (ratio: number) => {
-    const distanceScale = THREE.MathUtils.lerp(
-      skillEChargeConfig.minDistanceScale,
-      skillEChargeConfig.maxDistanceScale,
-      ratio
-    );
     const shurikenScale = THREE.MathUtils.lerp(
       skillEChargeConfig.minShurikenScale,
       skillEChargeConfig.maxShurikenScale,
@@ -5101,43 +5127,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillEChargeConfig.maxExplosionDamageScale,
       ratio
     );
-    const arcHeight = THREE.MathUtils.lerp(
-      skillEChargeConfig.minArcHeight,
-      skillEChargeConfig.maxArcHeight,
-      ratio
-    );
-    const outwardPhaseScale = THREE.MathUtils.lerp(
-      skillEChargeConfig.minOutwardPhaseScale,
-      skillEChargeConfig.maxOutwardPhaseScale,
-      ratio
-    );
-    const outwardBiasScale = THREE.MathUtils.lerp(
-      skillEChargeConfig.minOutwardBiasScale,
-      skillEChargeConfig.maxOutwardBiasScale,
-      ratio
-    );
 
     skillEVolley.speed = skillEConfig.speed * speedScale;
     skillEVolley.lifetime = skillEConfig.lifetime * lifetimeScale;
     skillEVolley.radius = skillEConfig.radius * radiusScale;
     skillEVolley.targetHitRadius = skillEConfig.targetHitRadius * radiusScale;
     skillEVolley.shurikenScale = shurikenScale;
-    skillEVolley.outwardPhaseRatio = THREE.MathUtils.clamp(
-      skillEConfig.outwardPhaseRatio * outwardPhaseScale,
-      0.12,
-      0.72
-    );
-    skillEVolley.outwardLateralBias =
-      skillEConfig.outwardLateralBias * outwardBiasScale;
-    skillEVolley.arcHeight = arcHeight;
     skillEVolley.explosionRadius = skillEConfig.explosionRadius * explosionScale;
     skillEVolley.explosionDamage = Math.round(
       skillEConfig.explosionDamage * explosionDamageScale
     );
-    skillEVolley.focusPoint
-      .copy(skillEOrigin)
-      .addScaledVector(skillEBaseDirection, skillEConfig.focusDistance * distanceScale);
-    skillEVolley.focusPoint.y += skillEConfig.focusHeight;
   };
 
   const setShurikenElectricState = (
@@ -5190,12 +5189,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       skillESideOffsets[Math.min(shotIndex, skillESideOffsets.length - 1)];
     const baseDirection = skillEVolley.baseDirection.clone();
     const baseRight = skillEVolley.right.clone();
-    const focusPoint = skillEVolley.focusPoint.clone();
     const speed = skillEVolley.speed;
     const lifetime = skillEVolley.lifetime;
-    const outwardPhaseRatio = skillEVolley.outwardPhaseRatio;
-    const outwardLateralBias = skillEVolley.outwardLateralBias;
-    const arcHeight = skillEVolley.arcHeight;
 
     skillEShotDirection
       .copy(baseDirection)
@@ -5215,17 +5210,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     setShurikenElectricState(entry, cloneBuffActive, scaleMultiplier);
     entry.spinPhase = Math.random() * Math.PI * 2;
     entry.spinRate = 14 + Math.random() * 6 + skillEChargeState.ratio * 3.5;
-    const outwardDirection = skillEShotDirection
-      .clone()
-      .addScaledVector(baseRight, side * outwardLateralBias)
-      .addScaledVector(skillEUp, arcHeight * 0.14)
-      .normalize();
     const currentDirection = new THREE.Vector3();
-    const desiredDirection = new THREE.Vector3();
-    const toFocus = new THREE.Vector3();
+    const homingDirection = new THREE.Vector3();
     const trailHead = new THREE.Vector3();
-    const launchAt = performance.now();
-    let convergeRemovalRequested = false;
 
     const trailHost = avatar.parent ?? avatar;
     if (entry.trail.parent !== trailHost) {
@@ -5260,59 +5247,31 @@ export const createRuntime: CharacterRuntimeFactory = ({
         onTargetHit: ({ now, point, direction }) => {
           launchSkillEHitCutWave(now, point, direction, cloneBuffActive ? 1.18 : 1);
         },
-        applyForces: ({ velocity, delta, removeProjectile }) => {
+        applyForces: ({ velocity, position, delta, findNearestTarget }) => {
           if (velocity.lengthSq() < 0.000001) return;
-
-          const ageRatio = THREE.MathUtils.clamp(
-            (performance.now() - launchAt) / (lifetime * 1000),
-            0,
-            1
-          );
-
           currentDirection.copy(velocity).normalize();
-          const arcLift = Math.sin(ageRatio * Math.PI) * arcHeight;
-          toFocus.copy(focusPoint);
-          toFocus.y += arcLift;
-          toFocus.sub(entry.mesh.position);
-          const distanceToFocus = toFocus.length();
-          const snapDistance = speed * delta + skillEConfig.convergeSnapPadding;
-          if (distanceToFocus <= snapDistance) {
-            if (!convergeRemovalRequested) {
-              convergeRemovalRequested = true;
-              removeProjectile("expired");
+
+          if (cloneBuffActive) {
+            const nearestTarget = findNearestTarget?.({
+              center: position,
+              radius: skillEConfig.superHomingSearchRadius,
+            });
+            if (nearestTarget) {
+              homingDirection.copy(nearestTarget.point).sub(position);
+              if (homingDirection.lengthSq() > 0.000001) {
+                homingDirection.normalize();
+                const steer =
+                  1 -
+                  Math.exp(
+                    -Math.max(0.01, skillEConfig.superHomingTurnRate) * delta
+                  );
+                currentDirection
+                  .lerp(homingDirection, THREE.MathUtils.clamp(steer, 0, 1))
+                  .normalize();
+              }
             }
-            return;
           }
 
-          if (distanceToFocus > 0.000001) {
-            desiredDirection.copy(toFocus).multiplyScalar(1 / distanceToFocus);
-          } else {
-            desiredDirection.copy(currentDirection);
-          }
-
-          const outwardPhaseProgress = THREE.MathUtils.clamp(
-            ageRatio / Math.max(0.0001, outwardPhaseRatio),
-            0,
-            1
-          );
-          const outwardWeight =
-            side === 0
-              ? 0
-              : THREE.MathUtils.smoothstep(1 - outwardPhaseProgress, 0, 1);
-          if (outwardWeight > 0) {
-            desiredDirection
-              .lerp(outwardDirection, THREE.MathUtils.clamp(outwardWeight, 0, 1))
-              .normalize();
-          }
-          const phaseTurnRate = THREE.MathUtils.lerp(
-            skillEConfig.turnRateMin,
-            skillEConfig.turnRateMax,
-            1 - outwardWeight
-          );
-          const steer = 1 - Math.exp(-phaseTurnRate * delta);
-          currentDirection
-            .lerp(desiredDirection, THREE.MathUtils.clamp(steer, 0, 1))
-            .normalize();
           velocity.copy(currentDirection).multiplyScalar(speed);
           entry.spinPhase += entry.spinRate * delta;
           entry.mesh.quaternion.setFromUnitVectors(
@@ -5584,15 +5543,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillEVolley.origin.set(0, 0, 0);
     skillEVolley.baseDirection.set(0, 0, 1);
     skillEVolley.right.set(1, 0, 0);
-    skillEVolley.focusPoint.set(0, 0, 0);
     skillEVolley.speed = skillEConfig.speed;
     skillEVolley.lifetime = skillEConfig.lifetime;
     skillEVolley.radius = skillEConfig.radius;
     skillEVolley.targetHitRadius = skillEConfig.targetHitRadius;
     skillEVolley.shurikenScale = 1;
-    skillEVolley.outwardPhaseRatio = skillEConfig.outwardPhaseRatio;
-    skillEVolley.outwardLateralBias = skillEConfig.outwardLateralBias;
-    skillEVolley.arcHeight = skillEChargeConfig.minArcHeight;
     skillEVolley.explosionRadius = skillEConfig.explosionRadius;
     skillEVolley.explosionDamage = skillEConfig.explosionDamage;
   };
@@ -5730,8 +5685,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const getMovementSpeedMultiplier = () =>
     skillRState.active
       ? skillRConfig.movementSpeedMultiplier
-      : skillQState.active || skillQSuperState.active
+      : skillQSuperState.active
         ? 0
+        : skillQState.active && runtimeIsSprinting
+          ? 1 / Math.max(1, profile.movement?.sprintMultiplier ?? 1.6)
         : 1;
 
   const isBasicAttackLocked = () =>
@@ -5975,6 +5932,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
       runtimeAvatarModelRef = args.avatarModel;
       runtimeIsMoving = args.isMoving;
+      runtimeIsSprinting = Boolean(args.isSprinting);
       bindRuntimeAnimationModel(args.avatarModel);
       const deltaSeconds = resolveRuntimeDeltaSeconds(args.now);
       if (args.aimDirectionWorld && args.aimDirectionWorld.lengthSq() > 0.000001) {
@@ -5995,12 +5953,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       updateSkillQSuperHitFx(args.now);
       updateSkillQ(args.now);
       updateSkillQSuper(args.now, deltaSeconds);
-      const qSuperDarknessActive =
-        skillQSuperState.active && skillQSuperState.stage !== "after";
-      skillQDarknessOverlay.update(qSuperDarknessActive ? 0.56 : 0, deltaSeconds);
+      skillQDarknessOverlay.update(0, deltaSeconds);
       updateSkillR(args.now);
-      const animationDeltaSeconds =
-        deltaSeconds * resolveSkillQSuperAnimationScale();
+      const animationDeltaSeconds = deltaSeconds;
       const skillRSwingShadowActive =
         skillRState.active && Boolean(primarySwingState.entry);
       updateSkillRShadowForm(skillRSwingShadowActive, animationDeltaSeconds);

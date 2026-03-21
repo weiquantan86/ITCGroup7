@@ -993,7 +993,7 @@ export default function SnackMixer({
                 No special events configured by admin yet.
               </div>
             ) : (
-              <div className="max-h-[72vh] overflow-auto rounded-xl border border-cyan-300/25">
+              <div className="max-h-[72dvh] overflow-auto rounded-xl border border-cyan-300/25">
                 <table className="min-w-full table-auto text-base">
                   <thead className="bg-cyan-900/30 text-cyan-100">
                     <tr>

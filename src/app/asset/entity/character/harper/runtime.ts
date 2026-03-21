@@ -32,21 +32,25 @@ const normalAttackBareChargeEndProgress = 0.56;
 const normalAttackBareProjectileFireProgress = 0.6;
 const normalAttackBareRecoveryDurationScale = 0.5;
 const normalAttackBareRecoveryEndBufferMs = 40;
+const normalAttackBareSpeedMultiplier = 1.4;
 const normalAttackBareMinProjectileSpeed = 16;
 const normalAttackBareMaxProjectileSpeed = 22;
 const normalAttackBareProjectileLifetime = 1.4;
 const normalAttackBareProjectileRadius = 0.34;
 const normalAttackBareProjectileScale = 2.25;
 const normalAttackBareProjectileForwardOffset = 0.62;
+const normalAttackBareDamageBase = 10;
+const normalAttackBareDamagePerSpeed = 0.6;
+const normalAttackBareDamageMultiplier = 1.5;
 const normalAttackWeaponMoveSpeedMultiplier = 0.2;
 const normalAttackWeaponThirdBackstepDistance = 2;
 const normalAttackWeaponBackstepStepDistance = 0.08;
 const normalAttackWeaponThirdBackstepProgress = 0.69;
 const normalAttackWeaponThirdBackstepAdvanceSeconds = 0.2;
 const normalAttackWeaponThirdBackstepDurationMs = 390;
-const normalAttackWeaponStageDamage = [20, 24, 34] as const;
+const normalAttackWeaponStageDamage = [50, 60, 70] as const;
 const normalAttackWeaponStageManaGain = [2, 4, 8] as const;
-const normalAttackWeaponStageEnergyGain = [1, 2, 4] as const;
+const normalAttackWeaponStageEnergyGain = [5, 10, 15] as const;
 const normalAttackWeaponAoEMaxHits = 12;
 const normalAttackWeaponContactRadius = [0.72, 0.8, 0.92] as const;
 const normalAttackWeaponContactForwardOffset = [0.18, 0.26, 0.56] as const;
@@ -81,7 +85,7 @@ const skillEWeaponProjectileRadius = 0.2;
 const skillEWeaponProjectileTargetHitRadius = 0.34;
 const skillEWeaponProjectileDamage = 30;
 const skillEWeaponProjectileExplosionRadius = 5.8;
-const skillEWeaponProjectileExplosionDamage = 62;
+const skillEWeaponProjectileExplosionDamage = 100;
 const skillEWeaponProjectileExplosionMinDamage = 24;
 const skillEWeaponProjectileForwardOffset = 0.52;
 const skillEWeaponProjectileMaxBackwardOffset = 1.28;
@@ -103,7 +107,7 @@ const skillEWeaponExplosionParticleCount = 24;
 const skillEWeaponExplosionMaxActiveCount = 3;
 const skillEWeaponExplosionFlashIntervalMs = 250;
 const skillEWeaponExplosionDamageTickIntervalMs = 250;
-const skillEWeaponExplosionDamageTick = 12;
+const skillEWeaponExplosionDamageTick = 100;
 const skillQWeaponExplosionTriggerStartProgress = 0.14;
 const skillQWeaponExplosionTriggerEndProgress = 0.9;
 const skillQWeaponSwingMinSpeed = 3.2;
@@ -132,7 +136,7 @@ const skillQBarePurcleSpawnForwardOffset = 1.15;
 const skillQBarePurcleLifetimeMs = 20000;
 const skillQBarePurcleMaxHealth = 50;
 const skillQBarePurcleEnemySearchRadius = 100;
-const skillQBarePurcleAttackRange = 1.55;
+const skillQBarePurcleAttackRange = 2.325;
 const skillQBarePurcleAttackReach = 0.42;
 const skillQBarePurcleAttackHitRadius = 0.68;
 const skillQBarePurcleAttackDamage = 9;
@@ -2224,7 +2228,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const started = playActionBinding(normalAttackBareBinding);
     if (!started) return false;
 
-    const durationMs = Math.max(1, normalAttackBareBinding.clip.duration * 1000);
+    const durationMs = Math.max(
+      1,
+      (normalAttackBareBinding.clip.duration * 1000) /
+        Math.max(0.01, normalAttackBareSpeedMultiplier)
+    );
     const chargeEndsAt = now + durationMs * normalAttackBareChargeEndProgress;
     const fireAt = now + durationMs * normalAttackBareProjectileFireProgress;
     const fullEndsAt = now + durationMs;
@@ -4305,6 +4313,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
       normalAttackBareMaxProjectileSpeed,
       chargeProgress
     );
+    const damage = Math.max(
+      1,
+      Math.round(
+        (normalAttackBareDamageBase + speed * normalAttackBareDamagePerSpeed) *
+          normalAttackBareDamageMultiplier
+      )
+    );
     const origin = primaryAttackChargeWorldPos
       .clone()
       .addScaledVector(
@@ -4362,6 +4377,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       origin,
       direction: primaryAttackProjectileDirection.clone(),
       speed,
+      damage,
       lifetime: normalAttackBareProjectileLifetime,
       radius: normalAttackBareProjectileRadius,
       targetHitRadius: normalAttackBareProjectileRadius * 1.18,
@@ -5659,7 +5675,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
           blend
         )
       );
-      normalAttackBareBinding.action.setEffectiveTimeScale(1);
+      normalAttackBareBinding.action.setEffectiveTimeScale(
+        barePrimaryAttackAnimationActive ? normalAttackBareSpeedMultiplier : 1
+      );
       normalAttackBareBinding.action.enabled = true;
     }
 

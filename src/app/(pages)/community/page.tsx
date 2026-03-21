@@ -425,7 +425,7 @@ export default function CommunityPage() {
 
       {isReportModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[24px] border border-white/20 bg-slate-900/95 shadow-[0_0_42px_rgba(34,211,238,0.2)]">
+          <div className="max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-[24px] border border-white/20 bg-slate-900/95 shadow-[0_0_42px_rgba(34,211,238,0.2)]">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-slate-900/95 px-5 py-4 backdrop-blur">
               <h3 className="text-xl font-semibold text-slate-100 md:text-2xl">
                 Report gaming bug

@@ -276,6 +276,10 @@ export default async function UserPage() {
     return <ErrorState message="Load failed: unable to read user information." />;
   }
 
+  const stageWidth =
+    "min(calc(100vw - 1.5rem), calc((100dvh - 1.5rem) * 16 / 9), 1920px)";
+  const stageHeight = `calc(${stageWidth} * 9 / 16)`;
+
   return (
     <main className="relative min-h-[100dvh] w-full overflow-hidden bg-[#05070d] text-slate-100">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[length:38px_38px]" />
@@ -283,9 +287,10 @@ export default async function UserPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.4),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.62)_48%,rgba(2,6,23,0.86)_68%,rgba(2,6,23,0.95)_100%)]" />
 
-      <div className="relative mx-auto flex h-[100dvh] w-full max-w-[1920px] items-stretch px-[clamp(0.75rem,2.3vw,4rem)] py-[clamp(0.75rem,2.1vh,2rem)]">
-        <div className="h-full w-full rounded-[36px] border border-white/10 bg-white/[0.03] px-[clamp(1rem,2.1vw,3.5rem)] py-[clamp(1rem,2.8vh,3rem)] shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
-          <div className="grid h-full min-h-0 gap-[clamp(0.75rem,1.3vw,1.5rem)] lg:grid-cols-[1fr_1.5fr_1fr] lg:grid-rows-[clamp(280px,30vh,320px)_minmax(0,1fr)]">
+      <div className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center p-3">
+        <div style={{ width: stageWidth, height: stageHeight }} className="relative">
+          <div className="h-full w-full rounded-[36px] border border-white/10 bg-white/[0.03] px-[clamp(1rem,2.1vw,3.5rem)] py-[clamp(1rem,2.8dvh,3rem)] shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
+            <div className="grid h-full min-h-0 gap-[clamp(0.75rem,1.3vw,1.5rem)] grid-cols-[1fr_1.5fr_1fr] grid-rows-[clamp(280px,30%,320px)_minmax(0,1fr)]">
             <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
               <div className="relative flex h-full min-h-0 items-center justify-center">
                 <div className="absolute left-0 top-1/2 z-10 -translate-y-1/2">
@@ -347,7 +352,7 @@ export default async function UserPage() {
               <div className="h-14 w-14 rounded-full border border-white/20 bg-white/10 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
             </Panel>
 
-            <Panel className="grid h-full min-h-0 grid-rows-4 gap-6 lg:col-start-3 lg:row-span-2 lg:row-start-1">
+            <Panel className="grid h-full min-h-0 grid-rows-4 gap-6 col-start-3 row-span-2 row-start-1">
               <MenuButton label="Snack Gacha" art="snack" className="h-full" href="/gacha" />
               <MenuButton label="Character" art="character" className="h-full" href="/characterManagement" />
               <MenuButton label="Storage" art="storage" className="h-full" href="/storage" />
@@ -369,6 +374,7 @@ export default async function UserPage() {
               <MenuButton label="Subgame1" art="subgame" className="h-full" />
               <MenuButton label="Star Shop" art="starshop" className="h-full" href="/starshop" />
             </Panel>
+            </div>
           </div>
         </div>
       </div>

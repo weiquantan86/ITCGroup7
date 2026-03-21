@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import SceneLauncher from "../../../asset/scenes/general/SceneLauncher";
 import type { SceneUiState } from "../../../asset/scenes/general/sceneTypes";
 import MochiGeneralPreview from "./MochiGeneralPreview";
@@ -45,7 +54,11 @@ type RewardClaimResponse = {
   error?: string;
   granted?: Partial<SurgeSnackRewards>;
   obtainedSnack?: Partial<SurgeSnackRewards>;
+  obtainedSnackBase?: Partial<SurgeSnackRewards>;
+  obtainedSnackMultiplierBonus?: Partial<SurgeSnackRewards>;
   winBonus?: Partial<SurgeSnackRewards>;
+  winBonusBase?: Partial<SurgeSnackRewards>;
+  winBonusMultiplierBonus?: Partial<SurgeSnackRewards>;
   scoreStep?: number;
   rewardPacks?: number;
 };
@@ -202,9 +215,20 @@ export default function MochiGeneralBattleClient({
   const [obtainedSnackRewards, setObtainedSnackRewards] = useState<SurgeSnackRewards>(
     createEmptySurgeSnackRewards()
   );
+  const [obtainedSnackBaseRewards, setObtainedSnackBaseRewards] =
+    useState<SurgeSnackRewards>(createEmptySurgeSnackRewards());
+  const [
+    obtainedSnackMultiplierBonusRewards,
+    setObtainedSnackMultiplierBonusRewards,
+  ] = useState<SurgeSnackRewards>(createEmptySurgeSnackRewards());
   const [winBonusRewards, setWinBonusRewards] = useState<SurgeSnackRewards>(
     createEmptySurgeSnackRewards()
   );
+  const [winBonusBaseRewards, setWinBonusBaseRewards] = useState<SurgeSnackRewards>(
+    createEmptySurgeSnackRewards()
+  );
+  const [winBonusMultiplierBonusRewards, setWinBonusMultiplierBonusRewards] =
+    useState<SurgeSnackRewards>(createEmptySurgeSnackRewards());
   const [revealedObtainedLines, setRevealedObtainedLines] = useState(0);
   const [revealedWinBonusLines, setRevealedWinBonusLines] = useState(0);
   const [obtainedAnimatedCounts, setObtainedAnimatedCounts] = useState<
@@ -293,6 +317,46 @@ export default function MochiGeneralBattleClient({
       (rewardMultiplier - 1) / Math.max(0.00001, MAX_DIFFICULTY_REWARD_BONUS);
     return Math.min(1, Math.max(0, normalized));
   }, [rewardMultiplier]);
+
+  const rewardGoldRatio = useMemo(() => {
+    const normalized =
+      (rewardMultiplier - 1) / Math.max(0.00001, MAX_DIFFICULTY_REWARD_BONUS);
+    return Math.min(1, Math.max(0, normalized));
+  }, [rewardMultiplier]);
+
+  const rewardGoldLineStyle = useMemo<CSSProperties>(() => {
+    return {
+      borderColor: `rgba(251,191,36,${(0.28 + rewardGoldRatio * 0.36).toFixed(3)})`,
+      backgroundColor: `rgba(245,158,11,${(0.1 + rewardGoldRatio * 0.18).toFixed(3)})`,
+      color: `rgba(255,248,220,${(0.88 + rewardGoldRatio * 0.12).toFixed(3)})`,
+      boxShadow: `0 0 24px rgba(251,191,36,${(0.14 + rewardGoldRatio * 0.36).toFixed(3)})`,
+    };
+  }, [rewardGoldRatio]);
+
+  const rewardGoldLineActiveStyle = useMemo<CSSProperties>(() => {
+    return {
+      borderColor: `rgba(252,211,77,${(0.45 + rewardGoldRatio * 0.42).toFixed(3)})`,
+      backgroundColor: `rgba(245,158,11,${(0.2 + rewardGoldRatio * 0.24).toFixed(3)})`,
+      color: "rgba(255,251,235,0.98)",
+      boxShadow: `0 0 30px rgba(251,191,36,${(0.24 + rewardGoldRatio * 0.44).toFixed(3)})`,
+    };
+  }, [rewardGoldRatio]);
+
+  const rewardGoldPillStyle = useMemo<CSSProperties>(() => {
+    return {
+      backgroundColor: `rgba(234,179,8,${(0.2 + rewardGoldRatio * 0.26).toFixed(3)})`,
+      color: "rgba(255,251,235,0.98)",
+      boxShadow: `0 0 16px rgba(251,191,36,${(0.16 + rewardGoldRatio * 0.3).toFixed(3)})`,
+    };
+  }, [rewardGoldRatio]);
+
+  const rewardGoldPillActiveStyle = useMemo<CSSProperties>(() => {
+    return {
+      backgroundColor: `rgba(250,204,21,${(0.3 + rewardGoldRatio * 0.34).toFixed(3)})`,
+      color: "rgba(255,255,255,0.98)",
+      boxShadow: `0 0 20px rgba(252,211,77,${(0.24 + rewardGoldRatio * 0.36).toFixed(3)})`,
+    };
+  }, [rewardGoldRatio]);
 
   const difficultyShellStyle = useMemo<CSSProperties>(() => {
     const upperRed = 0.05 + difficultyHeatRatio * 0.22;
@@ -473,7 +537,11 @@ export default function MochiGeneralBattleClient({
     setRewardClaimStatus("idle");
     setRewardClaimMessage("");
     setObtainedSnackRewards(createEmptySurgeSnackRewards());
+    setObtainedSnackBaseRewards(createEmptySurgeSnackRewards());
+    setObtainedSnackMultiplierBonusRewards(createEmptySurgeSnackRewards());
     setWinBonusRewards(createEmptySurgeSnackRewards());
+    setWinBonusBaseRewards(createEmptySurgeSnackRewards());
+    setWinBonusMultiplierBonusRewards(createEmptySurgeSnackRewards());
     setRevealedObtainedLines(0);
     setRevealedWinBonusLines(0);
     setObtainedAnimatedCounts({});
@@ -551,9 +619,25 @@ export default function MochiGeneralBattleClient({
           ...createEmptySurgeSnackRewards(),
           ...(data.obtainedSnack ?? {}),
         });
+        const obtainedSnackBase = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.obtainedSnackBase ?? data.obtainedSnack ?? {}),
+        });
+        const obtainedSnackMultiplierBonus = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.obtainedSnackMultiplierBonus ?? {}),
+        });
         const winBonus = cloneRewards({
           ...createEmptySurgeSnackRewards(),
           ...(data.winBonus ?? {}),
+        });
+        const winBonusBase = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.winBonusBase ?? data.winBonus ?? {}),
+        });
+        const winBonusMultiplierBonus = cloneRewards({
+          ...createEmptySurgeSnackRewards(),
+          ...(data.winBonusMultiplierBonus ?? {}),
         });
         const grantedCount = SURGE_SNACK_KEYS.reduce(
           (total, key) => total + granted[key],
@@ -574,7 +658,11 @@ export default function MochiGeneralBattleClient({
             ? Math.max(0, Math.floor(normalizedPackCountRaw))
             : fallbackPackCount;
         setObtainedSnackRewards(obtainedSnack);
+        setObtainedSnackBaseRewards(obtainedSnackBase);
+        setObtainedSnackMultiplierBonusRewards(obtainedSnackMultiplierBonus);
         setWinBonusRewards(winBonus);
+        setWinBonusBaseRewards(winBonusBase);
+        setWinBonusMultiplierBonusRewards(winBonusMultiplierBonus);
         setRewardScoreStep(normalizedScoreStep);
         setRewardPackTarget(normalizedPackCount);
         setRewardClaimStatus("claimed");
@@ -648,54 +736,65 @@ export default function MochiGeneralBattleClient({
 
     if (!isSettlementVisible || rewardClaimStatus !== "claimed") return;
 
-    const scheduleRewardLineAnimation = (startDelayMs: number) => {
-      obtainedSnackEntries.forEach((entry, index) => {
+    const animateRewardEntries = (
+      entries: RewardEntry[],
+      baseRewards: SurgeSnackRewards,
+      multiplierBonusRewards: SurgeSnackRewards,
+      setRevealedLines: Dispatch<SetStateAction<number>>,
+      setAnimatedCounts: Dispatch<SetStateAction<Record<string, number>>>,
+      startDelayMs: number
+    ) => {
+      entries.forEach((entry, index) => {
         const revealTimer = window.setTimeout(() => {
-          setRevealedObtainedLines((prev) => Math.max(prev, index + 1));
-          if (entry.count <= 1) {
-            setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
-            return;
-          }
-          let currentCount = 1;
-          setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
+          const baseCount = Math.max(0, Math.floor(baseRewards[entry.key] ?? 0));
+          const multiplierBonusCount = Math.max(
+            0,
+            Math.floor(multiplierBonusRewards[entry.key] ?? 0)
+          );
+          setRevealedLines((prev) => Math.max(prev, index + 1));
+          setAnimatedCounts((prev) => ({ ...prev, [entry.key]: baseCount }));
+          if (multiplierBonusCount <= 0) return;
+
+          let appliedBonus = 0;
           const countTimer = window.setInterval(() => {
-            currentCount += 1;
-            if (currentCount >= entry.count) {
-              currentCount = entry.count;
+            appliedBonus += 1;
+            if (appliedBonus >= multiplierBonusCount) {
+              appliedBonus = multiplierBonusCount;
               window.clearInterval(countTimer);
             }
-            setObtainedAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
+            setAnimatedCounts((prev) => ({
+              ...prev,
+              [entry.key]: baseCount + appliedBonus,
+            }));
           }, REWARD_COUNT_STEP_MS);
           rewardAnimationTimersRef.current.push(countTimer);
         }, startDelayMs + index * REWARD_LINE_STAGGER_MS);
         rewardAnimationTimersRef.current.push(revealTimer);
       });
+    };
+
+    const scheduleRewardLineAnimation = (startDelayMs: number) => {
+      animateRewardEntries(
+        obtainedSnackEntries,
+        obtainedSnackBaseRewards,
+        obtainedSnackMultiplierBonusRewards,
+        setRevealedObtainedLines,
+        setObtainedAnimatedCounts,
+        startDelayMs
+      );
 
       const winStartDelay =
         startDelayMs +
         Math.max(1, obtainedSnackEntries.length) * REWARD_LINE_STAGGER_MS +
         220;
-      winBonusEntries.forEach((entry, index) => {
-        const revealTimer = window.setTimeout(() => {
-          setRevealedWinBonusLines((prev) => Math.max(prev, index + 1));
-          if (entry.count <= 1) {
-            setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: entry.count }));
-            return;
-          }
-          let currentCount = 1;
-          setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-          const countTimer = window.setInterval(() => {
-            currentCount += 1;
-            if (currentCount >= entry.count) {
-              currentCount = entry.count;
-              window.clearInterval(countTimer);
-            }
-            setWinBonusAnimatedCounts((prev) => ({ ...prev, [entry.key]: currentCount }));
-          }, REWARD_COUNT_STEP_MS);
-          rewardAnimationTimersRef.current.push(countTimer);
-        }, winStartDelay + index * REWARD_LINE_STAGGER_MS);
-        rewardAnimationTimersRef.current.push(revealTimer);
-      });
+      animateRewardEntries(
+        winBonusEntries,
+        winBonusBaseRewards,
+        winBonusMultiplierBonusRewards,
+        setRevealedWinBonusLines,
+        setWinBonusAnimatedCounts,
+        winStartDelay
+      );
     };
 
     if (resolvedRewardPackTarget <= 0) {
@@ -733,7 +832,11 @@ export default function MochiGeneralBattleClient({
     isSettlementVisible,
     rewardClaimStatus,
     obtainedSnackEntries,
+    obtainedSnackBaseRewards,
+    obtainedSnackMultiplierBonusRewards,
     winBonusEntries,
+    winBonusBaseRewards,
+    winBonusMultiplierBonusRewards,
     resolvedRewardPackTarget,
   ]);
 
@@ -780,7 +883,7 @@ export default function MochiGeneralBattleClient({
           <>
             {shouldRenderBattleSection ? (
               <section
-                className={`mt-2 grid min-h-[calc(100vh-150px)] w-full items-stretch gap-3 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
+                className={`mt-2 grid min-h-[calc(100dvh-150px)] w-full items-stretch gap-3 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
                   surgeState.gameEnded
                     ? "pointer-events-none opacity-0 blur-[8px] scale-[0.985]"
                     : "opacity-100 blur-0 scale-100"
@@ -862,7 +965,7 @@ export default function MochiGeneralBattleClient({
                     onSceneStateChange={handleSceneStateChange}
                     maxPixelRatio={1.25}
                     antialias={false}
-                    className="h-[calc(100vh-150px)] min-h-[700px] w-full max-w-none overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
+                    className="h-[calc(100dvh-150px)] min-h-[700px] w-full max-w-none overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1119] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
                   />
                 </div>
 
@@ -1049,6 +1152,9 @@ export default function MochiGeneralBattleClient({
                       <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                         Converted Rewards
                       </p>
+                      <p className="mt-2 text-xs text-slate-300">
+                        Base x1.00 first, then multiplier x{rewardMultiplier.toFixed(2)} adds bonus one by one.
+                      </p>
                       {rewardClaimStatus === "claiming" ? (
                         <p className="mt-3 text-sm text-slate-300">Calculating...</p>
                       ) : obtainedSnackEntries.length === 0 ? (
@@ -1056,24 +1162,52 @@ export default function MochiGeneralBattleClient({
                       ) : (
                         <ul className="mt-3 space-y-2 text-sm md:text-base">
                           {obtainedSnackEntries.slice(0, revealedObtainedLines).map((entry) => {
-                            const shownCount = obtainedAnimatedCounts[entry.key] ?? 1;
-                            const isCounting = shownCount < entry.count;
+                            const baseCount = obtainedSnackBaseRewards[entry.key] ?? 0;
+                            const multiplierBonusCount =
+                              obtainedSnackMultiplierBonusRewards[entry.key] ?? 0;
+                            const shownCount = obtainedAnimatedCounts[entry.key] ?? baseCount;
+                            const isApplyingMultiplier =
+                              multiplierBonusCount > 0 && shownCount < entry.count;
+                            const hasMultiplierBonus =
+                              rewardMultiplier > 1 && multiplierBonusCount > 0;
                             return (
                               <li
                                 key={entry.key}
                                 className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition ${
-                                  isCounting
+                                  !hasMultiplierBonus && isApplyingMultiplier
                                     ? "border-cyan-300/45 bg-cyan-500/12 text-cyan-100 shadow-[0_0_22px_rgba(34,211,238,0.2)]"
                                     : "border-white/12 bg-white/[0.03] text-slate-100"
                                 }`}
+                                style={
+                                  hasMultiplierBonus
+                                    ? isApplyingMultiplier
+                                      ? rewardGoldLineActiveStyle
+                                      : rewardGoldLineStyle
+                                    : undefined
+                                }
                               >
-                                <span className="font-semibold">{entry.label}</span>
+                                <span className="font-semibold">
+                                  {entry.label}
+                                  {hasMultiplierBonus ? (
+                                    <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100/85">
+                                      base {baseCount} + bonus{" "}
+                                      {Math.max(0, shownCount - baseCount)}/{multiplierBonusCount}
+                                    </span>
+                                  ) : null}
+                                </span>
                                 <span
                                   className={`inline-flex min-w-[84px] items-center justify-center rounded-full px-3 py-1 text-sm font-bold tabular-nums ${
-                                    isCounting
+                                    !hasMultiplierBonus && isApplyingMultiplier
                                       ? "animate-pulse bg-cyan-300/25 text-cyan-100"
                                       : "bg-slate-100/12 text-slate-100"
                                   }`}
+                                  style={
+                                    hasMultiplierBonus
+                                      ? isApplyingMultiplier
+                                        ? rewardGoldPillActiveStyle
+                                        : rewardGoldPillStyle
+                                      : undefined
+                                  }
                                 >
                                   x {shownCount}
                                 </span>
