@@ -5,6 +5,7 @@ export default function MobileBlockedPage() {
         <h1 className="text-2xl font-semibold">Desktop Only</h1>
         <p className="mt-3 text-sm text-neutral-300">
           This site is currently available on desktop browsers only.
+          Mobile device is not playable.
         </p>
       </div>
     </main>

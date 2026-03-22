@@ -112,7 +112,6 @@ export default function MadaPreview() {
     const center = new THREE.Vector3();
     const sphere = new THREE.Sphere();
     let model: THREE.Object3D | null = null;
-    let mixer: THREE.AnimationMixer | null = null;
     let frame = 0;
     let cancelled = false;
     let framedRadius = 1.2;
@@ -130,10 +129,8 @@ export default function MadaPreview() {
 
     const animate = () => {
       const delta = clock.getDelta();
-      if (mixer) {
-        mixer.update(delta);
-      } else if (model) {
-        model.rotation.y += delta * 0.52;
+      if (model) {
+        model.rotation.y += delta * 0.42;
       }
       ring.rotation.z += delta * 0.9;
       renderer.render(scene, camera);
@@ -174,13 +171,6 @@ export default function MadaPreview() {
         framedRadius = Math.max(0.32, sphere.radius);
         frameCamera();
 
-        if (gltf.animations.length > 0) {
-          mixer = new THREE.AnimationMixer(model);
-          const action = mixer.clipAction(gltf.animations[0]);
-          action.reset();
-          action.play();
-        }
-
         scene.add(model);
       },
       undefined,
@@ -211,7 +201,6 @@ export default function MadaPreview() {
         scene.remove(model);
         disposeObjectResources(model);
       }
-      mixer?.stopAllAction();
       floor.geometry.dispose();
       if (Array.isArray(floor.material)) {
         floor.material.forEach((material) => material.dispose());

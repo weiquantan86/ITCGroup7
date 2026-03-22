@@ -5,7 +5,6 @@ export type MadaMode = "inactive" | "active" | "vanishing" | "vanished";
 export type MadaPresentationState = {
   mode: MadaMode;
   fadeAlpha: number;
-  bodyBlackout: boolean;
 };
 
 export type ResolveMadaPresentationStateArgs = {
@@ -14,7 +13,6 @@ export type ResolveMadaPresentationStateArgs = {
   containmentReleased: boolean;
   hasVanished: boolean;
   fadeAlpha?: number;
-  bodyBlackout?: boolean;
 };
 
 type MadaEyeMaterialState = {
@@ -69,13 +67,11 @@ export const resolveMadaPresentationState = ({
   containmentReleased,
   hasVanished,
   fadeAlpha = 1,
-  bodyBlackout = false,
 }: ResolveMadaPresentationStateArgs): MadaPresentationState => {
   if (hasVanished) {
     return {
       mode: "vanished",
       fadeAlpha: 0,
-      bodyBlackout: false,
     };
   }
 
@@ -84,30 +80,26 @@ export const resolveMadaPresentationState = ({
       return {
         mode: "inactive",
         fadeAlpha: 1,
-        bodyBlackout: false,
       };
     }
 
     const clampedFadeAlpha = clamp(fadeAlpha, 0, 1);
-    if (clampedFadeAlpha < 0.999 || bodyBlackout) {
+    if (clampedFadeAlpha < 0.999) {
       return {
         mode: "vanishing",
         fadeAlpha: clampedFadeAlpha,
-        bodyBlackout,
       };
     }
 
     return {
       mode: "active",
       fadeAlpha: 1,
-      bodyBlackout: false,
     };
   }
 
   return {
     mode: activated ? "active" : "inactive",
     fadeAlpha: 1,
-    bodyBlackout: false,
   };
 };
 
@@ -125,7 +117,6 @@ export const createMadaPresentationController = ({
   let currentState: MadaPresentationState = {
     mode: "inactive",
     fadeAlpha: 1,
-    bodyBlackout: false,
   };
 
   const isDescendantOfEyeNode = (object: THREE.Object3D) => {
@@ -222,7 +213,7 @@ export const createMadaPresentationController = ({
 
   const applyBodyState = (
     alpha: number,
-    bodyBlackout: boolean,
+    forcePureBlack: boolean,
     hitFlashActive: boolean
   ) => {
     const resolvedAlpha = clamp(alpha, 0, 1);
@@ -238,7 +229,7 @@ export const createMadaPresentationController = ({
       entry.material.transparent = nextTransparent;
       entry.material.depthWrite = nextDepthWrite;
       if (entry.baseColor && isColorMaterial(entry.material)) {
-        if (bodyBlackout) {
+        if (forcePureBlack) {
           entry.material.color.setRGB(0, 0, 0);
         } else if (hitFlashActive) {
           entry.material.color.copy(MADA_HIT_FLASH_COLOR);
@@ -247,7 +238,7 @@ export const createMadaPresentationController = ({
         }
       }
       if (entry.baseEmissive && isEmissiveMaterial(entry.material)) {
-        if (bodyBlackout) {
+        if (forcePureBlack) {
           entry.material.emissive.setRGB(0, 0, 0);
           entry.material.emissiveIntensity = 0;
         } else if (hitFlashActive) {
@@ -271,26 +262,26 @@ export const createMadaPresentationController = ({
     currentState = {
       mode: state.mode,
       fadeAlpha: clamp(state.fadeAlpha, 0, 1),
-      bodyBlackout: state.bodyBlackout,
     };
 
     let eyeAlpha = 0;
     let bodyAlpha = 1;
-    let bodyBlackout = false;
+    let forcePureBlack = false;
 
     if (currentState.mode === "active") {
       eyeAlpha = 1;
+    } else if (currentState.mode === "inactive") {
+      forcePureBlack = true;
     } else if (currentState.mode === "vanishing") {
       eyeAlpha = currentState.fadeAlpha;
       bodyAlpha = currentState.fadeAlpha;
-      bodyBlackout = currentState.bodyBlackout;
     } else if (currentState.mode === "vanished") {
       eyeAlpha = 0;
       bodyAlpha = 0;
     }
 
     applyEyeAlpha(eyeAlpha);
-    applyBodyState(bodyAlpha, bodyBlackout, performance.now() < hitFlashUntil);
+    applyBodyState(bodyAlpha, forcePureBlack, performance.now() < hitFlashUntil);
     rig.visible = eyeAlpha > 0.001 || bodyAlpha > 0.001;
   };
 

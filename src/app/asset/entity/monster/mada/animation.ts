@@ -12,11 +12,30 @@ type BoundNode = {
   restRotation: THREE.Euler;
 };
 
+const CRAWL_CLIP_NAME_PATTERN = /crawl/i;
+const REFERENCE_NAME_PATTERN = /reference|ref/i;
+const TARGET_REFERENCE_NAME_PATTERN = /target|hit|impact|grab|attack/i;
+
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
 const copyRotation = (rotation: THREE.Euler) =>
   new THREE.Euler(rotation.x, rotation.y, rotation.z, rotation.order);
+
+const resolveCrawlClip = (clips: THREE.AnimationClip[]) => {
+  const named = clips.find((candidate) =>
+    CRAWL_CLIP_NAME_PATTERN.test(candidate.name)
+  );
+  if (named) return named;
+  if (!clips.length) return null;
+  let fallback = clips[0];
+  for (let i = 1; i < clips.length; i += 1) {
+    if (clips[i].duration > fallback.duration) {
+      fallback = clips[i];
+    }
+  }
+  return fallback;
+};
 
 const createBoundNode = (object: THREE.Object3D | null): BoundNode | null =>
   object
@@ -52,8 +71,49 @@ export const createMadaAnimationController = ({
   let armLeftNode: BoundNode | null = null;
   let armRightNode: BoundNode | null = null;
   let headGroupNode: BoundNode | null = null;
+  let boundModel: THREE.Object3D | null = null;
+  let mixer: THREE.AnimationMixer | null = null;
+  let crawlAction: THREE.AnimationAction | null = null;
+  let crawlEnabled = false;
+  let grabReferenceNode: THREE.Object3D | null = null;
   const headLocalTarget = new THREE.Vector3();
   const headDelta = new THREE.Vector3();
+
+  const stopCrawl = () => {
+    if (!crawlAction) {
+      crawlEnabled = false;
+      return;
+    }
+    crawlAction.stop();
+    crawlAction.enabled = false;
+    crawlAction.time = 0;
+    crawlEnabled = false;
+  };
+
+  const clearClipBindings = () => {
+    stopCrawl();
+    if (mixer) {
+      mixer.stopAllAction();
+      mixer = null;
+    }
+    crawlAction = null;
+  };
+
+  const resolveGrabReferenceNode = (model: THREE.Object3D | null) => {
+    if (!model) return null;
+
+    const candidates: THREE.Object3D[] = [];
+    model.traverse((node) => {
+      if (!node.name || !REFERENCE_NAME_PATTERN.test(node.name)) return;
+      candidates.push(node);
+    });
+    if (!candidates.length) return null;
+
+    const targetedCandidate =
+      candidates.find((node) => TARGET_REFERENCE_NAME_PATTERN.test(node.name)) ??
+      null;
+    return targetedCandidate ?? candidates[0];
+  };
 
   const applyGrabAnimation = ({
     revealProgress = 0,
@@ -131,8 +191,53 @@ export const createMadaAnimationController = ({
     armLeftNode = createBoundNode(model?.getObjectByName("armLeft") ?? null);
     armRightNode = createBoundNode(model?.getObjectByName("armRight") ?? null);
     headGroupNode = createBoundNode(model?.getObjectByName("headGroup") ?? null);
+    boundModel = model;
+    clearClipBindings();
+    grabReferenceNode = resolveGrabReferenceNode(model);
     resetPose();
     applyHeadLook(null);
+  };
+
+  const bindAnimations = (clips: THREE.AnimationClip[] | null | undefined) => {
+    clearClipBindings();
+    if (!boundModel || !clips?.length) return;
+    const clip = resolveCrawlClip(clips);
+    if (!clip) return;
+    mixer = new THREE.AnimationMixer(boundModel);
+    crawlAction = mixer.clipAction(clip);
+    crawlAction.loop = THREE.LoopOnce;
+    crawlAction.clampWhenFinished = true;
+    crawlAction.repetitions = 1;
+    crawlAction.enabled = false;
+  };
+
+  const setCrawlEnabled = (enabled: boolean) => {
+    if (!crawlAction || !mixer) {
+      crawlEnabled = false;
+      return;
+    }
+
+    if (enabled) {
+      if (!crawlEnabled) {
+        crawlAction.reset();
+        crawlAction.enabled = true;
+        crawlAction.setEffectiveWeight(1);
+        crawlAction.setEffectiveTimeScale(1);
+        crawlAction.play();
+      }
+      crawlEnabled = true;
+      return;
+    }
+
+    if (crawlEnabled) {
+      stopCrawl();
+    }
+  };
+
+  const update = (delta: number) => {
+    if (!mixer || !crawlEnabled) return;
+    if (!Number.isFinite(delta) || delta <= 0) return;
+    mixer.update(delta);
   };
 
   const getRightClawWorldPosition = (target: THREE.Vector3) => {
@@ -145,13 +250,23 @@ export const createMadaAnimationController = ({
     return rig.localToWorld(target.set(0.78, 3, 0.42));
   };
 
+  const getGrabReferenceWorldPosition = (target: THREE.Vector3) => {
+    if (!grabReferenceNode) return false;
+    grabReferenceNode.getWorldPosition(target);
+    return true;
+  };
+
   bindModel(null);
 
   return {
     bindModel,
+    bindAnimations,
     applyGrabAnimation,
     resetPose,
     applyHeadLook,
+    setCrawlEnabled,
+    update,
     getRightClawWorldPosition,
+    getGrabReferenceWorldPosition,
   };
 };

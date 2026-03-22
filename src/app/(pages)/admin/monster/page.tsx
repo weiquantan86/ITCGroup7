@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import { adminAccessCookieName, hasAdminAccess } from "@/app/admin/adminAuth";
+import { isDirectGlbMonster } from "@/app/asset/entity/monster/general/directGlbMonsters";
 import AdminMonsterClient from "./AdminMonsterClient";
 
 type MonsterRow = {
@@ -55,6 +56,10 @@ const regenerateMonsterGlbs = async (): Promise<MonsterGenerationSummary> => {
 
   const monsterDirectories = await listDirectoryNames(sourceRoot);
   for (const monsterId of monsterDirectories) {
+    if (isDirectGlbMonster(monsterId)) {
+      continue;
+    }
+
     const monsterDirPath = path.join(sourceRoot, monsterId);
     let entries;
     try {
