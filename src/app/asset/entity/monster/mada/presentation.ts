@@ -9,8 +9,8 @@ export type MadaPresentationState = {
 
 export type ResolveMadaPresentationStateArgs = {
   activated: boolean;
-  breachSequenceStarted: boolean;
-  containmentReleased: boolean;
+  transitionActive: boolean;
+  released: boolean;
   hasVanished: boolean;
   fadeAlpha?: number;
 };
@@ -63,8 +63,8 @@ const isEmissiveMaterial = (
 
 export const resolveMadaPresentationState = ({
   activated,
-  breachSequenceStarted,
-  containmentReleased,
+  transitionActive,
+  released,
   hasVanished,
   fadeAlpha = 1,
 }: ResolveMadaPresentationStateArgs): MadaPresentationState => {
@@ -75,8 +75,8 @@ export const resolveMadaPresentationState = ({
     };
   }
 
-  if (breachSequenceStarted) {
-    if (!containmentReleased) {
+  if (transitionActive) {
+    if (!released) {
       return {
         mode: "inactive",
         fadeAlpha: 1,

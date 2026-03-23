@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
   PlayerAttackTarget,
   PlayerWorld,
@@ -16,10 +15,9 @@ import {
   type MadaLabState,
 } from "./labConfig";
 import {
-  createMadaPresentationController,
-  resolveMadaPresentationState,
-} from "../../../asset/entity/monster/mada/presentation";
-import { createMadaAnimationController } from "../../../asset/entity/monster/mada/animation";
+  createMadaLabCombatController,
+  MADA_LAB_MAX_HEALTH,
+} from "./madaLabCombatController";
 
 type BoxCollider = {
   minX: number;
@@ -36,12 +34,9 @@ type ActivationRemovableObstacle = {
 
 const GROUND_Y = -1.4;
 const MADA_GROUND_Y = GROUND_Y;
-const MADA_GRAVITY = -28;
-const MADA_MAX_FALL_SPEED = -48;
 const ROOM_WIDTH = 92;
 const ROOM_DEPTH = 70;
 const ROOM_HEIGHT = 18;
-const MADA_MAX_HEALTH = 2800;
 const UI_EMIT_INTERVAL_MS = 140;
 const BREACH_INTRO_SMOKE_DURATION_MS = 900;
 const BREACH_LOOK_LEFT_DURATION_MS = 700;
@@ -92,17 +87,6 @@ const AMBUSH_GRAB_WINDUP_DURATION_MS = 360;
 const AMBUSH_GRAB_STRIKE_DURATION_MS = 220;
 const AMBUSH_GRAB_RECOVER_DURATION_MS = 460;
 const AMBUSH_GRAB_DAMAGE = 24;
-const MADA_SKILL1_WINDUP_DURATION_MS = 560;
-const MADA_SKILL1_STRIKE_DURATION_MS = 260;
-const MADA_SKILL1_RECOVER_DURATION_MS = 540;
-const MADA_SKILL1_DURATION_MS =
-  MADA_SKILL1_WINDUP_DURATION_MS +
-  MADA_SKILL1_STRIKE_DURATION_MS +
-  MADA_SKILL1_RECOVER_DURATION_MS;
-const MADA_SKILL1_COOLDOWN_MS = 3200;
-const MADA_SKILL1_TRIGGER_RANGE = 11.5;
-const MADA_SKILL1_DAMAGE_RANGE = 6.5;
-const MADA_SKILL1_DAMAGE = 22;
 const AMBUSH_WALK_START_MS = BREACH_SEQUENCE_DURATION_MS;
 const AMBUSH_WALK_END_MS = AMBUSH_WALK_START_MS + AMBUSH_WALK_DURATION_MS;
 const AMBUSH_LOOK_START_MS = AMBUSH_WALK_END_MS;
@@ -146,40 +130,6 @@ const lerpAngle = (start: number, end: number, value: number) => {
   const delta =
     THREE.MathUtils.euclideanModulo(end - start + Math.PI, Math.PI * 2) - Math.PI;
   return start + delta * t;
-};
-
-const faceObjectTowardTargetOnYaw = (
-  object: THREE.Object3D,
-  target: THREE.Vector3
-) => {
-  const deltaX = target.x - object.position.x;
-  const deltaZ = target.z - object.position.z;
-  if (Math.abs(deltaX) < 0.0001 && Math.abs(deltaZ) < 0.0001) {
-    object.rotation.set(0, 0, 0);
-    return;
-  }
-  object.rotation.set(0, Math.atan2(deltaX, deltaZ), 0);
-};
-
-const resolveRenderableBounds = (object: THREE.Object3D) => {
-  const bounds = new THREE.Box3();
-  const meshBounds = new THREE.Box3();
-  let hasMesh = false;
-  object.traverse((child) => {
-    const mesh = child as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    meshBounds.setFromObject(mesh);
-    if (!hasMesh) {
-      bounds.copy(meshBounds);
-      hasMesh = true;
-    } else {
-      bounds.union(meshBounds);
-    }
-  });
-  if (!hasMesh) {
-    bounds.setFromObject(object);
-  }
-  return bounds;
 };
 
 const createPuddleGeometry = (radiusX: number, radiusZ: number, phase: number) => {
@@ -242,8 +192,6 @@ export const createMadaLabScene = (
   const activationRemovableObstacles: ActivationRemovableObstacle[] = [];
   const animators: Array<(now: number, delta: number) => void> = [];
 
-  let madaHealth = MADA_MAX_HEALTH;
-  let madaActivated = false;
   let terminalInRange = false;
   let terminalDestroyed = false;
   let breachSequenceStarted = false;
@@ -265,11 +213,8 @@ export const createMadaLabScene = (
   let storyModeActive = false;
   let madaHasVanished = false;
   let formalBattleStarted = false;
-  let madaVerticalVelocity = 0;
   let madaGrabDamageApplied = false;
-  let madaSkill1StartedAt = -1;
-  let madaSkill1NextAvailableAt = 0;
-  let madaSkill1DamageApplied = false;
+  let madaCombat!: ReturnType<typeof createMadaLabCombatController>;
   const frontWallDepth = 1.4;
   const frontWallZ = bounds.maxZ + 0.8;
   const tunnelWidth = 8.8;
@@ -554,63 +499,6 @@ export const createMadaLabScene = (
     };
   };
 
-  const getMadaSkill1State = (now: number) => {
-    if (madaSkill1StartedAt < 0) {
-      return {
-        active: false,
-        elapsedMs: 0,
-        windupProgress: 0,
-        strikeProgress: 0,
-        recoverProgress: 0,
-        isWindupPhase: false,
-        isStrikePhase: false,
-        isRecoverPhase: false,
-      };
-    }
-
-    const elapsedMs = Math.max(0, now - madaSkill1StartedAt);
-    if (elapsedMs >= MADA_SKILL1_DURATION_MS) {
-      return {
-        active: false,
-        elapsedMs,
-        windupProgress: 1,
-        strikeProgress: 1,
-        recoverProgress: 1,
-        isWindupPhase: false,
-        isStrikePhase: false,
-        isRecoverPhase: false,
-      };
-    }
-
-    return {
-      active: true,
-      elapsedMs,
-      windupProgress: easeInOut(
-        inverseLerp(0, MADA_SKILL1_WINDUP_DURATION_MS, elapsedMs)
-      ),
-      strikeProgress: easeInOut(
-        inverseLerp(
-          MADA_SKILL1_WINDUP_DURATION_MS,
-          MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS,
-          elapsedMs
-        )
-      ),
-      recoverProgress: easeInOut(
-        inverseLerp(
-          MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS,
-          MADA_SKILL1_DURATION_MS,
-          elapsedMs
-        )
-      ),
-      isWindupPhase: elapsedMs < MADA_SKILL1_WINDUP_DURATION_MS,
-      isStrikePhase:
-        elapsedMs >= MADA_SKILL1_WINDUP_DURATION_MS &&
-        elapsedMs < MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS,
-      isRecoverPhase:
-        elapsedMs >= MADA_SKILL1_WINDUP_DURATION_MS + MADA_SKILL1_STRIKE_DURATION_MS,
-    };
-  };
-
   const resolveStoryPlayerPosition = (now: number, target: THREE.Vector3) => {
     if (!breachSequenceStarted) {
       return target.copy(playerWorldPosition);
@@ -710,14 +598,16 @@ export const createMadaLabScene = (
   const emitState = (force = false, now = performance.now()) => {
     if (!force && now < nextUiEmitAt) return;
     nextUiEmitAt = now + UI_EMIT_INTERVAL_MS;
+    const madaHealth = madaCombat?.getHealth() ?? MADA_LAB_MAX_HEALTH;
+    const madaActivated = madaCombat?.isActivated() ?? false;
     const containmentIntegrity = clamp(
-      Math.round((madaHealth / MADA_MAX_HEALTH) * 100),
+      Math.round((madaHealth / MADA_LAB_MAX_HEALTH) * 100),
       0,
       100
     );
     const nextState: MadaLabState = {
       madaHealth: Math.max(0, Math.floor(madaHealth)),
-      madaMaxHealth: MADA_MAX_HEALTH,
+      madaMaxHealth: MADA_LAB_MAX_HEALTH,
       containmentIntegrity,
       electricActivity: clamp(Math.round(electricActivity), 0, 100),
       fluidPatches: fluidPatchCount,
@@ -1727,41 +1617,20 @@ export const createMadaLabScene = (
       storyTimeline.reappearProgress <= 0.001 &&
       !storyTimeline.isSequenceComplete;
 
-    if (formalBattleStarted) {
-      madaPresentation.applyState({
-        mode: "active",
-        fadeAlpha: 1,
-      });
-    } else if (storyTimeline.isInitialBreachActive) {
-      const madaFadeAlpha =
-        breachSequenceStarted && breachTimeline.elapsedMs >= BREACH_FADE_START_MS
-          ? 1 - breachTimeline.fadeProgress
-          : 1;
-      madaPresentation.applyState(
-        resolveMadaPresentationState({
-          activated: madaActivated,
-          breachSequenceStarted,
-          containmentReleased,
-          hasVanished: false,
-          fadeAlpha: madaFadeAlpha,
-        })
-      );
-    } else if (storyTimeline.isSequenceComplete) {
-      madaPresentation.applyState({
-        mode: "active",
-        fadeAlpha: 1,
-      });
-    } else if (storyTimeline.reappearProgress > 0.001) {
-      madaPresentation.applyState({
-        mode: storyTimeline.reappearProgress >= 0.999 ? "active" : "vanishing",
-        fadeAlpha: storyTimeline.reappearProgress,
-      });
-    } else {
-      madaPresentation.applyState({
-        mode: "vanished",
-        fadeAlpha: 0,
-      });
-    }
+    const madaFadeAlpha =
+      breachSequenceStarted && breachTimeline.elapsedMs >= BREACH_FADE_START_MS
+        ? 1 - breachTimeline.fadeProgress
+        : 1;
+    madaCombat?.updatePresentation({
+      formalBattleStarted,
+      isInitialBreachActive: storyTimeline.isInitialBreachActive,
+      isSequenceComplete: storyTimeline.isSequenceComplete,
+      reappearProgress: storyTimeline.reappearProgress,
+      breachSequenceStarted,
+      containmentReleased,
+      hasVanished: madaHasVanished,
+      fadeAlpha: madaFadeAlpha,
+    });
 
     const introSmokeOpacity = breachTimeline.introSmokeOpacity;
     const bigSmokeOpacity = breachTimeline.bigSmokeOpacity;
@@ -1878,60 +1747,27 @@ export const createMadaLabScene = (
   trackObject(chamber);
   const chamberCollider = addCollider(0, -12, 11.2, 11.2, 0.85);
 
-  const madaRig = new THREE.Group();
-  madaRig.position.set(
-    0,
-    MADA_GROUND_Y + MADA_CONTAINMENT_BASE_LIFT + MADA_PRE_SMOKE_EXTRA_LIFT,
-    -12
-  );
-  const madaModelRoot = new THREE.Group();
-  madaRig.add(madaModelRoot);
-  labGroup.add(madaRig);
-  madaRig.rotation.y = 0;
-
-  const fallbackMaterial = new THREE.MeshStandardMaterial({
-    color: 0x352930,
-    roughness: 0.72,
-    metalness: 0.08,
+  madaCombat = createMadaLabCombatController({
+    labGroup,
+    attackTargets,
+    trackMesh,
+    trackObject,
+    disposeObjectResources,
+    spawnPosition: new THREE.Vector3(
+      0,
+      MADA_GROUND_Y + MADA_CONTAINMENT_BASE_LIFT + MADA_PRE_SMOKE_EXTRA_LIFT,
+      -12
+    ),
+    groundY: MADA_GROUND_Y,
+    containmentBaseLift: MADA_CONTAINMENT_BASE_LIFT,
+    preSmokeExtraLift: MADA_PRE_SMOKE_EXTRA_LIFT,
+    isCombatAvailable: () => !storyModeActive && !madaHasVanished,
+    onHealthChanged: (now) => {
+      shieldPulse = Math.min(1.4, shieldPulse + 0.55);
+      emitState(true, now);
+    },
   });
-  const fallbackBody = new THREE.Mesh(
-    new THREE.CapsuleGeometry(1.2, 2.6, 6, 12),
-    fallbackMaterial
-  );
-  fallbackBody.position.y = 2.5;
-  madaModelRoot.add(fallbackBody);
-  trackMesh(fallbackBody);
-  const madaPresentation = createMadaPresentationController({
-    rig: madaRig,
-    modelRoot: madaModelRoot,
-  });
-  const madaAnimation = createMadaAnimationController({
-    rig: madaRig,
-  });
-  const setMadaActivated = (active: boolean) => {
-    if (madaActivated === active) return;
-    madaActivated = active;
-  };
-
-  const resolveContainedIdleMadaY = (now: number) =>
-    MADA_GROUND_Y +
-    MADA_CONTAINMENT_BASE_LIFT +
-    MADA_PRE_SMOKE_EXTRA_LIFT +
-    Math.sin(now * 0.0012) * 0.08 +
-    shieldPulse * 0.05;
-
-  const applyMadaGravity = (delta: number) => {
-    if (!Number.isFinite(delta) || delta <= 0) return;
-    madaVerticalVelocity = Math.max(
-      MADA_MAX_FALL_SPEED,
-      madaVerticalVelocity + MADA_GRAVITY * delta
-    );
-    madaRig.position.y += madaVerticalVelocity * delta;
-    if (madaRig.position.y <= MADA_GROUND_Y) {
-      madaRig.position.y = MADA_GROUND_Y;
-      madaVerticalVelocity = 0;
-    }
-  };
+  const madaRig = madaCombat.rig;
 
   const configureBreachCutscene = (playerPosition: THREE.Vector3) => {
     breachCutscenePlayerPosition.copy(playerPosition);
@@ -1996,7 +1832,7 @@ export const createMadaLabScene = (
     chamberProjectileBlockingEnabled = false;
     setContainmentShellAlpha(0);
     chamberCollider.enabled = false;
-    setMadaActivated(true);
+    madaCombat?.setActivated(true);
     shieldPulse = Math.max(shieldPulse, 1.25);
     if (!breachAftermathSpawned) {
       breachAftermathSpawned = true;
@@ -2175,27 +2011,14 @@ export const createMadaLabScene = (
     storyModeActive = true;
     madaHasVanished = false;
     formalBattleStarted = false;
-    madaVerticalVelocity = 0;
     madaGrabDamageApplied = false;
-    madaSkill1StartedAt = -1;
-    madaSkill1NextAvailableAt = 0;
-    madaSkill1DamageApplied = false;
     chamber.visible = true;
     chamberProjectileBlockingEnabled = true;
     setContainmentShellAlpha(1);
     chamberCollider.enabled = true;
-    setMadaActivated(false);
+    madaCombat?.resetForContainmentBreach();
     shieldPulse = Math.max(shieldPulse, 0.9);
     configureBreachCutscene(playerPosition);
-    madaAnimation.resetPose();
-    madaPresentation.applyState(
-      resolveMadaPresentationState({
-        activated: false,
-        breachSequenceStarted: true,
-        containmentReleased: false,
-        hasVanished: false,
-      })
-    );
     emitState(true, now);
   };
 
@@ -2212,72 +2035,9 @@ export const createMadaLabScene = (
     );
   }
 
-  const loader = new GLTFLoader();
-  let isDisposed = false;
-  loader.load(
-    "/assets/monsters/mada/mada.glb",
-    (gltf) => {
-      if (!gltf?.scene) return;
-      if (isDisposed) {
-        disposeObjectResources(gltf.scene);
-        return;
-      }
-
-      const model = gltf.scene;
-      const modelBounds = resolveRenderableBounds(model);
-      const size = new THREE.Vector3();
-      const center = new THREE.Vector3();
-      modelBounds.getSize(size);
-      const targetHeight = 5.6;
-      const height = Math.max(0.001, size.y);
-      model.scale.setScalar(targetHeight / height);
-      model.updateMatrixWorld(true);
-
-      const normalizedBounds = resolveRenderableBounds(model);
-      normalizedBounds.getCenter(center);
-      model.position.set(-center.x, -normalizedBounds.min.y, -center.z);
-      model.updateMatrixWorld(true);
-
-      while (madaModelRoot.children.length > 0) {
-        madaModelRoot.remove(madaModelRoot.children[0]);
-      }
-      madaModelRoot.add(model);
-      madaPresentation.bindModel(model);
-      madaAnimation.bindModel(model);
-      madaAnimation.bindAnimations(gltf.animations ?? []);
-      trackObject(model);
-    },
-    undefined,
-    () => {}
-  );
-
-  const specimenFocus = new THREE.Vector3();
-  const madaHeadLookTarget = new THREE.Vector3();
   const madaGrabOrigin = new THREE.Vector3();
   const madaGrabTarget = new THREE.Vector3();
-  const madaGrabDirection = new THREE.Vector3();
-  const madaSkill1Direction = new THREE.Vector3();
-  const madaAttackTarget: PlayerAttackTarget = {
-    id: "madaSubject",
-    object: madaRig,
-    category: "boss",
-    label: "Mada Subject",
-    isActive: () =>
-      madaActivated && madaHealth > 0 && !storyModeActive && !madaHasVanished,
-    getHealth: () => madaHealth,
-    getMaxHealth: () => MADA_MAX_HEALTH,
-    onHit: (hit) => {
-      if (!madaActivated || madaHealth <= 0 || storyModeActive || madaHasVanished) {
-        return;
-      }
-      setMadaActivated(true);
-      madaPresentation.triggerHitFlash(hit.now);
-      madaHealth = Math.max(0, madaHealth - Math.max(1, Math.floor(hit.damage)));
-      shieldPulse = Math.min(1.4, shieldPulse + 0.55);
-      emitState(true, hit.now);
-    },
-  };
-  attackTargets.push(madaAttackTarget);
+  const ambushPlayerHitTarget = new THREE.Vector3();
 
   const worldTick = ({
     now,
@@ -2312,13 +2072,14 @@ export const createMadaLabScene = (
     const breachTimeline = storyTimeline.breachTimeline;
     const breachActive =
       breachSequenceStarted && (!madaHasVanished || storyTimeline.hasMadaReappeared);
+    const madaHealth = madaCombat.getHealth();
 
     electricActivity = breachActive
       ? 94 + (0.5 + 0.5 * Math.sin(now * 0.011)) * 6 + shieldPulse * 12
       : 60 +
         12 * (0.5 + 0.5 * Math.sin(now * 0.0024)) +
         shieldPulse * 20 +
-        (madaHealth <= MADA_MAX_HEALTH * 0.35 ? 8 : 0);
+        (madaHealth <= MADA_LAB_MAX_HEALTH * 0.35 ? 8 : 0);
 
     if (storyModeActive) {
       resolveStoryPlayerPosition(now, breachStoryPlayerPosition);
@@ -2329,83 +2090,32 @@ export const createMadaLabScene = (
 
     if (breachSequenceStarted && !formalBattleStarted) {
       resolveStoryMadaPosition(now, breachStoryMadaPosition);
-      madaRig.position.copy(breachStoryMadaPosition);
-      madaVerticalVelocity = 0;
-    } else if (!breachSequenceStarted && !madaActivated) {
-      madaRig.position.y = resolveContainedIdleMadaY(now);
-      madaVerticalVelocity = 0;
+      madaCombat.setStoryPosition(breachStoryMadaPosition);
+    } else if (!breachSequenceStarted && !madaCombat.isActivated()) {
+      madaCombat.setDormantHover(now, shieldPulse);
     } else {
-      applyMadaGravity(effectiveDelta);
-    }
-
-    let madaSkill1State = getMadaSkill1State(now);
-    if (
-      formalBattleStarted &&
-      madaActivated &&
-      madaHealth > 0 &&
-      !storyModeActive &&
-      !madaSkill1State.active &&
-      now >= madaSkill1NextAvailableAt
-    ) {
-      player.getWorldPosition(specimenFocus);
-      madaSkill1Direction
-        .copy(specimenFocus)
-        .sub(madaRig.position)
-        .setY(0);
-      if (madaSkill1Direction.length() <= MADA_SKILL1_TRIGGER_RANGE) {
-        madaSkill1StartedAt = now;
-        madaSkill1NextAvailableAt = now + MADA_SKILL1_COOLDOWN_MS;
-        madaSkill1DamageApplied = false;
-        madaSkill1State = getMadaSkill1State(now);
-      }
+      madaCombat.applyGravity(effectiveDelta);
     }
 
     const ambushCrawlActive =
       storyModeActive &&
       storyTimeline.hasMadaReappeared &&
       !storyTimeline.isSequenceComplete;
-    madaAnimation.setCrawlEnabled(ambushCrawlActive);
-
-    if (madaSkill1State.active) {
-      madaAnimation.applyGrabAnimation({
-        revealProgress: 1,
-        windupProgress: madaSkill1State.windupProgress,
-        strikeProgress: madaSkill1State.strikeProgress,
-        recoverProgress: madaSkill1State.recoverProgress,
-      });
-    } else if (!ambushCrawlActive) {
-      madaAnimation.resetPose();
-    }
-    madaAnimation.update(effectiveDelta);
-
-    if (madaHealth > 0 && (!madaHasVanished || storyTimeline.hasMadaReappeared)) {
-      if (breachSequenceStarted && !formalBattleStarted) {
-        if (containmentReleased && !storyTimeline.isSequenceComplete) {
-          faceObjectTowardTargetOnYaw(madaRig, breachStoryPlayerPosition);
-          madaHeadLookTarget.copy(breachStoryPlayerPosition);
-          madaHeadLookTarget.y += 1.45;
-        } else {
-          madaRig.rotation.y = 0;
-          madaHeadLookTarget.set(0, 0, 0);
-        }
-      } else if (madaActivated) {
-        player.getWorldPosition(specimenFocus);
-        faceObjectTowardTargetOnYaw(madaRig, specimenFocus);
-        madaHeadLookTarget.copy(specimenFocus);
-        madaHeadLookTarget.y += 1.45;
-      } else {
-        madaRig.rotation.y = 0;
-        madaHeadLookTarget.set(0, 0, 0);
-      }
-      madaAnimation.applyHeadLook(
-        madaHeadLookTarget.lengthSq() > 0.0001 ? madaHeadLookTarget : null
-      );
-    } else if (!madaHasVanished) {
-      madaRig.rotation.y += effectiveDelta * 0.35;
-      madaAnimation.applyHeadLook(null);
-    } else {
-      madaAnimation.applyHeadLook(null);
-    }
+    madaCombat.updateCombatBehavior({
+      now,
+      delta: effectiveDelta,
+      player,
+      applyDamage,
+      formalBattleStarted,
+      storyModeActive,
+      breachSequenceStarted,
+      containmentReleased,
+      storyHasMadaReappeared: storyTimeline.hasMadaReappeared,
+      storySequenceComplete: storyTimeline.isSequenceComplete,
+      storyPlayerPosition: breachStoryPlayerPosition,
+      ambushCrawlActive,
+      hasVanished: madaHasVanished,
+    });
 
     if (
       storyModeActive &&
@@ -2414,48 +2124,19 @@ export const createMadaLabScene = (
     ) {
       resolveStoryPlayerPosition(now, breachStoryPlayerPosition);
       madaRig.updateMatrixWorld(true);
-      madaAnimation.getRightClawWorldPosition(madaGrabOrigin);
+      madaCombat.getRightClawWorldPosition(madaGrabOrigin);
       const hasReferenceTarget =
-        madaAnimation.getGrabReferenceWorldPosition(madaGrabTarget);
-      specimenFocus.copy(breachStoryPlayerPosition);
-      specimenFocus.y += 1.25;
-      const clawToPlayerDistance = madaGrabOrigin.distanceTo(specimenFocus);
+        madaCombat.getGrabReferenceWorldPosition(madaGrabTarget);
+      ambushPlayerHitTarget.copy(breachStoryPlayerPosition);
+      ambushPlayerHitTarget.y += 1.25;
+      const clawToPlayerDistance = madaGrabOrigin.distanceTo(ambushPlayerHitTarget);
       const referenceToPlayerDistance = hasReferenceTarget
-        ? madaGrabTarget.distanceTo(specimenFocus)
+        ? madaGrabTarget.distanceTo(ambushPlayerHitTarget)
         : Infinity;
       if (clawToPlayerDistance <= 1.05 && referenceToPlayerDistance <= 0.8) {
         applyDamage(AMBUSH_GRAB_DAMAGE);
       }
       madaGrabDamageApplied = true;
-    }
-
-    if (
-      formalBattleStarted &&
-      madaSkill1State.active &&
-      !madaSkill1DamageApplied &&
-      madaSkill1State.elapsedMs >= MADA_SKILL1_WINDUP_DURATION_MS
-    ) {
-      player.getWorldPosition(madaGrabTarget);
-      madaGrabDirection.copy(madaGrabTarget).sub(madaRig.position).setY(0);
-      const horizontalDistance = madaGrabDirection.length();
-      if (horizontalDistance > 0.001) {
-        madaGrabDirection.normalize();
-        madaSkill1Direction
-          .set(Math.sin(madaRig.rotation.y), 0, Math.cos(madaRig.rotation.y))
-          .normalize();
-        if (
-          horizontalDistance <= MADA_SKILL1_DAMAGE_RANGE &&
-          madaSkill1Direction.dot(madaGrabDirection) >= 0.15
-        ) {
-          applyDamage(MADA_SKILL1_DAMAGE);
-        }
-      }
-      madaSkill1DamageApplied = true;
-    }
-
-    if (!madaSkill1State.active && madaSkill1StartedAt >= 0) {
-      madaSkill1StartedAt = -1;
-      madaSkill1DamageApplied = false;
     }
 
     if (
@@ -2466,10 +2147,7 @@ export const createMadaLabScene = (
       formalBattleStarted = true;
       storyModeActive = false;
       madaHasVanished = false;
-      madaSkill1StartedAt = -1;
-      madaSkill1NextAvailableAt = now + 700;
-      madaSkill1DamageApplied = false;
-      setMadaActivated(true);
+      madaCombat.beginFormalBattle(now);
       emitState(true, now);
     }
 
@@ -2518,7 +2196,6 @@ export const createMadaLabScene = (
   emitState(true);
 
   const dispose = () => {
-    isDisposed = true;
     if (typeof window !== "undefined") {
       window.removeEventListener(
         MADA_TERMINAL_UNLOCK_EVENT,
@@ -2528,6 +2205,7 @@ export const createMadaLabScene = (
     context?.onStateChange?.({});
     scene.remove(ambient);
     scene.remove(breachAlarmLight);
+    madaCombat.dispose();
     attackTargets.length = 0;
     scene.remove(labGroup);
     disposeTrackedResources();

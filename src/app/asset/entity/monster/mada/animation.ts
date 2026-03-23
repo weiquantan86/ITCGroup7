@@ -211,6 +211,25 @@ export const createMadaAnimationController = ({
     crawlAction.enabled = false;
   };
 
+  /**
+   * Force-restart the crawl animation from frame 0.
+   * Returns the clip duration in seconds (0 if no clip is bound).
+   */
+  const triggerCrawl = (): number => {
+    if (!crawlAction || !mixer) return 0;
+    crawlAction.stop();
+    crawlAction.reset();
+    crawlAction.enabled = true;
+    crawlAction.setEffectiveWeight(1);
+    crawlAction.setEffectiveTimeScale(1);
+    crawlAction.play();
+    crawlEnabled = true;
+    return crawlAction.getClip().duration;
+  };
+
+  const getCrawlDuration = (): number =>
+    crawlAction?.getClip().duration ?? 0;
+
   const setCrawlEnabled = (enabled: boolean) => {
     if (!crawlAction || !mixer) {
       crawlEnabled = false;
@@ -264,6 +283,8 @@ export const createMadaAnimationController = ({
     applyGrabAnimation,
     resetPose,
     applyHeadLook,
+    triggerCrawl,
+    getCrawlDuration,
     setCrawlEnabled,
     update,
     getRightClawWorldPosition,

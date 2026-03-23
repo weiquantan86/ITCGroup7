@@ -17,7 +17,19 @@ import {
   resolveMochiGeneralRig,
 } from "./combatBehavior";
 import { createMochiGeneralCombatRuntime } from "./combatRuntime";
-import { mochiGeneralProfile } from "./profile";
+const mochiGeneralProfile = {
+  id: "mochiGeneral",
+  label: "Mochi General",
+  pathToken: "/mochiGeneral/",
+  stats: {
+    health: 10000,
+    attack: 30,
+    defense: 0,
+    speed: 4.004,
+    aggroRange: 200,
+    attackRange: 2.2,
+  },
+};
 
 type EntranceSmokeParticle = {
   mesh: THREE.Mesh;
@@ -171,7 +183,7 @@ export const createMochiGeneralBossLifecycle = ({
   const resolvedDamageMultiplier = normalizePositiveMultiplier(damageMultiplier, 1);
   const resolvedDefenseRatio = normalizeDefenseRatio(defenseRatio);
   const resolvedTempoMultiplier = normalizePositiveMultiplier(tempoMultiplier, 1);
-  const baseStats = mochiGeneralProfile.stats ?? {};
+  const baseStats = mochiGeneralProfile.stats;
   const monsterProfile: MonsterProfile = {
     ...mochiGeneralProfile,
     stats: {

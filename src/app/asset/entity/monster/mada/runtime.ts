@@ -7,16 +7,29 @@ import type {
 import {
   createMadaPresentationController,
   type MadaPresentationState,
-} from "../mada/presentation";
-import { createMadaAnimationController } from "../mada/animation";
-import { normalizeModelToHeight, removeAttackTargetById } from "./runtimeUtils";
+} from "./presentation";
+import { createMadaAnimationController } from "./animation";
+import { createMadaCrawlEffect } from "./crawlEffect";
+import { normalizeModelToHeight, removeAttackTargetById } from "../unified/runtimeUtils";
 import type {
   UnifiedMonsterRuntime,
   UnifiedMonsterRuntimeHost,
   UnifiedMonsterState,
-} from "./types";
+} from "../unified/types";
 
 const MADA_MAX_HEALTH = 2800;
+const MADA_CRAWL_DETECTION_RANGE = 9;
+const MADA_CRAWL_COOLDOWN_MS = 5000;
+const MADA_CRAWL_DAMAGE = 35;
+const MADA_CRAWL_DAMAGE_RANGE = 6;
+// Fraction of the crawl clip that is windup (before strike starts)
+const MADA_CRAWL_WINDUP_RATIO = 0.28;
+// Fraction of the crawl clip that is the active strike window
+const MADA_CRAWL_STRIKE_RATIO = 0.44;
+// Minimum ms between successive VFX emits during the strike window
+const MADA_CRAWL_EMIT_INTERVAL_MS = 45;
+// Progress through the crawl animation at which damage is applied (mid-strike)
+const MADA_CRAWL_DAMAGE_RATIO = 0.55;
 const MADA_RESPAWN_DELAY_MS = 1800;
 const MADA_SKILL1_WINDUP_DURATION_MS = 560;
 const MADA_SKILL1_STRIKE_DURATION_MS = 260;
@@ -40,6 +53,7 @@ export const createMadaUnifiedRuntime = (
   host: UnifiedMonsterRuntimeHost
 ): UnifiedMonsterRuntime => {
   const {
+    scene,
     hostGroup,
     resourceTracker,
     spawnPosition,
@@ -102,6 +116,15 @@ export const createMadaUnifiedRuntime = (
     1,
     Math.floor(MADA_SKILL1_DAMAGE * damageMultiplier)
   );
+  const resolvedCrawlDamage = Math.max(
+    1,
+    Math.floor(MADA_CRAWL_DAMAGE * damageMultiplier)
+  );
+  const resolvedCrawlDamageRange = MADA_CRAWL_DAMAGE_RANGE * strikeRangeMultiplier;
+  const resolvedCrawlCooldownMs = Math.max(
+    800,
+    MADA_CRAWL_COOLDOWN_MS / tempoMultiplier
+  );
 
   const runtimeGroup = new THREE.Group();
   runtimeGroup.name = "unified-mada-runtime";
@@ -157,6 +180,15 @@ export const createMadaUnifiedRuntime = (
   let skillNextAvailableAt = performance.now() + 700 / tempoMultiplier;
   let skillDamageApplied = false;
 
+  // --- crawl skill state ---
+  let crawlStartedAt = -1;
+  let crawlDurationMs = 0;
+  let crawlNextAvailableAt = 0;
+  let crawlDamageApplied = false;
+  let crawlLastEmitAt = 0;
+
+  const crawlEffect = createMadaCrawlEffect(scene);
+
   const applyPresentationState = (state: MadaPresentationState) => {
     madaPresentation.applyState(state);
   };
@@ -169,6 +201,17 @@ export const createMadaUnifiedRuntime = (
     skillDamageApplied = false;
   };
 
+  const resetCrawlState = (now: number) => {
+    if (crawlStartedAt >= 0) {
+      madaAnimation.setCrawlEnabled(false);
+    }
+    crawlStartedAt = -1;
+    crawlDurationMs = 0;
+    crawlNextAvailableAt = now;
+    crawlDamageApplied = false;
+    crawlLastEmitAt = 0;
+  };
+
   const reset = (now: number) => {
     health = resolvedMaxHealth;
     respawnAt = 0;
@@ -176,6 +219,7 @@ export const createMadaUnifiedRuntime = (
     madaRig.position.copy(spawnPosition);
     madaRig.rotation.set(0, 0, 0);
     resetSkillState(now);
+    resetCrawlState(now);
     madaAnimation.resetPose();
     madaAnimation.applyHeadLook(null);
     applyPresentationState({ mode: "active", fadeAlpha: 1 });
@@ -186,6 +230,7 @@ export const createMadaUnifiedRuntime = (
     respawnAt = allowRespawn ? now + MADA_RESPAWN_DELAY_MS : 0;
     madaRig.visible = false;
     resetSkillState(now);
+    resetCrawlState(now);
     applyPresentationState({ mode: "vanished", fadeAlpha: 0 });
   };
 
@@ -292,6 +337,7 @@ export const createMadaUnifiedRuntime = (
   return {
     tick: ({ now, delta, player, applyDamage }: PlayerWorldTickArgs) => {
       if (health <= 0) {
+        crawlEffect.update(delta);
         if (allowRespawn && respawnAt > 0 && now >= respawnAt) {
           reset(now);
         }
@@ -301,6 +347,7 @@ export const createMadaUnifiedRuntime = (
         madaAnimation.resetPose();
         madaAnimation.applyHeadLook(null);
         madaAnimation.update(delta);
+        crawlEffect.update(delta);
         return;
       }
 
@@ -315,9 +362,41 @@ export const createMadaUnifiedRuntime = (
       madaAnimation.applyHeadLook(toTarget);
 
       const planarDistance = Math.hypot(dx, dz);
+
+      // ── crawl skill ──────────────────────────────────────────────────────
+      const crawlElapsedMs =
+        crawlStartedAt >= 0 ? now - crawlStartedAt : -1;
+      const crawlActive =
+        crawlElapsedMs >= 0 && crawlElapsedMs < crawlDurationMs;
+
+      // Auto-end crawl when its clip finishes
+      if (!crawlActive && crawlStartedAt >= 0) {
+        madaAnimation.setCrawlEnabled(false);
+        crawlStartedAt = -1;
+        crawlDamageApplied = false;
+      }
+
+      // Trigger crawl: player detected within range, cooldown expired
+      if (
+        !crawlActive &&
+        now >= crawlNextAvailableAt &&
+        planarDistance <= MADA_CRAWL_DETECTION_RANGE
+      ) {
+        const dur = madaAnimation.triggerCrawl();
+        if (dur > 0) {
+          crawlStartedAt = now;
+          crawlDurationMs = dur * 1000;
+          crawlNextAvailableAt = now + resolvedCrawlCooldownMs;
+          crawlDamageApplied = false;
+          crawlLastEmitAt = 0;
+        }
+      }
+
+      // ── grab skill (only when crawl is idle) ─────────────────────────────
       let skillState = resolveSkillState(now);
       if (
         !skillState.active &&
+        !crawlActive &&
         now >= skillNextAvailableAt &&
         planarDistance <= resolvedSkill1TriggerRange
       ) {
@@ -327,20 +406,26 @@ export const createMadaUnifiedRuntime = (
         skillState = resolveSkillState(now);
       }
 
-      if (skillState.active) {
+      // ── apply animations (mutually exclusive) ────────────────────────────
+      if (skillState.active && !crawlActive) {
         madaAnimation.applyGrabAnimation({
           revealProgress: 1,
           windupProgress: skillState.windupProgress,
           strikeProgress: skillState.strikeProgress,
           recoverProgress: skillState.recoverProgress,
         });
-      } else {
+      } else if (!crawlActive) {
+        // Neither skill active – return to rest pose
         madaAnimation.resetPose();
       }
+      // If crawlActive: the GLB mixer owns the skeleton, don't touch bones
+
       madaAnimation.update(delta);
 
+      // ── grab damage ───────────────────────────────────────────────────────
       if (
         skillState.active &&
+        !crawlActive &&
         !skillDamageApplied &&
         skillState.elapsedMs >= resolvedSkill1WindupDurationMs
       ) {
@@ -366,6 +451,53 @@ export const createMadaUnifiedRuntime = (
         skillStartedAt = -1;
         skillDamageApplied = false;
       }
+
+      // ── crawl VFX + damage ────────────────────────────────────────────────
+      if (crawlActive && crawlDurationMs > 0) {
+        const progress = crawlElapsedMs / crawlDurationMs;
+        const strikeStart = MADA_CRAWL_WINDUP_RATIO;
+        const strikeEnd = MADA_CRAWL_WINDUP_RATIO + MADA_CRAWL_STRIKE_RATIO;
+
+        if (progress >= strikeStart && progress < strikeEnd) {
+          // Force-update world matrices so bone positions reflect the current
+          // mixer frame before reading claw/reference positions.
+          madaRig.updateMatrixWorld(true);
+
+          // Emit slash/tear VFX from the right claw, throttled by interval
+          if (now - crawlLastEmitAt >= MADA_CRAWL_EMIT_INTERVAL_MS) {
+            const clawPos = new THREE.Vector3();
+            madaAnimation.getRightClawWorldPosition(clawPos);
+            // Swipe direction: forward + rightward bias (right-arm arc)
+            const angle = madaRig.rotation.y;
+            const swipeDir = new THREE.Vector3(
+              Math.sin(angle) + 0.45 * Math.cos(angle),
+              -0.15,
+              Math.cos(angle) - 0.45 * Math.sin(angle)
+            ).normalize();
+            crawlEffect.emit(clawPos, swipeDir);
+            crawlLastEmitAt = now;
+          }
+
+          // Damage once per crawl – delayed to mid-strike for better feel.
+          // Uses the reference bone world position as the hit-check origin.
+          if (!crawlDamageApplied && progress >= MADA_CRAWL_DAMAGE_RATIO) {
+            const refPos = new THREE.Vector3();
+            const checkPos = new THREE.Vector3();
+            if (madaAnimation.getGrabReferenceWorldPosition(refPos)) {
+              checkPos.copy(refPos);
+            } else {
+              madaAnimation.getRightClawWorldPosition(checkPos);
+            }
+            player.getWorldPosition(toTarget);
+            if (checkPos.distanceTo(toTarget) <= resolvedCrawlDamageRange) {
+              applyDamage(resolvedCrawlDamage);
+            }
+            crawlDamageApplied = true;
+          }
+        }
+      }
+
+      crawlEffect.update(delta);
     },
     reset,
     getState: (): UnifiedMonsterState => ({
@@ -378,6 +510,7 @@ export const createMadaUnifiedRuntime = (
     dispose: () => {
       isDisposed = true;
       removeAttackTargetById(attackTargets, attackTargetId);
+      crawlEffect.dispose();
       if (runtimeGroup.parent) {
         runtimeGroup.parent.remove(runtimeGroup);
       }

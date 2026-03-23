@@ -1,15 +1,15 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { PlayerWorldTickArgs } from "../../character/general/player";
-import { createMochiGeneralBossLifecycle } from "../mochiGeneral/lifecycle";
+import { createMochiGeneralBossLifecycle } from "./lifecycle";
 import { createMochiSoldierLifecycle } from "../mochiSoldier/lifecycle";
 import { normalizeMochiSoldierPrototype } from "../mochiSoldier/runtime";
-import { findBossHealthFromAttackTargets } from "./runtimeUtils";
+import { findBossHealthFromAttackTargets } from "../unified/runtimeUtils";
 import type {
   UnifiedMonsterRuntime,
   UnifiedMonsterRuntimeHost,
   UnifiedMonsterState,
-} from "./types";
+} from "../unified/types";
 
 const BOSS_RESPAWN_DELAY_MS = 1700;
 
