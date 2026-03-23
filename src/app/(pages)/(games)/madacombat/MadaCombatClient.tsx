@@ -26,13 +26,6 @@ const clampPercent = (value: number) => {
   return Math.max(0, Math.min(100, Math.round(value)));
 };
 
-const BATTLE_MULTIPLIER_OPTIONS = [
-  { value: 1, label: "x1.00" },
-  { value: 1.25, label: "x1.25" },
-  { value: 1.5, label: "x1.50" },
-  { value: 2, label: "x2.00" },
-] as const;
-
 function MadaEyeGlyph({ active }: { active: boolean }) {
   return (
     <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
@@ -107,9 +100,6 @@ export default function MadaCombatClient({
   selectedCharacter,
 }: MadaCombatClientProps) {
   const [labState, setLabState] = useState<MadaLabState>(createInitialMadaLabState());
-  const [battleMultiplier, setBattleMultiplier] = useState<
-    (typeof BATTLE_MULTIPLIER_OPTIONS)[number]["value"]
-  >(1);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [terminalCode, setTerminalCode] = useState("");
   const [terminalFeedback, setTerminalFeedback] = useState<"idle" | "error">("idle");
@@ -236,15 +226,9 @@ export default function MadaCombatClient({
     const { createMadaLabScene } = await import("./labSceneDefinition");
     return {
       id: "madaLab",
-      setupScene: (
-        scene: Parameters<typeof createMadaLabScene>[0],
-        context?: Parameters<typeof createMadaLabScene>[1]
-      ) =>
-        createMadaLabScene(scene, context, {
-          battleMultiplier,
-        }),
+      setupScene: createMadaLabScene,
     };
-  }, [battleMultiplier]);
+  }, []);
 
   const terminalDisplayChars = Array.from({ length: 4 }, (_, index) =>
     terminalCode[index] ?? "\u53e3"
@@ -263,25 +247,6 @@ export default function MadaCombatClient({
             <h1 className="text-center text-5xl font-black leading-none tracking-[1.01em] text-cyan-100 md:text-6xl">
               ???
             </h1>
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-              {BATTLE_MULTIPLIER_OPTIONS.map((option) => {
-                const selected = option.value === battleMultiplier;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setBattleMultiplier(option.value)}
-                    className={`rounded-full border px-4 py-2 text-xs font-semibold tracking-[0.16em] transition ${
-                      selected
-                        ? "border-rose-200/80 bg-rose-500/20 text-rose-100 shadow-[0_0_18px_rgba(251,113,133,0.28)]"
-                        : "border-cyan-200/25 bg-cyan-500/10 text-cyan-100 hover:border-cyan-200/45"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
           </div>
         </section>
 
