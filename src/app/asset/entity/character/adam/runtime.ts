@@ -2077,6 +2077,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
         scale: 12.24,
         damage: resolveEmpoweredBasicAttackDamage(speed),
         energyGainOnHit: 8,
+        manaGainOnHit: 2,
+        grantManaOnTargetHit: true,
         splitOnImpact: true,
         explosionRadius: 10.8,
         explosionDamage: baseDamage,
@@ -2088,6 +2090,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
         speed,
         lifetime,
         energyGainOnHit: 4,
+        manaGainOnHit: 2,
+        grantManaOnTargetHit: true,
       });
     }
     chargeState.releaseUntil = now + chargeConfig.releaseMs;
@@ -2420,4 +2424,3 @@ export const createRuntime: CharacterRuntimeFactory = ({
     isFacingLocked: baseRuntime.isFacingLocked,
   });
 };
-
