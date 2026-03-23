@@ -12,12 +12,17 @@ import type {
 import {
   MADA_LAB_STATE_KEY,
   MADA_TERMINAL_UNLOCK_EVENT,
+  type MadaTerminalUnlockDetail,
   type MadaLabState,
 } from "./labConfig";
 import {
   createMadaLabCombatController,
   MADA_LAB_MAX_HEALTH,
 } from "./madaLabCombatController";
+import {
+  MADA_AMBUSH_CRAWL_DAMAGE,
+  canApplyMadaAmbushCrawlDamage,
+} from "../../../asset/entity/monster/mada/skillCrawl";
 
 type BoxCollider = {
   minX: number;
@@ -86,7 +91,6 @@ const AMBUSH_PLAYER_RETREAT_DURATION_MS = 220;
 const AMBUSH_GRAB_WINDUP_DURATION_MS = 360;
 const AMBUSH_GRAB_STRIKE_DURATION_MS = 220;
 const AMBUSH_GRAB_RECOVER_DURATION_MS = 460;
-const AMBUSH_GRAB_DAMAGE = 24;
 const AMBUSH_WALK_START_MS = BREACH_SEQUENCE_DURATION_MS;
 const AMBUSH_WALK_END_MS = AMBUSH_WALK_START_MS + AMBUSH_WALK_DURATION_MS;
 const AMBUSH_LOOK_START_MS = AMBUSH_WALK_END_MS;
@@ -130,6 +134,12 @@ const lerpAngle = (start: number, end: number, value: number) => {
   const delta =
     THREE.MathUtils.euclideanModulo(end - start + Math.PI, Math.PI * 2) - Math.PI;
   return start + delta * t;
+};
+
+const normalizeMadaDamageMultiplier = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return parsed;
 };
 
 const createPuddleGeometry = (radiusX: number, radiusZ: number, phase: number) => {
@@ -214,6 +224,7 @@ export const createMadaLabScene = (
   let madaHasVanished = false;
   let formalBattleStarted = false;
   let madaGrabDamageApplied = false;
+  let madaDamageMultiplier = 1;
   let madaCombat!: ReturnType<typeof createMadaLabCombatController>;
   const frontWallDepth = 1.4;
   const frontWallZ = bounds.maxZ + 0.8;
@@ -2023,8 +2034,11 @@ export const createMadaLabScene = (
   };
 
   const handleTerminalUnlock = (event: Event) => {
-    const customEvent = event as CustomEvent<{ code?: string }>;
+    const customEvent = event as CustomEvent<MadaTerminalUnlockDetail>;
     if (customEvent.detail?.code !== "1986") return;
+    madaDamageMultiplier = normalizeMadaDamageMultiplier(
+      customEvent.detail?.madaDamageMultiplier
+    );
     destroyTerminal(performance.now());
   };
 
@@ -2129,12 +2143,15 @@ export const createMadaLabScene = (
         madaCombat.getGrabReferenceWorldPosition(madaGrabTarget);
       ambushPlayerHitTarget.copy(breachStoryPlayerPosition);
       ambushPlayerHitTarget.y += 1.25;
-      const clawToPlayerDistance = madaGrabOrigin.distanceTo(ambushPlayerHitTarget);
-      const referenceToPlayerDistance = hasReferenceTarget
-        ? madaGrabTarget.distanceTo(ambushPlayerHitTarget)
-        : Infinity;
-      if (clawToPlayerDistance <= 1.05 && referenceToPlayerDistance <= 0.8) {
-        applyDamage(AMBUSH_GRAB_DAMAGE);
+      if (
+        canApplyMadaAmbushCrawlDamage({
+          clawPosition: madaGrabOrigin,
+          referencePosition: madaGrabTarget,
+          hasReferencePosition: hasReferenceTarget,
+          targetPosition: ambushPlayerHitTarget,
+        })
+      ) {
+        applyDamage(MADA_AMBUSH_CRAWL_DAMAGE * madaDamageMultiplier);
       }
       madaGrabDamageApplied = true;
     }

@@ -1,6 +1,11 @@
 export const MADA_LAB_STATE_KEY = "madaLabState";
 export const MADA_TERMINAL_UNLOCK_EVENT = "madacombat:terminal-unlock";
 
+export type MadaTerminalUnlockDetail = {
+  code?: string;
+  madaDamageMultiplier?: number;
+};
+
 export type MadaLabState = {
   madaHealth: number;
   madaMaxHealth: number;

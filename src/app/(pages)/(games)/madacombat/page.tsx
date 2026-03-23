@@ -4,10 +4,18 @@ import pool from "../../../../database/client";
 import { characterProfiles } from "../../../asset/entity/character/general/player/registry";
 import MadaCombatClient from "./MadaCombatClient";
 
-type SelectedCharacter = {
+type SkillDetail = {
+  key: "q" | "e" | "r";
+  label: string;
+  description: string;
+};
+
+type GameCharacterOption = {
   id: string;
   label: string;
   path: string;
+  basicAttackDescription: string;
+  skills: SkillDetail[];
 };
 
 function ErrorState({ message }: { message: string }) {
@@ -33,21 +41,19 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-const buildCharacterPath = (characterId: string) => {
-  const profile = characterProfiles.find((entry) => entry.id === characterId);
-  if (!profile) return "";
-  return `/assets/characters${profile.pathToken}${profile.id}.glb`;
-};
-
-const buildSelectedCharacter = (characterId: string): SelectedCharacter | null => {
-  const profile = characterProfiles.find((entry) => entry.id === characterId);
-  if (!profile) return null;
-  return {
-    id: profile.id,
-    label: profile.label,
-    path: buildCharacterPath(profile.id),
-  };
-};
+const buildCharacterOption = (
+  profile: (typeof characterProfiles)[number]
+): GameCharacterOption => ({
+  id: profile.id,
+  label: profile.label,
+  path: `/assets/characters${profile.pathToken}${profile.id}.glb`,
+  basicAttackDescription: profile.kit?.basicAttack?.description || "No description.",
+  skills: (["q", "e", "r"] as const).map((key) => ({
+    key,
+    label: profile.kit?.skills?.[key]?.label || key.toUpperCase(),
+    description: profile.kit?.skills?.[key]?.description || "No description.",
+  })),
+});
 
 export default async function MadaCombatPage() {
   const cookieStore = await cookies();
@@ -73,9 +79,11 @@ export default async function MadaCombatPage() {
       [userId]
     );
     const ownedSet = new Set(rows.map((row) => row.id));
-    const fallbackCharacterId =
-      characterProfiles.find((profile) => ownedSet.has(profile.id))?.id ?? "";
-    if (!fallbackCharacterId) {
+    const characterOptions = characterProfiles
+      .filter((profile) => ownedSet.has(profile.id))
+      .map(buildCharacterOption);
+
+    if (characterOptions.length <= 0) {
       return (
         <ErrorState message="Load failed: no unlocked characters for this account." />
       );
@@ -83,15 +91,18 @@ export default async function MadaCombatPage() {
 
     const selectedCharacterIdFromCookie =
       cookieStore.get("selected_character_id")?.value?.toLowerCase() ?? "";
-    const selectedCharacterId = ownedSet.has(selectedCharacterIdFromCookie)
+    const initialCharacterId = characterOptions.some(
+      (option) => option.id === selectedCharacterIdFromCookie
+    )
       ? selectedCharacterIdFromCookie
-      : fallbackCharacterId;
-    const selectedCharacter = buildSelectedCharacter(selectedCharacterId);
-    if (!selectedCharacter?.path) {
-      return <ErrorState message="Load failed: selected character asset is missing." />;
-    }
+      : characterOptions[0].id;
 
-    return <MadaCombatClient selectedCharacter={selectedCharacter} />;
+    return (
+      <MadaCombatClient
+        characterOptions={characterOptions}
+        initialCharacterId={initialCharacterId}
+      />
+    );
   } catch (error) {
     console.error(error);
     return (

@@ -114,6 +114,7 @@ export const createMadaPresentationController = ({
   let eyeMaterials: MadaEyeMaterialState[] = [];
   let bodyMaterials: MadaBodyMaterialState[] = [];
   let hitFlashUntil = 0;
+  let hitFlashResetTimer: ReturnType<typeof setTimeout> | null = null;
   let currentState: MadaPresentationState = {
     mode: "inactive",
     fadeAlpha: 1,
@@ -258,7 +259,10 @@ export const createMadaPresentationController = ({
     }
   };
 
-  const applyState = (state: MadaPresentationState) => {
+  const applyState = (
+    state: MadaPresentationState,
+    now = performance.now()
+  ) => {
     currentState = {
       mode: state.mode,
       fadeAlpha: clamp(state.fadeAlpha, 0, 1),
@@ -280,9 +284,25 @@ export const createMadaPresentationController = ({
       bodyAlpha = 0;
     }
 
+    const hitFlashActive = now < hitFlashUntil;
     applyEyeAlpha(eyeAlpha);
-    applyBodyState(bodyAlpha, forcePureBlack, performance.now() < hitFlashUntil);
+    applyBodyState(bodyAlpha, forcePureBlack, hitFlashActive);
     rig.visible = eyeAlpha > 0.001 || bodyAlpha > 0.001;
+  };
+
+  const scheduleHitFlashReset = () => {
+    if (hitFlashResetTimer !== null) {
+      clearTimeout(hitFlashResetTimer);
+      hitFlashResetTimer = null;
+    }
+    const delayMs = Math.max(
+      0,
+      Math.ceil(hitFlashUntil - performance.now())
+    );
+    hitFlashResetTimer = setTimeout(() => {
+      hitFlashResetTimer = null;
+      applyState(currentState);
+    }, delayMs + 1);
   };
 
   const bindModel = (model: THREE.Object3D | null) => {
@@ -310,7 +330,8 @@ export const createMadaPresentationController = ({
     applyState,
     triggerHitFlash: (now = performance.now()) => {
       hitFlashUntil = now + MADA_HIT_FLASH_DURATION_MS;
-      applyState(currentState);
+      applyState(currentState, now);
+      scheduleHitFlashReset();
     },
     getState: () => currentState,
   };

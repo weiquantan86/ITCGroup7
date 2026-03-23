@@ -18,22 +18,8 @@ export const MADA_LAB_MAX_HEALTH = 2800;
 
 const MADA_GRAVITY = -28;
 const MADA_MAX_FALL_SPEED = -48;
-const MADA_SKILL1_WINDUP_DURATION_MS = 560;
-const MADA_SKILL1_STRIKE_DURATION_MS = 260;
-const MADA_SKILL1_RECOVER_DURATION_MS = 540;
-const MADA_SKILL1_DURATION_MS =
-  MADA_SKILL1_WINDUP_DURATION_MS +
-  MADA_SKILL1_STRIKE_DURATION_MS +
-  MADA_SKILL1_RECOVER_DURATION_MS;
-const MADA_SKILL1_COOLDOWN_MS = 3200;
-const MADA_SKILL1_TRIGGER_RANGE = 11.5;
-const MADA_SKILL1_DAMAGE_RANGE = 6.5;
-const MADA_SKILL1_DAMAGE = 22;
 const MADA_HEAD_LOOK_HEIGHT = 1.45;
 const MADA_ATTACK_TARGET_ID = "madaSubject";
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value));
 
 const faceObjectTowardTargetOnYaw = (
   object: THREE.Object3D,
@@ -46,14 +32,6 @@ const faceObjectTowardTargetOnYaw = (
     return;
   }
   object.rotation.set(0, Math.atan2(deltaX, deltaZ), 0);
-};
-
-type MadaLabSkill1State = {
-  active: boolean;
-  elapsedMs: number;
-  windupProgress: number;
-  strikeProgress: number;
-  recoverProgress: number;
 };
 
 export type MadaLabPresentationUpdateArgs = {
@@ -160,62 +138,13 @@ export const createMadaLabCombatController = ({
   let health = MADA_LAB_MAX_HEALTH;
   let activated = false;
   let verticalVelocity = 0;
-  let skill1StartedAt = -1;
-  let skill1NextAvailableAt = 0;
-  let skill1DamageApplied = false;
 
   const specimenFocus = new THREE.Vector3();
   const madaHeadLookTarget = new THREE.Vector3();
-  const madaGrabTarget = new THREE.Vector3();
-  const madaGrabDirection = new THREE.Vector3();
-  const madaSkill1Direction = new THREE.Vector3();
 
   const setActivated = (active: boolean) => {
     if (activated === active) return;
     activated = active;
-  };
-
-  const resolveSkill1State = (now: number): MadaLabSkill1State => {
-    if (skill1StartedAt < 0) {
-      return {
-        active: false,
-        elapsedMs: 0,
-        windupProgress: 0,
-        strikeProgress: 0,
-        recoverProgress: 0,
-      };
-    }
-
-    const elapsedMs = Math.max(0, now - skill1StartedAt);
-    if (elapsedMs >= MADA_SKILL1_DURATION_MS) {
-      return {
-        active: false,
-        elapsedMs,
-        windupProgress: 1,
-        strikeProgress: 1,
-        recoverProgress: 1,
-      };
-    }
-
-    return {
-      active: true,
-      elapsedMs,
-      windupProgress: clamp(elapsedMs / MADA_SKILL1_WINDUP_DURATION_MS, 0, 1),
-      strikeProgress: clamp(
-        (elapsedMs - MADA_SKILL1_WINDUP_DURATION_MS) /
-          MADA_SKILL1_STRIKE_DURATION_MS,
-        0,
-        1
-      ),
-      recoverProgress: clamp(
-        (elapsedMs -
-          MADA_SKILL1_WINDUP_DURATION_MS -
-          MADA_SKILL1_STRIKE_DURATION_MS) /
-          MADA_SKILL1_RECOVER_DURATION_MS,
-        0,
-        1
-      ),
-    };
   };
 
   const applyGravity = (delta: number) => {
@@ -249,9 +178,6 @@ export const createMadaLabCombatController = ({
   const resetForContainmentBreach = () => {
     setActivated(false);
     verticalVelocity = 0;
-    skill1StartedAt = -1;
-    skill1NextAvailableAt = 0;
-    skill1DamageApplied = false;
     madaAnimation.resetPose();
     madaPresentation.applyState(
       resolveMadaPresentationState({
@@ -264,9 +190,7 @@ export const createMadaLabCombatController = ({
   };
 
   const beginFormalBattle = (now: number) => {
-    skill1StartedAt = -1;
-    skill1NextAvailableAt = now + 700;
-    skill1DamageApplied = false;
+    void now;
     setActivated(true);
   };
 
@@ -332,12 +256,9 @@ export const createMadaLabCombatController = ({
   };
 
   const updateCombatBehavior = ({
-    now,
     delta,
     player,
-    applyDamage,
     formalBattleStarted,
-    storyModeActive,
     breachSequenceStarted,
     containmentReleased,
     storyHasMadaReappeared,
@@ -346,34 +267,8 @@ export const createMadaLabCombatController = ({
     ambushCrawlActive,
     hasVanished,
   }: MadaLabCombatUpdateArgs) => {
-    let skill1State = resolveSkill1State(now);
-    if (
-      formalBattleStarted &&
-      activated &&
-      health > 0 &&
-      !storyModeActive &&
-      !skill1State.active &&
-      now >= skill1NextAvailableAt
-    ) {
-      player.getWorldPosition(specimenFocus);
-      madaSkill1Direction.copy(specimenFocus).sub(madaRig.position).setY(0);
-      if (madaSkill1Direction.length() <= MADA_SKILL1_TRIGGER_RANGE) {
-        skill1StartedAt = now;
-        skill1NextAvailableAt = now + MADA_SKILL1_COOLDOWN_MS;
-        skill1DamageApplied = false;
-        skill1State = resolveSkill1State(now);
-      }
-    }
-
     madaAnimation.setCrawlEnabled(ambushCrawlActive);
-    if (skill1State.active) {
-      madaAnimation.applyGrabAnimation({
-        revealProgress: 1,
-        windupProgress: skill1State.windupProgress,
-        strikeProgress: skill1State.strikeProgress,
-        recoverProgress: skill1State.recoverProgress,
-      });
-    } else if (!ambushCrawlActive) {
+    if (!ambushCrawlActive) {
       madaAnimation.resetPose();
     }
     madaAnimation.update(delta);
@@ -407,34 +302,6 @@ export const createMadaLabCombatController = ({
       madaAnimation.applyHeadLook(null);
     }
 
-    if (
-      formalBattleStarted &&
-      skill1State.active &&
-      !skill1DamageApplied &&
-      skill1State.elapsedMs >= MADA_SKILL1_WINDUP_DURATION_MS
-    ) {
-      player.getWorldPosition(madaGrabTarget);
-      madaGrabDirection.copy(madaGrabTarget).sub(madaRig.position).setY(0);
-      const horizontalDistance = madaGrabDirection.length();
-      if (horizontalDistance > 0.001) {
-        madaGrabDirection.normalize();
-        madaSkill1Direction
-          .set(Math.sin(madaRig.rotation.y), 0, Math.cos(madaRig.rotation.y))
-          .normalize();
-        if (
-          horizontalDistance <= MADA_SKILL1_DAMAGE_RANGE &&
-          madaSkill1Direction.dot(madaGrabDirection) >= 0.15
-        ) {
-          applyDamage(MADA_SKILL1_DAMAGE);
-        }
-      }
-      skill1DamageApplied = true;
-    }
-
-    if (!skill1State.active && skill1StartedAt >= 0) {
-      skill1StartedAt = -1;
-      skill1DamageApplied = false;
-    }
   };
 
   const attackTarget: PlayerAttackTarget = {
