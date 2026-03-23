@@ -69,6 +69,15 @@ type ScoreDeltaFx = {
   lane: number;
 };
 
+type LockedMochiGeneralRunConfig = {
+  battleDifficultyConfig: MochiGeneralBattleDifficultyConfig;
+  rewardMultiplier: number;
+  bossDamageRate: number;
+  bossDefenseRate: number;
+  bossSpeedRate: number;
+  bossTempoMultiplier: number;
+};
+
 const REWARD_LINE_STAGGER_MS = 280;
 const REWARD_COUNT_STEP_MS = 90;
 const REWARD_CONVERSION_STEP_MS = 160;
@@ -78,6 +87,7 @@ const SCORE_DELTA_LANE_COUNT = 3;
 const MOCHI_GENERAL_VICTORY_SCORE_STEP = 100;
 const MOCHI_GENERAL_DEFEAT_SCORE_STEP = 400;
 const END_SCENE_FADE_OUT_MS = 950;
+const REWARD_REQUEST_TIMEOUT_MS = 12_000;
 
 const DAMAGE_RATE_OPTIONS = [
   { value: 1, label: "x1.00", rewardBonus: 0 },
@@ -209,6 +219,7 @@ export default function MochiGeneralBattleClient({
   const [surgeState, setSurgeState] = useState<MochiSoldierSurgeState>(
     createInitialMochiSoldierSurgeState()
   );
+  const latestSurgeStateRef = useRef<MochiSoldierSurgeState>(surgeState);
   const [rewardClaimStatus, setRewardClaimStatus] =
     useState<RewardClaimStatus>("idle");
   const [rewardClaimMessage, setRewardClaimMessage] = useState("");
@@ -249,6 +260,9 @@ export default function MochiGeneralBattleClient({
   const scoreDeltaTimerIdsRef = useRef<number[]>([]);
   const scoreDeltaNextIdRef = useRef(1);
   const endTransitionTimerRef = useRef<number | null>(null);
+  const [lockedRunConfig, setLockedRunConfig] =
+    useState<LockedMochiGeneralRunConfig | null>(null);
+  const lockedRunConfigRef = useRef<LockedMochiGeneralRunConfig | null>(null);
 
   const clearScoreDeltaTimers = useCallback(() => {
     scoreDeltaTimerIdsRef.current.forEach((timerId) => {
@@ -256,6 +270,10 @@ export default function MochiGeneralBattleClient({
     });
     scoreDeltaTimerIdsRef.current = [];
   }, []);
+
+  useEffect(() => {
+    latestSurgeStateRef.current = surgeState;
+  }, [surgeState]);
 
   const clearEndTransitionTimer = useCallback(() => {
     if (endTransitionTimerRef.current !== null) {
@@ -437,6 +455,34 @@ export default function MochiGeneralBattleClient({
     };
   }, [bossDamageRate, bossDefenseRate, bossTempoMultiplier]);
 
+  const runtimeRewardMultiplier =
+    lockedRunConfig?.rewardMultiplier ?? rewardMultiplier;
+  const runtimeBattleDifficultyConfig =
+    lockedRunConfig?.battleDifficultyConfig ?? battleDifficultyConfig;
+  const runtimeBossDamageRate = lockedRunConfig?.bossDamageRate ?? bossDamageRate;
+  const runtimeBossDefenseRate = lockedRunConfig?.bossDefenseRate ?? bossDefenseRate;
+  const runtimeBossSpeedRate = lockedRunConfig?.bossSpeedRate ?? bossSpeedRate;
+  const runtimeBossTempoMultiplier =
+    lockedRunConfig?.bossTempoMultiplier ?? bossTempoMultiplier;
+  const runtimeSelectedDamageOption = useMemo(() => {
+    return (
+      DAMAGE_RATE_OPTIONS.find((option) => option.value === runtimeBossDamageRate) ??
+      DAMAGE_RATE_OPTIONS[0]
+    );
+  }, [runtimeBossDamageRate]);
+  const runtimeSelectedDefenseOption = useMemo(() => {
+    return (
+      DEFENSE_RATE_OPTIONS.find((option) => option.value === runtimeBossDefenseRate) ??
+      DEFENSE_RATE_OPTIONS[0]
+    );
+  }, [runtimeBossDefenseRate]);
+  const runtimeSelectedSpeedOption = useMemo(() => {
+    return (
+      SPEED_RATE_OPTIONS.find((option) => option.value === runtimeBossSpeedRate) ??
+      SPEED_RATE_OPTIONS[0]
+    );
+  }, [runtimeBossSpeedRate]);
+
   const buildRewardEntries = useCallback((rewards: SurgeSnackRewards): RewardEntry[] => {
     return SURGE_SNACK_KEYS.filter((key) => rewards[key] > 0).map((key) => ({
       key,
@@ -467,8 +513,13 @@ export default function MochiGeneralBattleClient({
       return Math.max(0, Math.floor(rewardPackTarget));
     }
     const scoreStep = Math.max(1, Math.floor(resolvedRewardScoreStep));
-    return Math.floor((Math.max(0, surgeState.score) * rewardMultiplier) / scoreStep);
-  }, [rewardPackTarget, resolvedRewardScoreStep, surgeState.score, rewardMultiplier]);
+    return Math.floor((Math.max(0, surgeState.score) * runtimeRewardMultiplier) / scoreStep);
+  }, [
+    rewardPackTarget,
+    resolvedRewardScoreStep,
+    surgeState.score,
+    runtimeRewardMultiplier,
+  ]);
 
   const rewardConvertedScoreTarget = useMemo(() => {
     const rawTarget = resolvedRewardPackTarget * resolvedRewardScoreStep;
@@ -481,9 +532,11 @@ export default function MochiGeneralBattleClient({
   }, [animatedRewardPackCount, resolvedRewardScoreStep, rewardConvertedScoreTarget]);
 
   const rewardScoreRemainder = useMemo(() => {
-    const effectiveScore = Math.floor(Math.max(0, surgeState.score) * rewardMultiplier);
+    const effectiveScore = Math.floor(
+      Math.max(0, surgeState.score) * runtimeRewardMultiplier
+    );
     return Math.max(0, effectiveScore - rewardConvertedScoreTarget);
-  }, [surgeState.score, rewardConvertedScoreTarget, rewardMultiplier]);
+  }, [surgeState.score, rewardConvertedScoreTarget, runtimeRewardMultiplier]);
 
   const rewardConversionInProgress =
     rewardClaimStatus === "claimed" &&
@@ -558,6 +611,20 @@ export default function MochiGeneralBattleClient({
 
   const startGame = async () => {
     if (isStarting || !selectedCharacter || !hasConfiguredDifficulty) return;
+    const nextLockedRunConfig: LockedMochiGeneralRunConfig = {
+      battleDifficultyConfig: {
+        bossDamageMultiplier: battleDifficultyConfig.bossDamageMultiplier,
+        bossDefenseRatio: battleDifficultyConfig.bossDefenseRatio,
+        bossTempoMultiplier: battleDifficultyConfig.bossTempoMultiplier,
+      },
+      rewardMultiplier,
+      bossDamageRate,
+      bossDefenseRate,
+      bossSpeedRate,
+      bossTempoMultiplier,
+    };
+    lockedRunConfigRef.current = nextLockedRunConfig;
+    setLockedRunConfig(nextLockedRunConfig);
     setDeltaStartAtMs(performance.now());
     setIsStarting(true);
     try {
@@ -578,39 +645,58 @@ export default function MochiGeneralBattleClient({
 
   const loadSurgeScene = useCallback(async () => {
     const { createMochiGeneralBattleScene } = await import("./battleSceneDefinition");
+    const effectiveDifficultyConfig =
+      lockedRunConfigRef.current?.battleDifficultyConfig ??
+      runtimeBattleDifficultyConfig;
     return {
       id: "mochiGeneralBattle",
       setupScene: (scene, context) =>
-        createMochiGeneralBattleScene(scene, context, battleDifficultyConfig),
+        createMochiGeneralBattleScene(scene, context, effectiveDifficultyConfig),
     };
-  }, [battleDifficultyConfig]);
+  }, [runtimeBattleDifficultyConfig]);
 
   useEffect(() => {
-    if (!hasStarted || !surgeState.gameEnded || rewardSubmittedRef.current) return;
+    const lockedRewardMultiplier =
+      lockedRunConfigRef.current?.rewardMultiplier ??
+      lockedRunConfig?.rewardMultiplier;
+    if (
+      !hasStarted ||
+      !surgeState.gameEnded ||
+      rewardSubmittedRef.current ||
+      lockedRewardMultiplier == null
+    ) {
+      return;
+    }
 
     rewardSubmittedRef.current = true;
-    let cancelled = false;
+    let disposed = false;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      controller.abort();
+    }, REWARD_REQUEST_TIMEOUT_MS);
     const claimRewards = async () => {
+      const settledState = latestSurgeStateRef.current;
       setRewardClaimStatus("claiming");
       setRewardClaimMessage("");
       try {
         const response = await fetch("/api/games/mochisoldiersurge/reward", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             gameMode: "mochiGeneralBattle",
-            score: surgeState.score,
-            elapsedSeconds: surgeState.elapsedSeconds,
-            defeatedMonsters: surgeState.defeatedMonsters,
-            victory: surgeState.victory,
-            rewardMultiplier,
+            score: settledState.score,
+            elapsedSeconds: settledState.elapsedSeconds,
+            defeatedMonsters: settledState.defeatedMonsters,
+            victory: settledState.victory,
+            rewardMultiplier: lockedRewardMultiplier,
           }),
         });
         const data = (await response.json()) as RewardClaimResponse;
         if (!response.ok) {
           throw new Error(data.error || "Failed to claim rewards.");
         }
-        if (cancelled) return;
+        if (disposed) return;
         const granted = cloneRewards({
           ...createEmptySurgeSnackRewards(),
           ...(data.granted ?? {}),
@@ -643,14 +729,15 @@ export default function MochiGeneralBattleClient({
           (total, key) => total + granted[key],
           0
         );
-        const fallbackScoreStep = resolveMochiGeneralScoreStep(surgeState.victory);
+        const fallbackScoreStep = resolveMochiGeneralScoreStep(settledState.victory);
         const normalizedScoreStepRaw = Number(data.scoreStep);
         const normalizedScoreStep =
           Number.isFinite(normalizedScoreStepRaw) && normalizedScoreStepRaw > 0
             ? Math.max(1, Math.floor(normalizedScoreStepRaw))
             : fallbackScoreStep;
         const fallbackPackCount = Math.floor(
-          (Math.max(0, surgeState.score) * rewardMultiplier) / normalizedScoreStep
+          (Math.max(0, settledState.score) * lockedRewardMultiplier) /
+            normalizedScoreStep
         );
         const normalizedPackCountRaw = Number(data.rewardPacks);
         const normalizedPackCount =
@@ -672,26 +759,32 @@ export default function MochiGeneralBattleClient({
           setRewardClaimMessage("Snack rewards have been added to storage.");
         }
       } catch (error) {
-        if (cancelled) return;
+        if (disposed) return;
+        const isTimeoutError =
+          error instanceof DOMException && error.name === "AbortError";
         setRewardClaimStatus("error");
         setRewardClaimMessage(
-          error instanceof Error ? error.message : "Failed to claim rewards."
+          isTimeoutError
+            ? "Reward request timed out. Please try again."
+            : error instanceof Error
+              ? error.message
+              : "Failed to claim rewards."
         );
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     };
 
     void claimRewards();
     return () => {
-      cancelled = true;
+      disposed = true;
+      controller.abort();
+      window.clearTimeout(timeoutId);
     };
   }, [
     hasStarted,
     surgeState.gameEnded,
-    surgeState.score,
-    surgeState.elapsedSeconds,
-    surgeState.defeatedMonsters,
-    surgeState.victory,
-    rewardMultiplier,
+    lockedRunConfig,
   ]);
 
   useEffect(() => {
@@ -901,10 +994,10 @@ export default function MochiGeneralBattleClient({
                         Damage Rate
                       </p>
                       <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
-                        x{bossDamageRate.toFixed(2)}
+                        x{runtimeBossDamageRate.toFixed(2)}
                       </p>
                       <p className="mt-1 text-xs text-emerald-300">
-                        Reward +{selectedDamageOption.rewardBonus.toFixed(2)}
+                        Reward +{runtimeSelectedDamageOption.rewardBonus.toFixed(2)}
                       </p>
                     </div>
 
@@ -913,10 +1006,10 @@ export default function MochiGeneralBattleClient({
                         Damage Reduction
                       </p>
                       <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
-                        {(bossDefenseRate * 100).toFixed(0)}%
+                        {(runtimeBossDefenseRate * 100).toFixed(0)}%
                       </p>
                       <p className="mt-1 text-xs text-emerald-300">
-                        Reward +{selectedDefenseOption.rewardBonus.toFixed(2)}
+                        Reward +{runtimeSelectedDefenseOption.rewardBonus.toFixed(2)}
                       </p>
                     </div>
 
@@ -925,13 +1018,13 @@ export default function MochiGeneralBattleClient({
                         Move + Animation Speed
                       </p>
                       <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
-                        +{bossSpeedRate}%
+                        +{runtimeBossSpeedRate}%
                       </p>
                       <p className="mt-1 text-xs text-sky-200">
-                        Tempo x{bossTempoMultiplier.toFixed(2)}
+                        Tempo x{runtimeBossTempoMultiplier.toFixed(2)}
                       </p>
                       <p className="mt-1 text-xs text-emerald-300">
-                        Reward +{selectedSpeedOption.rewardBonus.toFixed(2)}
+                        Reward +{runtimeSelectedSpeedOption.rewardBonus.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -943,13 +1036,13 @@ export default function MochiGeneralBattleClient({
                     <div className="mt-2 flex items-center justify-between gap-3 text-sm">
                       <span className="text-pink-100/80">Total Bonus</span>
                       <span className="font-semibold tabular-nums text-pink-100">
-                        +{Math.max(0, rewardMultiplier - 1).toFixed(2)}
+                        +{Math.max(0, runtimeRewardMultiplier - 1).toFixed(2)}
                       </span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-3 text-sm">
                       <span className="text-pink-100/80">Reward Multiplier</span>
                       <span className="font-semibold tabular-nums text-pink-100">
-                        x{rewardMultiplier.toFixed(2)}
+                        x{runtimeRewardMultiplier.toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -1111,7 +1204,7 @@ export default function MochiGeneralBattleClient({
                           <li className="flex items-center justify-between gap-4">
                             <span className="text-cyan-200/80">Difficulty Multiplier</span>
                             <span className="font-semibold tabular-nums">
-                              x{rewardMultiplier.toFixed(2)}
+                              x{runtimeRewardMultiplier.toFixed(2)}
                             </span>
                           </li>
                           <li className="flex items-center justify-between gap-4">
@@ -1153,7 +1246,7 @@ export default function MochiGeneralBattleClient({
                         Converted Rewards
                       </p>
                       <p className="mt-2 text-xs text-slate-300">
-                        Base x1.00 first, then multiplier x{rewardMultiplier.toFixed(2)} adds bonus one by one.
+                        Base x1.00 first, then multiplier x{runtimeRewardMultiplier.toFixed(2)} adds bonus one by one.
                       </p>
                       {rewardClaimStatus === "claiming" ? (
                         <p className="mt-3 text-sm text-slate-300">Calculating...</p>
@@ -1169,7 +1262,7 @@ export default function MochiGeneralBattleClient({
                             const isApplyingMultiplier =
                               multiplierBonusCount > 0 && shownCount < entry.count;
                             const hasMultiplierBonus =
-                              rewardMultiplier > 1 && multiplierBonusCount > 0;
+                              runtimeRewardMultiplier > 1 && multiplierBonusCount > 0;
                             return (
                               <li
                                 key={entry.key}
@@ -1413,8 +1506,9 @@ export default function MochiGeneralBattleClient({
                     </p>
                     <button
                       type="button"
+                      disabled={isStarting}
                       onClick={() => setHasConfiguredDifficulty(false)}
-                      className="inline-flex h-9 items-center justify-center rounded-full border border-cyan-100/35 bg-slate-900/40 px-4 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-50 transition hover:border-cyan-100/55 hover:bg-cyan-100/10"
+                      className="inline-flex h-9 items-center justify-center rounded-full border border-cyan-100/35 bg-slate-900/40 px-4 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-50 transition hover:border-cyan-100/55 hover:bg-cyan-100/10 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Edit Difficulty
                     </button>

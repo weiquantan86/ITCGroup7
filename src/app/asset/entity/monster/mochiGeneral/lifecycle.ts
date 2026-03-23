@@ -176,7 +176,8 @@ export const createMochiGeneralBossLifecycle = ({
     ...mochiGeneralProfile,
     stats: {
       ...baseStats,
-      attack: Math.max(0, (baseStats.attack ?? 0) * resolvedDamageMultiplier),
+      health: Math.max(1, Number(baseStats.health ?? 1)),
+      attack: Math.max(0, Number(baseStats.attack ?? 0)),
       defense: resolvedDefenseRatio,
     },
   };

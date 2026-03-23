@@ -9,7 +9,7 @@ const ALL_CHARACTER_NAMES = [
   "Slimlu",
 ] as const;
 
-const STARTER_CHARACTER_NAMES = ["Adam", "Flare", "Slimlu"] as const;
+const DEFAULT_INITIAL_CHARACTER_NAME = "Adam";
 
 type Queryable = {
   query: (text: string, params?: unknown[]) => Promise<unknown>;
@@ -49,7 +49,9 @@ export const assignCharactersToUser = async (
   );
 };
 
-export const assignStarterCharacters = async (db: Queryable, userId: number) =>
-  assignCharactersToUser(db, userId, STARTER_CHARACTER_NAMES);
+export const assignInitialCharacterToUser = async (
+  db: Queryable,
+  userId: number
+) => assignCharactersToUser(db, userId, [DEFAULT_INITIAL_CHARACTER_NAME]);
 
-export { ALL_CHARACTER_NAMES, STARTER_CHARACTER_NAMES };
+export { ALL_CHARACTER_NAMES, DEFAULT_INITIAL_CHARACTER_NAME };

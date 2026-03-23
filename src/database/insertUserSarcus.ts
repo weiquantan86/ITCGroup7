@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import pool from "./client.ts";
 import {
-  assignStarterCharacters,
+  assignInitialCharacterToUser,
   ensureCharacterCatalog,
 } from "./characterCatalog.ts";
 
@@ -91,12 +91,12 @@ const insertUserSarcus = async () => {
 
     const userId = Number(createdUserResult.rows[0].id);
     await ensureCharacterCatalog(pool);
-    await assignStarterCharacters(pool, userId);
+    await assignInitialCharacterToUser(pool, userId);
     await assignUserResources(userId, DEFAULT_SEED_SNACK_AMOUNT);
 
     await pool.query("COMMIT");
     console.log(
-      "[insertUserSarcus] Completed: user reset with starter characters and seed resources"
+      "[insertUserSarcus] Completed: user reset with Adam as initial character and seed resources"
     );
   } catch (error) {
     await pool.query("ROLLBACK");

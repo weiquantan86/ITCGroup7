@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import pool from './client.ts';
 import {
-  assignStarterCharacters,
+  assignInitialCharacterToUser,
   ensureCharacterCatalog,
 } from './characterCatalog.ts';
 
@@ -110,11 +110,11 @@ async function insertUserWeiquan() {
 
     const userId = createdUserResult.rows[0].id;
     await ensureCharacterCatalog(pool);
-    await assignStarterCharacters(pool, userId);
+    await assignInitialCharacterToUser(pool, userId);
     await assignUserResources(userId, DEFAULT_SEED_RESOURCE_AMOUNT);
 
     await pool.query('COMMIT');
-    console.log('insertUserWeiquan completed: user reset with starter characters and seed resources');
+    console.log('insertUserWeiquan completed: user reset with Adam as initial character and seed resources');
   } catch (err) {
     await pool.query('ROLLBACK');
     console.error('Error insertUserWeiquan:', err);

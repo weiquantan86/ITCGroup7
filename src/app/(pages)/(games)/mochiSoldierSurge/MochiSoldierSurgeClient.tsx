@@ -61,9 +61,19 @@ type RewardClaimResponse = {
   winBonusMultiplierBonus?: Partial<SurgeSnackRewards>;
 };
 
+type LockedSurgeRunConfig = {
+  difficultyConfig: MochiSoldierSurgeDifficultyConfig;
+  rewardMultiplier: number;
+  monsterTotal: number;
+  monsterHealthMultiplier: number;
+  spawnIntervalMs: number;
+  spawnBatchSize: number;
+};
+
 const REWARD_LINE_STAGGER_MS = 280;
 const REWARD_COUNT_STEP_MS = 90;
 const END_SCENE_FADE_OUT_MS = 950;
+const REWARD_REQUEST_TIMEOUT_MS = 12_000;
 
 const MONSTER_TOTAL_OPTIONS = [
   { value: 50, label: "50", rewardBonus: 0 },
@@ -136,6 +146,7 @@ export default function MochiSoldierSurgeClient({
   const [surgeState, setSurgeState] = useState<MochiSoldierSurgeState>(
     createInitialMochiSoldierSurgeState()
   );
+  const latestSurgeStateRef = useRef<MochiSoldierSurgeState>(surgeState);
   const [rewardClaimStatus, setRewardClaimStatus] =
     useState<RewardClaimStatus>("idle");
   const [rewardClaimMessage, setRewardClaimMessage] = useState("");
@@ -169,6 +180,9 @@ export default function MochiSoldierSurgeClient({
   const rewardSubmittedRef = useRef(false);
   const rewardAnimationTimersRef = useRef<number[]>([]);
   const endTransitionTimerRef = useRef<number | null>(null);
+  const [lockedRunConfig, setLockedRunConfig] =
+    useState<LockedSurgeRunConfig | null>(null);
+  const lockedRunConfigRef = useRef<LockedSurgeRunConfig | null>(null);
 
   const selectedCharacter = useMemo(() => {
     if (!selectedCharacterId) return characterOptions[0] ?? null;
@@ -178,6 +192,10 @@ export default function MochiSoldierSurgeClient({
       null
     );
   }, [characterOptions, selectedCharacterId]);
+
+  useEffect(() => {
+    latestSurgeStateRef.current = surgeState;
+  }, [surgeState]);
 
   const activeSkill = useMemo(() => {
     if (!selectedCharacter) return null;
@@ -354,6 +372,42 @@ export default function MochiSoldierSurgeClient({
     };
   }, [monsterHealthMultiplier, monsterTotal, spawnBatchSize, spawnIntervalMs]);
 
+  const runtimeRewardMultiplier =
+    lockedRunConfig?.rewardMultiplier ?? rewardMultiplier;
+  const runtimeSurgeDifficultyConfig =
+    lockedRunConfig?.difficultyConfig ?? surgeDifficultyConfig;
+  const runtimeMonsterTotal = lockedRunConfig?.monsterTotal ?? monsterTotal;
+  const runtimeMonsterHealthMultiplier =
+    lockedRunConfig?.monsterHealthMultiplier ?? monsterHealthMultiplier;
+  const runtimeSpawnIntervalMs = lockedRunConfig?.spawnIntervalMs ?? spawnIntervalMs;
+  const runtimeSpawnBatchSize = lockedRunConfig?.spawnBatchSize ?? spawnBatchSize;
+  const runtimeSelectedTotalOption = useMemo(() => {
+    return (
+      MONSTER_TOTAL_OPTIONS.find((option) => option.value === runtimeMonsterTotal) ??
+      MONSTER_TOTAL_OPTIONS[0]
+    );
+  }, [runtimeMonsterTotal]);
+  const runtimeSelectedHealthOption = useMemo(() => {
+    return (
+      HEALTH_MULTIPLIER_OPTIONS.find(
+        (option) => option.value === runtimeMonsterHealthMultiplier
+      ) ?? HEALTH_MULTIPLIER_OPTIONS[0]
+    );
+  }, [runtimeMonsterHealthMultiplier]);
+  const runtimeSelectedIntervalOption = useMemo(() => {
+    return (
+      SPAWN_INTERVAL_OPTIONS.find(
+        (option) => option.valueMs === runtimeSpawnIntervalMs
+      ) ?? SPAWN_INTERVAL_OPTIONS[0]
+    );
+  }, [runtimeSpawnIntervalMs]);
+  const runtimeSelectedBatchOption = useMemo(() => {
+    return (
+      SPAWN_BATCH_OPTIONS.find((option) => option.value === runtimeSpawnBatchSize) ??
+      SPAWN_BATCH_OPTIONS[0]
+    );
+  }, [runtimeSpawnBatchSize]);
+
   const buildRewardEntries = useCallback((rewards: SurgeSnackRewards): RewardEntry[] => {
     return SURGE_SNACK_KEYS.filter((key) => rewards[key] > 0).map((key) => ({
       key,
@@ -416,6 +470,21 @@ export default function MochiSoldierSurgeClient({
 
   const startGame = async () => {
     if (isStarting || !selectedCharacter || !hasConfiguredDifficulty) return;
+    const nextLockedRunConfig: LockedSurgeRunConfig = {
+      difficultyConfig: {
+        totalMonsters: surgeDifficultyConfig.totalMonsters,
+        healthMultiplier: surgeDifficultyConfig.healthMultiplier,
+        spawnIntervalMs: surgeDifficultyConfig.spawnIntervalMs,
+        spawnBatchSize: surgeDifficultyConfig.spawnBatchSize,
+      },
+      rewardMultiplier,
+      monsterTotal,
+      monsterHealthMultiplier,
+      spawnIntervalMs,
+      spawnBatchSize,
+    };
+    lockedRunConfigRef.current = nextLockedRunConfig;
+    setLockedRunConfig(nextLockedRunConfig);
     setDeltaStartAtMs(performance.now());
     setIsStarting(true);
     try {
@@ -436,39 +505,57 @@ export default function MochiSoldierSurgeClient({
 
   const loadSurgeScene = useCallback(async () => {
     const { createMochiSoldierSurgeScene } = await import("./surgeSceneDefinition");
+    const effectiveDifficultyConfig =
+      lockedRunConfigRef.current?.difficultyConfig ?? runtimeSurgeDifficultyConfig;
     return {
       id: "mochiSoldierSurge",
       setupScene: (
         scene: Parameters<typeof createMochiSoldierSurgeScene>[0],
         context?: Parameters<typeof createMochiSoldierSurgeScene>[1]
       ) =>
-        createMochiSoldierSurgeScene(scene, context, surgeDifficultyConfig),
+        createMochiSoldierSurgeScene(scene, context, effectiveDifficultyConfig),
     };
-  }, [surgeDifficultyConfig]);
+  }, [runtimeSurgeDifficultyConfig]);
 
   useEffect(() => {
-    if (!hasStarted || !surgeState.gameEnded || rewardSubmittedRef.current) return;
+    const lockedRewardMultiplier =
+      lockedRunConfigRef.current?.rewardMultiplier ??
+      lockedRunConfig?.rewardMultiplier;
+    if (
+      !hasStarted ||
+      !surgeState.gameEnded ||
+      rewardSubmittedRef.current ||
+      lockedRewardMultiplier == null
+    ) {
+      return;
+    }
 
     rewardSubmittedRef.current = true;
-    let cancelled = false;
+    let disposed = false;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      controller.abort();
+    }, REWARD_REQUEST_TIMEOUT_MS);
     const claimRewards = async () => {
+      const settledState = latestSurgeStateRef.current;
       setRewardClaimStatus("claiming");
       setRewardClaimMessage("");
       try {
         const response = await fetch("/api/games/mochisoldiersurge/reward", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
-            defeatedMonsters: surgeState.defeatedMonsters,
-            victory: surgeState.victory,
-            rewardMultiplier,
+            defeatedMonsters: settledState.defeatedMonsters,
+            victory: settledState.victory,
+            rewardMultiplier: lockedRewardMultiplier,
           }),
         });
         const data = (await response.json()) as RewardClaimResponse;
         if (!response.ok) {
           throw new Error(data.error || "Failed to claim rewards.");
         }
-        if (cancelled) return;
+        if (disposed) return;
         const granted = cloneRewards({
           ...createEmptySurgeSnackRewards(),
           ...(data.granted ?? {}),
@@ -514,24 +601,32 @@ export default function MochiSoldierSurgeClient({
           setRewardClaimMessage("Snack rewards have been added to storage.");
         }
       } catch (error) {
-        if (cancelled) return;
+        if (disposed) return;
+        const isTimeoutError =
+          error instanceof DOMException && error.name === "AbortError";
         setRewardClaimStatus("error");
         setRewardClaimMessage(
-          error instanceof Error ? error.message : "Failed to claim rewards."
+          isTimeoutError
+            ? "Reward request timed out. Please try again."
+            : error instanceof Error
+              ? error.message
+              : "Failed to claim rewards."
         );
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     };
 
     void claimRewards();
     return () => {
-      cancelled = true;
+      disposed = true;
+      controller.abort();
+      window.clearTimeout(timeoutId);
     };
   }, [
     hasStarted,
     surgeState.gameEnded,
-    surgeState.defeatedMonsters,
-    surgeState.victory,
-    rewardMultiplier,
+    lockedRunConfig,
   ]);
 
   useEffect(() => {
@@ -685,10 +780,10 @@ export default function MochiSoldierSurgeClient({
                         Total Monsters
                       </p>
                       <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
-                        {monsterTotal}
+                        {runtimeMonsterTotal}
                       </p>
                       <p className="mt-1 text-xs text-emerald-300">
-                        Reward +{selectedTotalOption.rewardBonus.toFixed(2)}
+                        Reward +{runtimeSelectedTotalOption.rewardBonus.toFixed(2)}
                       </p>
                     </div>
 
@@ -697,10 +792,10 @@ export default function MochiSoldierSurgeClient({
                         Health Multiplier
                       </p>
                       <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
-                        x{monsterHealthMultiplier.toFixed(1)}
+                        x{runtimeMonsterHealthMultiplier.toFixed(1)}
                       </p>
                       <p className="mt-1 text-xs text-emerald-300">
-                        Reward +{selectedHealthOption.rewardBonus.toFixed(2)}
+                        Reward +{runtimeSelectedHealthOption.rewardBonus.toFixed(2)}
                       </p>
                     </div>
 
@@ -709,10 +804,10 @@ export default function MochiSoldierSurgeClient({
                         Spawn Interval
                       </p>
                       <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
-                        {(spawnIntervalMs / 1000).toFixed(0)}s
+                        {(runtimeSpawnIntervalMs / 1000).toFixed(0)}s
                       </p>
                       <p className="mt-1 text-xs text-emerald-300">
-                        Reward +{selectedIntervalOption.rewardBonus.toFixed(2)}
+                        Reward +{runtimeSelectedIntervalOption.rewardBonus.toFixed(2)}
                       </p>
                     </div>
 
@@ -721,10 +816,10 @@ export default function MochiSoldierSurgeClient({
                         Spawn Per Wave
                       </p>
                       <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
-                        {spawnBatchSize}
+                        {runtimeSpawnBatchSize}
                       </p>
                       <p className="mt-1 text-xs text-emerald-300">
-                        Reward +{selectedBatchOption.rewardBonus.toFixed(2)}
+                        Reward +{runtimeSelectedBatchOption.rewardBonus.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -736,13 +831,13 @@ export default function MochiSoldierSurgeClient({
                     <div className="mt-2 flex items-center justify-between gap-3 text-sm">
                       <span className="text-pink-100/80">Total Bonus</span>
                       <span className="font-semibold tabular-nums text-pink-100">
-                        +{Math.max(0, rewardMultiplier - 1).toFixed(2)}
+                        +{Math.max(0, runtimeRewardMultiplier - 1).toFixed(2)}
                       </span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-3 text-sm">
                       <span className="text-pink-100/80">Reward Multiplier</span>
                       <span className="font-semibold tabular-nums text-pink-100">
-                        x{rewardMultiplier.toFixed(2)}
+                        x{runtimeRewardMultiplier.toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -804,7 +899,7 @@ export default function MochiSoldierSurgeClient({
                       Full clear bonus: +3 random snacks.
                     </p>
                     <p className="mt-2 text-sm font-semibold text-emerald-300">
-                      Current multiplier: x{rewardMultiplier.toFixed(2)}
+                      Current multiplier: x{runtimeRewardMultiplier.toFixed(2)}
                     </p>
                   </div>
 
@@ -850,7 +945,7 @@ export default function MochiSoldierSurgeClient({
 
                     <p className="mt-8 text-2xl font-semibold text-slate-200 md:text-3xl">Obtained Snack:</p>
                     <p className="mt-2 text-sm text-slate-300">
-                      Base x1.00 first, then multiplier x{rewardMultiplier.toFixed(2)} adds bonus one by one.
+                      Base x1.00 first, then multiplier x{runtimeRewardMultiplier.toFixed(2)} adds bonus one by one.
                     </p>
                     {rewardClaimStatus === "claiming" ? (
                       <p className="mt-3 text-xl text-slate-300">Calculating...</p>
@@ -866,7 +961,7 @@ export default function MochiSoldierSurgeClient({
                           const isApplyingMultiplier =
                             multiplierBonusCount > 0 && shownCount < entry.count;
                           const hasMultiplierBonus =
-                            rewardMultiplier > 1 && multiplierBonusCount > 0;
+                            runtimeRewardMultiplier > 1 && multiplierBonusCount > 0;
                           return (
                             <li
                               key={entry.key}
@@ -916,7 +1011,7 @@ export default function MochiSoldierSurgeClient({
 
                     <p className="mt-8 text-2xl font-semibold text-slate-200 md:text-3xl">Win Bonus:</p>
                     <p className="mt-2 text-sm text-slate-300">
-                      Base x1.00 first, then multiplier x{rewardMultiplier.toFixed(2)} adds bonus one by one.
+                      Base x1.00 first, then multiplier x{runtimeRewardMultiplier.toFixed(2)} adds bonus one by one.
                     </p>
                     {rewardClaimStatus === "claiming" ? (
                       <p className="mt-3 text-xl text-slate-300">Calculating...</p>
@@ -932,7 +1027,7 @@ export default function MochiSoldierSurgeClient({
                           const isApplyingMultiplier =
                             multiplierBonusCount > 0 && shownCount < entry.count;
                           const hasMultiplierBonus =
-                            rewardMultiplier > 1 && multiplierBonusCount > 0;
+                            runtimeRewardMultiplier > 1 && multiplierBonusCount > 0;
                           return (
                             <li
                               key={entry.key}
@@ -1225,8 +1320,9 @@ export default function MochiSoldierSurgeClient({
                     </p>
                     <button
                       type="button"
+                      disabled={isStarting}
                       onClick={() => setHasConfiguredDifficulty(false)}
-                      className="inline-flex h-9 items-center justify-center rounded-full border border-cyan-100/35 bg-slate-900/40 px-4 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-50 transition hover:border-cyan-100/55 hover:bg-cyan-100/10"
+                      className="inline-flex h-9 items-center justify-center rounded-full border border-cyan-100/35 bg-slate-900/40 px-4 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-50 transition hover:border-cyan-100/55 hover:bg-cyan-100/10 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Edit Difficulty
                     </button>

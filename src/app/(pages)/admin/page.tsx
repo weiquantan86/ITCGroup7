@@ -58,6 +58,12 @@ export default async function AdminPage() {
           >
             Feedback
           </Link>
+          <Link
+            href="/admin/adminTest"
+            className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 transition-colors hover:bg-slate-700"
+          >
+            Admin Test
+          </Link>
         </section>
       </main>
     </div>

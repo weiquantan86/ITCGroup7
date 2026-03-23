@@ -20,6 +20,13 @@ type RewardRequestBody = {
 
 const MOCHI_GENERAL_VICTORY_SCORE_STEP = 100;
 const MOCHI_GENERAL_DEFEAT_SCORE_STEP = 400;
+const DEFAULT_DB_QUERY_TIMEOUT_MS = 12_000;
+
+const queryTimeoutMsFromEnv = Number(process.env.DB_QUERY_TIMEOUT_MS);
+const dbQueryTimeoutMs =
+  Number.isFinite(queryTimeoutMsFromEnv) && queryTimeoutMsFromEnv > 0
+    ? queryTimeoutMsFromEnv
+    : DEFAULT_DB_QUERY_TIMEOUT_MS;
 
 const normalizeDefeatedCount = (value: unknown) => {
   const parsed = Number(value);
@@ -183,8 +190,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await pool.query(
-      `
+    const result = await pool.query({
+      text: `
         INSERT INTO user_resources (
           user_id,
           energy_sugar,
@@ -205,14 +212,16 @@ export async function POST(request: Request) {
           COALESCE(core_crunch_seed, 0) AS core_crunch_seed,
           COALESCE(star_gel_essence, 0) AS star_gel_essence;
       `,
-      [
+      values: [
         userId,
         rewards.energy_sugar,
         rewards.dream_fruit_dust,
         rewards.core_crunch_seed,
         rewards.star_gel_essence,
       ]
-    );
+      ,
+      query_timeout: dbQueryTimeoutMs,
+    });
 
     const resources = result.rows[0] ?? createEmptySurgeSnackRewards();
     return NextResponse.json({

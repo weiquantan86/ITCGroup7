@@ -48,6 +48,7 @@ export const profile: CharacterProfile = {
   },
   camera: {
     followHeadBone: true,
+    hideLocalBody: true,
   },
   slash: {
     enabled: true,

@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import pool from '../../../database/client';
 import { getDatabaseErrorDetails } from '../../../database/error';
 import {
-  assignStarterCharacters,
+  assignInitialCharacterToUser,
   ensureCharacterCatalog,
 } from '../../../database/characterCatalog';
 
@@ -63,7 +63,7 @@ export async function POST(request) {
     );
 
     await ensureCharacterCatalog(client);
-    await assignStarterCharacters(client, userId);
+    await assignInitialCharacterToUser(client, userId);
 
     await client.query('COMMIT');
     transactionStarted = false;

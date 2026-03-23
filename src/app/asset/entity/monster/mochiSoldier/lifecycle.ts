@@ -4,7 +4,7 @@ import {
   applyDamageToSlimluThreatOrPlayer,
   resolveSlimluThreatTargetForEnemy,
 } from "../../character/slimlu/threatRegistry";
-import { Monster } from "../general";
+import { Monster, type MonsterProfile } from "../general";
 import { mochiSoldierProfile } from "./profile";
 import {
   attachMochiSoldierPrototype,
@@ -56,6 +56,9 @@ export const createMochiSoldierLifecycle = ({
   fallbackMaterialTemplate,
   hitboxGeometry,
   hitboxMaterialTemplate,
+  profileOverride,
+  idPrefix,
+  idNamespace,
 }: {
   scene: THREE.Scene;
   group: THREE.Group;
@@ -67,7 +70,19 @@ export const createMochiSoldierLifecycle = ({
   fallbackMaterialTemplate: THREE.Material;
   hitboxGeometry: THREE.BufferGeometry;
   hitboxMaterialTemplate: THREE.Material;
+  profileOverride?: MonsterProfile;
+  idPrefix?: string;
+  idNamespace?: string;
 }): MochiSoldierLifecycle => {
+  const resolvedProfile = profileOverride ?? mochiSoldierProfile;
+  const resolvedIdPrefix =
+    typeof idPrefix === "string" && idPrefix.trim().length > 0
+      ? idPrefix.trim()
+      : "mochi-general-summon";
+  const resolvedIdNamespace =
+    typeof idNamespace === "string" && idNamespace.trim().length > 0
+      ? idNamespace.trim()
+      : "";
   const entries: MochiSummonedSoldierEntry[] = [];
   const summonFxRuntime = createMochiSoldierSummonFxRuntime(scene);
   const deathFxRuntime = createMochiSoldierDeathFxRuntime(scene);
@@ -112,7 +127,11 @@ export const createMochiSoldierLifecycle = ({
     spawn: (position) => {
       idCounter += 1;
       spawned += 1;
-      const id = `mochi-general-summon-${idCounter}`;
+      const idCore = `${resolvedIdPrefix}-${idCounter}`;
+      const id =
+        resolvedIdNamespace.length > 0
+          ? `${resolvedIdNamespace}-${idCore}`
+          : idCore;
       const anchor = new THREE.Group();
       anchor.name = `${id}-anchor`;
       anchor.position.copy(position);
@@ -146,7 +165,7 @@ export const createMochiSoldierLifecycle = ({
         model: null,
         monster: new Monster({
           model: anchor,
-          profile: mochiSoldierProfile,
+          profile: resolvedProfile,
         }),
         ...createMochiSoldierRuntimeState(),
       };
@@ -157,7 +176,7 @@ export const createMochiSoldierLifecycle = ({
         object: hitbox,
         isActive: () => !isGameEnded() && entry.monster.isAlive,
         category: "normal",
-        label: mochiSoldierProfile.label,
+        label: resolvedProfile.label,
         getHealth: () => entry.monster.health,
         getMaxHealth: () => entry.monster.maxHealth,
         onHit: (hit) => {

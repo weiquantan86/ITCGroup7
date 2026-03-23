@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import pool from '../../../database/client';
 import { getDatabaseErrorDetails } from '../../../database/error';
 import {
-  assignStarterCharacters,
+  assignInitialCharacterToUser,
   ensureCharacterCatalog,
 } from '../../../database/characterCatalog';
 
@@ -29,7 +29,7 @@ export async function POST(request) {
     }
 
     await ensureCharacterCatalog(pool);
-    await assignStarterCharacters(pool, user.id);
+    await assignInitialCharacterToUser(pool, user.id);
 
     const response = NextResponse.json({
       success: true,
