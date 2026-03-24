@@ -1,10 +1,7 @@
 import * as THREE from "three";
 import type { PlayerAttackTarget } from "../../character/general/player";
 
-export const clamp = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value));
-
-export const resolveRenderableBounds = (object: THREE.Object3D) => {
+const resolveRenderableBounds = (object: THREE.Object3D) => {
   const bounds = new THREE.Box3();
   const meshBounds = new THREE.Box3();
   let hasMesh = false;
@@ -70,4 +67,3 @@ export const findBossHealthFromAttackTargets = (
     alive: health > 0,
   };
 };
-

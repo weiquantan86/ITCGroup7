@@ -3,7 +3,6 @@ import type { MonsterProfile } from "../general";
 export const mochiSoldierProfile: MonsterProfile = {
   id: "mochiSoldier",
   label: "Mochi Soldier",
-  pathToken: "/mochiSoldier/",
   stats: {
     health: 50,
     attack: 20,

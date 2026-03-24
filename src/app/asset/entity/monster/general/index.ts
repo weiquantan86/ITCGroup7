@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { HpPool } from "../../hpPool";
 
-export interface MonsterStats {
+interface MonsterStats {
   health: number;
   attack: number;
   defense: number;
@@ -13,28 +13,13 @@ export interface MonsterStats {
 export interface MonsterProfile {
   id: string;
   label: string;
-  pathToken: string;
   stats?: Partial<MonsterStats>;
-  tag?: string;
 }
 
-export interface MonsterSpawn {
+type MonsterSpawn = {
   position?: THREE.Vector3;
   yaw?: number;
-}
-
-export interface MonsterUpdateArgs {
-  now: number;
-  delta: number;
-  target?: THREE.Object3D | null;
-}
-
-export type MonsterBehavior = (args: {
-  monster: Monster;
-  now: number;
-  delta: number;
-  target?: THREE.Object3D | null;
-}) => void;
+};
 
 const defaultMonsterStats: MonsterStats = {
   health: 80,
@@ -45,19 +30,16 @@ const defaultMonsterStats: MonsterStats = {
   attackRange: 1.6,
 };
 
-export const resolveMonsterStats = (profile?: MonsterProfile): MonsterStats => ({
+const resolveMonsterStats = (profile?: MonsterProfile): MonsterStats => ({
   ...defaultMonsterStats,
   ...(profile?.stats ?? {}),
 });
 
 export class Monster {
   readonly model: THREE.Object3D;
-  readonly profile: MonsterProfile;
   readonly stats: MonsterStats;
 
   private readonly hp: HpPool;
-  private behavior?: MonsterBehavior;
-  private target: THREE.Object3D | null = null;
   private readonly scratch = new THREE.Vector3();
   private readonly scratchTarget = new THREE.Vector3();
   private readonly hitFlashColor = new THREE.Color(0xff3b30);
@@ -78,16 +60,13 @@ export class Monster {
   constructor({
     model,
     profile,
-    behavior,
     spawn,
   }: {
     model: THREE.Object3D;
     profile: MonsterProfile;
-    behavior?: MonsterBehavior;
     spawn?: MonsterSpawn;
   }) {
     this.model = model;
-    this.profile = profile;
     this.stats = resolveMonsterStats(profile);
     const defenseRatio = THREE.MathUtils.clamp(this.stats.defense, 0, 1);
     this.hp = new HpPool({
@@ -95,7 +74,6 @@ export class Monster {
       current: this.stats.health,
       resolveDamage: ({ amount }) => Math.max(0, amount * (1 - defenseRatio)),
     });
-    this.behavior = behavior;
 
     if (spawn?.position) {
       this.model.position.copy(spawn.position);
@@ -117,22 +95,6 @@ export class Monster {
     return this.hp.isAlive;
   }
 
-  get currentTarget() {
-    return this.target;
-  }
-
-  setBehavior(next?: MonsterBehavior) {
-    this.behavior = next;
-  }
-
-  setTarget(next: THREE.Object3D | null) {
-    this.target = next;
-  }
-
-  clearTarget() {
-    this.target = null;
-  }
-
   invalidateHitFlashMaterialCache() {
     this.cachedHitFlashMaterials = null;
   }
@@ -143,10 +105,6 @@ export class Monster {
       this.triggerHitFlash();
     }
     return applied;
-  }
-
-  heal(amount: number) {
-    return this.hp.heal(amount);
   }
 
   revive(ratio = 1) {
@@ -178,14 +136,6 @@ export class Monster {
     const ratio = Math.min(step / length, 1);
     this.model.position.x += dx * ratio;
     this.model.position.z += dz * ratio;
-  }
-
-  update({ now, delta, target }: MonsterUpdateArgs) {
-    if (!this.hp.isAlive) return;
-    const resolvedTarget = target ?? this.target ?? null;
-    if (this.behavior) {
-      this.behavior({ monster: this, now, delta, target: resolvedTarget });
-    }
   }
 
   private isColorMaterial(

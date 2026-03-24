@@ -419,7 +419,6 @@ export const createTrainingScene = (
     profile: {
       id: "tester",
       label: "Tester",
-      pathToken: "/tester/",
       stats: {
         health: 1000,
         attack: 0,

@@ -100,7 +100,6 @@ export const createFallbackMonsterRuntime = (
     profile: {
       id: monster.id,
       label: monster.label,
-      pathToken: `/${monster.id}/`,
       stats: {
         health: runtimeConfig.health,
         attack: runtimeConfig.attackDamage,

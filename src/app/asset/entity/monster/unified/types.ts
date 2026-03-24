@@ -39,8 +39,6 @@ export type UnifiedMonsterRuntimeOptions = {
   mada?: {
     healthMultiplier?: number;
     damageMultiplier?: number;
-    tempoMultiplier?: number;
-    triggerRangeMultiplier?: number;
     strikeRangeMultiplier?: number;
     completenessTier?: number;
   };
