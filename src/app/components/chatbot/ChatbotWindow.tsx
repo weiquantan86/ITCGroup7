@@ -109,13 +109,14 @@ export default function ChatbotWindow({ onClose }: ChatbotWindowProps) {
     }
 
     // Default responses
-    if (lowerInput.includes("game mode")) {
-      return "We have three game modes: **Mochi General Battle**, **Mochi Soldier Surge**, and **Mada Combat**. Which one would you like to know more about?";
+    if (lowerInput.includes("game mode") || lowerInput.includes("modes")) {
+      const modesList = GAME_MODES.map(m => `• **${m.name}**`).join("\n");
+      return `We have the following game modes:\n${modesList}\n\nWhich one would you like to know more about?`;
     }
 
-    if (lowerInput.includes("character") || lowerInput.includes("skill")) {
-      const names = characterProfiles.map(p => p.label).join(", ");
-      return `I can tell you about the skills of these characters: ${names}. Just type their name!`;
+    if (lowerInput.includes("character") || lowerInput.includes("skill") || lowerInput.includes("list")) {
+      const names = characterProfiles.map(p => `• **${p.label}**`).join("\n");
+      return `I can tell you about the skills of these characters:\n${names}\n\nJust type a name to see their kit!`;
     }
 
     return "I'm not sure I understand. You can ask me about game modes (like 'Soldier Surge') or character skills (like 'Flare skills').";
@@ -174,7 +175,7 @@ export default function ChatbotWindow({ onClose }: ChatbotWindowProps) {
               }`}
             >
               {msg.text.split("\n").map((line, i) => {
-                // Simple bold parsing
+                // Simple bold parsing: splits by **word** and renders <strong> for matches
                 const parts = line.split(/(\*\*.*?\*\*)/g);
                 return (
                   <p key={i}>
