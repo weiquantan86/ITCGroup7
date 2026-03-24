@@ -51,6 +51,7 @@ const normalAttackWeaponThirdBackstepDurationMs = 390;
 const normalAttackWeaponStageDamage = [50, 60, 70] as const;
 const normalAttackWeaponStageManaGain = [2, 4, 8] as const;
 const normalAttackWeaponStageEnergyGain = [5, 10, 15] as const;
+const normalAttackWeaponFinalStageHeal = 10;
 const normalAttackWeaponAoEMaxHits = 12;
 const normalAttackWeaponContactRadius = [0.72, 0.8, 0.92] as const;
 const normalAttackWeaponContactForwardOffset = [0.18, 0.26, 0.56] as const;
@@ -1031,6 +1032,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   fireProjectile,
   getAttackTargets,
   performMeleeAttack,
+  applyHealth,
   applyEnergy,
   applyMana,
   spendMana,
@@ -2582,6 +2584,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
       if (hitCount <= 0) return;
       applyMana?.(normalAttackWeaponStageManaGain[resolvedStageIndex] * hitCount);
       applyEnergy?.(normalAttackWeaponStageEnergyGain[resolvedStageIndex] * hitCount);
+      if (
+        resolvedStageIndex === normalAttackWeaponComboStages.length - 1
+      ) {
+        applyHealth?.(normalAttackWeaponFinalStageHeal);
+      }
     };
     const hitTargetIds = new Set<string>();
     const meshHits = applyWeaponMeshColliderHits({

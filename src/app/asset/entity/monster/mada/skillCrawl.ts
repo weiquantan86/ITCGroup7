@@ -6,9 +6,9 @@ const normalizePositive = (value: number, fallback: number) => {
 };
 
 export const MADA_CRAWL_DETECTION_RANGE = 9;
-export const MADA_CRAWL_COOLDOWN_MS = 5000;
+export const MADA_CRAWL_COOLDOWN_MS = 7000;
 export const MADA_CRAWL_DAMAGE = 10;
-export const MADA_CRAWL_DAMAGE_RANGE = 3.5;
+export const MADA_CRAWL_DAMAGE_RANGE = 2.8;
 export const MADA_CRAWL_WINDUP_RATIO = 0.28;
 export const MADA_CRAWL_STRIKE_RATIO = 0.44;
 export const MADA_CRAWL_EMIT_INTERVAL_MS = 45;
@@ -19,27 +19,18 @@ export const MADA_AMBUSH_CRAWL_CLAW_HIT_RANGE = 0.78;
 export const MADA_AMBUSH_CRAWL_REFERENCE_HIT_RANGE = 0.58;
 
 export const resolveMadaCrawlRuntimeValues = ({
-  damageMultiplier,
-  tempoMultiplier,
   strikeRangeMultiplier,
 }: {
-  damageMultiplier: number;
-  tempoMultiplier: number;
   strikeRangeMultiplier: number;
 }) => {
-  const normalizedDamageMultiplier = normalizePositive(damageMultiplier, 1);
-  const normalizedTempoMultiplier = normalizePositive(tempoMultiplier, 1);
   const normalizedStrikeRangeMultiplier = normalizePositive(
     strikeRangeMultiplier,
     1
   );
   return {
-    damage: Math.max(
-      1,
-      Math.floor(MADA_CRAWL_DAMAGE * normalizedDamageMultiplier)
-    ),
+    damage: MADA_CRAWL_DAMAGE,
     damageRange: MADA_CRAWL_DAMAGE_RANGE * normalizedStrikeRangeMultiplier,
-    cooldownMs: Math.max(800, MADA_CRAWL_COOLDOWN_MS / normalizedTempoMultiplier),
+    cooldownMs: MADA_CRAWL_COOLDOWN_MS,
   };
 };
 

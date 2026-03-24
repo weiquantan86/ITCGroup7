@@ -73,7 +73,8 @@ export const createMadaVanishManager = ({
   const respawnPosition = new THREE.Vector3();
 
   let phase: MadaVanishPhase = "idle";
-  let nextVanishAt = performance.now() + vanishIntervalMs;
+  let cooldownRemainingMs = vanishIntervalMs;
+  let lastUpdateAt = 0;
   let lookupDeadlineAt = 0;
   let fadeStartedAt = 0;
   let hiddenUntilAt = 0;
@@ -119,6 +120,16 @@ export const createMadaVanishManager = ({
     fadeStartedAt = now;
   };
 
+  const advanceCooldown = (now: number, skillActive: boolean) => {
+    const elapsed = Math.max(0, now - lastUpdateAt);
+    lastUpdateAt = now;
+    if (phase !== "idle" || skillActive) return;
+    cooldownRemainingMs = Math.max(0, cooldownRemainingMs - elapsed);
+    if (cooldownRemainingMs <= 0) {
+      phase = "pending";
+    }
+  };
+
   const update = ({
     now,
     skillActive,
@@ -129,9 +140,7 @@ export const createMadaVanishManager = ({
     hide,
     revealAt,
   }: MadaVanishManagerUpdateArgs): MadaVanishManagerUpdateResult => {
-    if (phase === "idle" && now >= nextVanishAt) {
-      phase = "pending";
-    }
+    advanceCooldown(now, skillActive);
 
     if (phase === "pending" && !skillActive) {
       if (pendingSkipLookup) {
@@ -174,7 +183,7 @@ export const createMadaVanishManager = ({
     if (phase === "hidden" && now >= hiddenUntilAt) {
       revealAt(respawnPosition, now);
       phase = "idle";
-      nextVanishAt = now + vanishIntervalMs;
+      cooldownRemainingMs = vanishIntervalMs;
     }
 
     return {
@@ -187,7 +196,8 @@ export const createMadaVanishManager = ({
 
   const reset = (now: number) => {
     phase = "idle";
-    nextVanishAt = now + vanishIntervalMs;
+    cooldownRemainingMs = vanishIntervalMs;
+    lastUpdateAt = now;
     lookupDeadlineAt = 0;
     fadeStartedAt = 0;
     hiddenUntilAt = 0;
@@ -197,7 +207,8 @@ export const createMadaVanishManager = ({
   const requestVanishNow = (now: number, options?: MadaVanishRequestOptions) => {
     if (phase === "hidden") return;
     phase = "pending";
-    nextVanishAt = now;
+    cooldownRemainingMs = 0;
+    lastUpdateAt = now;
     lookupDeadlineAt = 0;
     fadeStartedAt = 0;
     hiddenUntilAt = 0;

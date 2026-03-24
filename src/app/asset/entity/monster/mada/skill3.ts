@@ -18,6 +18,7 @@ const MADA_SKILL3_PROJECTILE_SPEED = 14.8;
 const MADA_SKILL3_PROJECTILE_MAX_LIFE_S = 12.5;
 const MADA_SKILL3_PROJECTILE_RADIUS = 3.52 * 0.7; // 70% of previous size
 const MADA_SKILL3_PLAYER_RADIUS = 0.72;
+const MADA_SKILL3_TARGET_HIT_RADIUS_MAX = 2.6;
 const MADA_SKILL3_FLASH_INTERVAL_S = 0.12;
 const MADA_SKILL3_DESPAWN_DURATION_S = 0.3;
 const MADA_SKILL3_DESPAWN_PARTICLE_INTERVAL_S = 0.045;
@@ -96,6 +97,12 @@ const projectileDirection = new THREE.Vector3();
 const edgeCheckPosition = new THREE.Vector3();
 const despawnOffset = new THREE.Vector3();
 const despawnVelocity = new THREE.Vector3();
+const targetBounds = new THREE.Box3();
+const targetSphere = new THREE.Sphere();
+const stepStartPosition = new THREE.Vector3();
+const segmentDelta = new THREE.Vector3();
+const segmentToTarget = new THREE.Vector3();
+const segmentClosestPoint = new THREE.Vector3();
 
 export const createMadaSkill3Runtime = ({
   scene,
@@ -435,6 +442,43 @@ export const createMadaSkill3Runtime = ({
     projectiles.push(projectile);
   };
 
+  const resolveTargetHitProbe = (target: THREE.Object3D) => {
+    target.getWorldPosition(playerProbe);
+    targetBounds.setFromObject(target);
+    if (targetBounds.isEmpty()) {
+      playerProbe.y += 1.2;
+      return MADA_SKILL3_PLAYER_RADIUS;
+    }
+    targetBounds.getBoundingSphere(targetSphere);
+    playerProbe.copy(targetSphere.center);
+    return Math.max(
+      MADA_SKILL3_PLAYER_RADIUS,
+      Math.min(MADA_SKILL3_TARGET_HIT_RADIUS_MAX, targetSphere.radius)
+    );
+  };
+
+  const doesStepSegmentHitTarget = (
+    stepStart: THREE.Vector3,
+    stepEnd: THREE.Vector3,
+    target: THREE.Vector3,
+    hitDistance: number
+  ) => {
+    const hitDistanceSq = hitDistance * hitDistance;
+    segmentDelta.copy(stepEnd).sub(stepStart);
+    const segmentLenSq = segmentDelta.lengthSq();
+    if (segmentLenSq <= 0.0000001) {
+      return stepStart.distanceToSquared(target) <= hitDistanceSq;
+    }
+    const t = THREE.MathUtils.clamp(
+      segmentToTarget.copy(target).sub(stepStart).dot(segmentDelta) /
+        segmentLenSq,
+      0,
+      1
+    );
+    segmentClosestPoint.copy(stepStart).addScaledVector(segmentDelta, t);
+    return segmentClosestPoint.distanceToSquared(target) <= hitDistanceSq;
+  };
+
   const fireAfterFinisher = (rig: THREE.Object3D, player: THREE.Object3D) => {
     if (afterFinisherState === "fired") return;
     hideChargeVfx();
@@ -588,23 +632,27 @@ export const createMadaSkill3Runtime = ({
             applyFlashPhase(projectile, !projectile.redPhase);
           }
 
+          stepStartPosition.copy(projectile.group.position);
           edgeCheckPosition
-            .copy(projectile.group.position)
+            .copy(stepStartPosition)
             .addScaledVector(projectile.velocity, Math.max(0, delta));
-          if (isOutOfBounds(edgeCheckPosition)) {
+          const targetHitRadius = resolveTargetHitProbe(player);
+          const hitDistance = projectile.radius + targetHitRadius;
+          const stepHit = doesStepSegmentHitTarget(
+            stepStartPosition,
+            edgeCheckPosition,
+            playerProbe,
+            hitDistance
+          );
+          if (stepHit) {
+            projectile.group.position.copy(edgeCheckPosition);
+            applyDamage(projectile.damage);
+            beginProjectileFade(projectile);
+          } else if (isOutOfBounds(edgeCheckPosition)) {
             beginProjectileFade(projectile);
           } else {
             projectile.group.position.copy(edgeCheckPosition);
-            player.getWorldPosition(playerProbe);
-            playerProbe.y += 1.2;
-            const hitDistance = projectile.radius + MADA_SKILL3_PLAYER_RADIUS;
-            if (
-              projectile.group.position.distanceToSquared(playerProbe) <=
-              hitDistance * hitDistance
-            ) {
-              applyDamage(projectile.damage);
-              beginProjectileFade(projectile);
-            } else if (projectile.life >= projectile.maxLife) {
+            if (projectile.life >= projectile.maxLife) {
               beginProjectileFade(projectile);
             }
           }

@@ -42,6 +42,7 @@ export type UnifiedMonsterRuntimeOptions = {
     tempoMultiplier?: number;
     triggerRangeMultiplier?: number;
     strikeRangeMultiplier?: number;
+    completenessTier?: number;
   };
 };
 

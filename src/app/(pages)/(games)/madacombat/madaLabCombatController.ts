@@ -14,7 +14,18 @@ import {
   resolveMadaPresentationState,
 } from "../../../asset/entity/monster/mada/presentation";
 
-export const MADA_LAB_MAX_HEALTH = 2800;
+export const MADA_LAB_MAX_HEALTH = 4000;
+export const MADA_LAB_MAX_HEALTH_OPTIONS = [4000, 6000, 8000] as const;
+
+export const resolveMadaLabMaxHealth = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return MADA_LAB_MAX_HEALTH;
+  const normalized = Math.max(1, Math.floor(parsed));
+  if ((MADA_LAB_MAX_HEALTH_OPTIONS as readonly number[]).includes(normalized)) {
+    return normalized;
+  }
+  return MADA_LAB_MAX_HEALTH;
+};
 
 const MADA_GRAVITY = -28;
 const MADA_MAX_FALL_SPEED = -48;
@@ -71,6 +82,7 @@ type CreateMadaLabCombatControllerArgs = {
   groundY: number;
   containmentBaseLift: number;
   preSmokeExtraLift: number;
+  maxHealth?: number;
   isCombatAvailable: () => boolean;
   onHealthChanged: (now: number) => void;
 };
@@ -79,6 +91,7 @@ export type MadaLabCombatController = {
   rig: THREE.Group;
   getHealth: () => number;
   getMaxHealth: () => number;
+  setMaxHealth: (value: number, refill?: boolean) => void;
   isActivated: () => boolean;
   setActivated: (active: boolean) => void;
   resetForContainmentBreach: () => void;
@@ -103,6 +116,7 @@ export const createMadaLabCombatController = ({
   groundY,
   containmentBaseLift,
   preSmokeExtraLift,
+  maxHealth,
   isCombatAvailable,
   onHealthChanged,
 }: CreateMadaLabCombatControllerArgs): MadaLabCombatController => {
@@ -135,7 +149,8 @@ export const createMadaLabCombatController = ({
     rig: madaRig,
   });
 
-  let health = MADA_LAB_MAX_HEALTH;
+  let maxHealthValue = resolveMadaLabMaxHealth(maxHealth);
+  let health = maxHealthValue;
   let activated = false;
   let verticalVelocity = 0;
 
@@ -145,6 +160,15 @@ export const createMadaLabCombatController = ({
   const setActivated = (active: boolean) => {
     if (activated === active) return;
     activated = active;
+  };
+
+  const setMaxHealth = (value: number, refill = true) => {
+    maxHealthValue = resolveMadaLabMaxHealth(value);
+    if (refill) {
+      health = maxHealthValue;
+      return;
+    }
+    health = Math.min(health, maxHealthValue);
   };
 
   const applyGravity = (delta: number) => {
@@ -178,6 +202,7 @@ export const createMadaLabCombatController = ({
   const resetForContainmentBreach = () => {
     setActivated(false);
     verticalVelocity = 0;
+    health = maxHealthValue;
     madaAnimation.resetPose();
     madaPresentation.applyState(
       resolveMadaPresentationState({
@@ -311,7 +336,7 @@ export const createMadaLabCombatController = ({
     label: "Mada Subject",
     isActive: () => activated && health > 0 && isCombatAvailable(),
     getHealth: () => health,
-    getMaxHealth: () => MADA_LAB_MAX_HEALTH,
+    getMaxHealth: () => maxHealthValue,
     onHit: (hit) => {
       if (!activated || health <= 0 || !isCombatAvailable()) {
         return;
@@ -353,7 +378,8 @@ export const createMadaLabCombatController = ({
   return {
     rig: madaRig,
     getHealth: () => health,
-    getMaxHealth: () => MADA_LAB_MAX_HEALTH,
+    getMaxHealth: () => maxHealthValue,
+    setMaxHealth,
     isActivated: () => activated,
     setActivated,
     resetForContainmentBreach,

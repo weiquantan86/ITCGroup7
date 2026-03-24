@@ -18,11 +18,14 @@ import {
 import {
   createMadaLabCombatController,
   MADA_LAB_MAX_HEALTH,
+  resolveMadaLabMaxHealth,
 } from "./madaLabCombatController";
 import {
   MADA_AMBUSH_CRAWL_DAMAGE,
   canApplyMadaAmbushCrawlDamage,
 } from "../../../asset/entity/monster/mada/skillCrawl";
+import { createUnifiedMonsterRuntime } from "../../../asset/entity/monster/unified/registry";
+import type { UnifiedMonsterRuntime } from "../../../asset/entity/monster/unified/types";
 
 type BoxCollider = {
   minX: number;
@@ -108,6 +111,17 @@ const AMBUSH_GRAB_STRIKE_END_MS =
   AMBUSH_GRAB_WINDUP_END_MS + AMBUSH_GRAB_STRIKE_DURATION_MS;
 const STORY_SEQUENCE_DURATION_MS =
   AMBUSH_GRAB_STRIKE_END_MS + AMBUSH_GRAB_RECOVER_DURATION_MS;
+const MADA_UNIFIED_BASE_MAX_HEALTH = 2800;
+const MADA_SCORE_PER_DAMAGE = 1;
+const MADA_SCORE_HIT_PENALTY = 100;
+const MADA_VICTORY_BONUS_WITHIN_6_MIN = 3000;
+const MADA_VICTORY_BONUS_WITHIN_7_MIN = 2000;
+const MADA_VICTORY_BONUS_WITHIN_8_MIN = 1000;
+const MADA_VICTORY_BONUS_WITHIN_10_MIN = 0;
+const MADA_VICTORY_BONUS_6_MIN_SECONDS = 6 * 60;
+const MADA_VICTORY_BONUS_7_MIN_SECONDS = 7 * 60;
+const MADA_VICTORY_BONUS_8_MIN_SECONDS = 8 * 60;
+const MADA_VICTORY_BONUS_10_MIN_SECONDS = 10 * 60;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -140,6 +154,14 @@ const normalizeMadaDamageMultiplier = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return 1;
   return parsed;
+};
+
+const normalizeMadaCompletenessTier = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1;
+  if (parsed >= 3) return 3;
+  if (parsed >= 2) return 2;
+  return 1;
 };
 
 const createPuddleGeometry = (radiusX: number, radiusZ: number, phase: number) => {
@@ -194,7 +216,9 @@ export const createMadaLabScene = (
   const labGroup = new THREE.Group();
   const fxGroup = new THREE.Group();
   const solidGroup = new THREE.Group();
-  labGroup.add(solidGroup, fxGroup);
+  const madaRuntimeHostGroup = new THREE.Group();
+  madaRuntimeHostGroup.name = "madaLabUnifiedRuntimeHost";
+  labGroup.add(solidGroup, fxGroup, madaRuntimeHostGroup);
   scene.add(labGroup);
 
   const attackTargets: PlayerAttackTarget[] = [];
@@ -221,11 +245,25 @@ export const createMadaLabScene = (
   let activationObstaclesRemoved = false;
   let containmentReleased = false;
   let storyModeActive = false;
+  let tunnelSealed = false;
   let madaHasVanished = false;
   let formalBattleStarted = false;
+  let playerDead = false;
+  let gameEnded = false;
+  let victory = false;
+  let runStartedAtMs = performance.now();
+  let elapsedSeconds = 0;
+  let score = 0;
+  let damageScore = 0;
+  let hitPenaltyCount = 0;
+  let hitPenaltyScore = 0;
+  let victoryTimeBonusScore = 0;
   let madaGrabDamageApplied = false;
   let madaDamageMultiplier = 1;
+  let madaCompletenessTier = 1;
+  let madaMaxHealth = MADA_LAB_MAX_HEALTH;
   let madaCombat!: ReturnType<typeof createMadaLabCombatController>;
+  let madaBattleRuntime: UnifiedMonsterRuntime | null = null;
   const frontWallDepth = 1.4;
   const frontWallZ = bounds.maxZ + 0.8;
   const tunnelWidth = 8.8;
@@ -606,31 +644,98 @@ export const createMadaLabScene = (
     return target;
   };
 
+  const addScore = (amount: number) => {
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    const normalized = Math.max(0, amount);
+    score = Math.max(0, score + normalized);
+    return normalized;
+  };
+
+  const applyScorePenalty = (amount: number) => {
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    const normalized = Math.max(0, amount);
+    const before = score;
+    score = Math.max(0, score - normalized);
+    return before - score;
+  };
+
+  const refreshElapsedSeconds = (nowMs: number) => {
+    elapsedSeconds = Math.floor(Math.max(0, nowMs - runStartedAtMs) / 1000);
+  };
+
+  const resolveVictoryTimeBonus = (seconds: number) => {
+    if (seconds <= MADA_VICTORY_BONUS_6_MIN_SECONDS) {
+      return MADA_VICTORY_BONUS_WITHIN_6_MIN;
+    }
+    if (seconds <= MADA_VICTORY_BONUS_7_MIN_SECONDS) {
+      return MADA_VICTORY_BONUS_WITHIN_7_MIN;
+    }
+    if (seconds <= MADA_VICTORY_BONUS_8_MIN_SECONDS) {
+      return MADA_VICTORY_BONUS_WITHIN_8_MIN;
+    }
+    if (seconds <= MADA_VICTORY_BONUS_10_MIN_SECONDS) {
+      return MADA_VICTORY_BONUS_WITHIN_10_MIN;
+    }
+    return 0;
+  };
+
+  const endBattle = (didWin: boolean, now = performance.now()) => {
+    if (gameEnded) return;
+    refreshElapsedSeconds(now);
+    gameEnded = true;
+    victory = didWin;
+    playerDead = !didWin;
+    if (didWin) {
+      const bonus = resolveVictoryTimeBonus(elapsedSeconds);
+      victoryTimeBonusScore += addScore(bonus);
+    }
+    emitState(true, now);
+  };
+
   const emitState = (force = false, now = performance.now()) => {
     if (!force && now < nextUiEmitAt) return;
     nextUiEmitAt = now + UI_EMIT_INTERVAL_MS;
-    const madaHealth = madaCombat?.getHealth() ?? MADA_LAB_MAX_HEALTH;
-    const madaActivated = madaCombat?.isActivated() ?? false;
+    const runtimeState = madaBattleRuntime?.getState();
+    const resolvedMadaMaxHealth =
+      runtimeState?.monsterMaxHealth ?? madaCombat?.getMaxHealth() ?? madaMaxHealth;
+    const madaHealth =
+      runtimeState?.monsterHealth ?? madaCombat?.getHealth() ?? resolvedMadaMaxHealth;
+    const madaActivated =
+      runtimeState != null
+        ? runtimeState.monsterAlive
+        : madaCombat?.isActivated() ?? false;
     const containmentIntegrity = clamp(
-      Math.round((madaHealth / MADA_LAB_MAX_HEALTH) * 100),
+      Math.round((madaHealth / Math.max(1, resolvedMadaMaxHealth)) * 100),
       0,
       100
     );
     const nextState: MadaLabState = {
       madaHealth: Math.max(0, Math.floor(madaHealth)),
-      madaMaxHealth: MADA_LAB_MAX_HEALTH,
+      madaMaxHealth: resolvedMadaMaxHealth,
+      elapsedSeconds: Math.max(0, Math.floor(elapsedSeconds)),
+      score: Math.max(0, Math.floor(score)),
+      damageScore: Math.max(0, Math.floor(damageScore)),
+      hitPenaltyCount: Math.max(0, Math.floor(hitPenaltyCount)),
+      hitPenaltyScore: Math.max(0, Math.floor(hitPenaltyScore)),
+      victoryTimeBonusScore: Math.max(0, Math.floor(victoryTimeBonusScore)),
+      gameEnded,
+      victory,
+      playerDead,
       containmentIntegrity,
       electricActivity: clamp(Math.round(electricActivity), 0, 100),
       fluidPatches: fluidPatchCount,
       circuitBreaks: circuitBreakCount,
       terminalInRange,
       statusLabel:
-        madaHasVanished
+        gameEnded && victory
+          ? "Specimen neutralized"
+          : gameEnded
+          ? "Operator down"
+          : madaHasVanished
           ? "Specimen vanished"
           : storyModeActive
           ? "Story sequence"
-          :
-        madaHealth <= 0
+          : madaHealth <= 0
           ? "Containment failure"
           : breachSequenceStarted
           ? "Containment breach"
@@ -755,6 +860,12 @@ export const createMadaLabScene = (
   );
   solidGroup.add(frontWallTop);
   trackMesh(frontWallTop);
+
+  const frontWallGate = createWall(tunnelWidth, tunnelHeight, frontWallDepth);
+  frontWallGate.position.set(0, GROUND_Y + tunnelHeight / 2, frontWallZ);
+  frontWallGate.visible = false;
+  solidGroup.add(frontWallGate);
+  trackMesh(frontWallGate);
 
   const leftWall = createWall(1.4, ROOM_HEIGHT, ROOM_DEPTH - 8);
   leftWall.position.set(bounds.minX - 0.8, GROUND_Y + ROOM_HEIGHT / 2, 0);
@@ -980,10 +1091,36 @@ export const createMadaLabScene = (
 
   solidGroup.add(tunnelGroup);
   trackObject(tunnelGroup);
-  addCollider(-(tunnelWidth / 2 + 0.17), tunnelCenterZ, 0.34, tunnelDepth, 0.08);
-  addCollider(tunnelWidth / 2 + 0.17, tunnelCenterZ, 0.34, tunnelDepth, 0.08);
-  addCollider(0, tunnelEndZ - 0.14, tunnelWidth + 0.36, 0.28, 0.08);
+  const tunnelLeftWallCollider = addCollider(
+    -(tunnelWidth / 2 + 0.17),
+    tunnelCenterZ,
+    0.34,
+    tunnelDepth,
+    0.08
+  );
+  const tunnelRightWallCollider = addCollider(
+    tunnelWidth / 2 + 0.17,
+    tunnelCenterZ,
+    0.34,
+    tunnelDepth,
+    0.08
+  );
+  const tunnelEndWallCollider = addCollider(
+    0,
+    tunnelEndZ - 0.14,
+    tunnelWidth + 0.36,
+    0.28,
+    0.08
+  );
   const terminalCollider = addCollider(0, terminalAnchor.z - 0.12, 2, 1.8, 0.1);
+  const frontWallGateCollider = addCollider(
+    0,
+    frontWallZ,
+    tunnelWidth,
+    frontWallDepth,
+    0.08
+  );
+  frontWallGateCollider.enabled = false;
 
   const createPanelWindow = (x: number) => {
     const panel = new THREE.Group();
@@ -1772,6 +1909,7 @@ export const createMadaLabScene = (
     groundY: MADA_GROUND_Y,
     containmentBaseLift: MADA_CONTAINMENT_BASE_LIFT,
     preSmokeExtraLift: MADA_PRE_SMOKE_EXTRA_LIFT,
+    maxHealth: madaMaxHealth,
     isCombatAvailable: () => !storyModeActive && !madaHasVanished,
     onHealthChanged: (now) => {
       shieldPulse = Math.min(1.4, shieldPulse + 0.55);
@@ -2033,12 +2171,112 @@ export const createMadaLabScene = (
     emitState(true, now);
   };
 
+  const isBlockedAt = (x: number, z: number) => {
+    if (
+      x < playableBounds.minX ||
+      x > playableBounds.maxX ||
+      z < playableBounds.minZ ||
+      z > playableBounds.maxZ
+    ) {
+      return true;
+    }
+    if (z > bounds.maxZ && Math.abs(x) > tunnelWidth / 2 - 0.18) {
+      return true;
+    }
+    for (let i = 0; i < colliders.length; i += 1) {
+      const collider = colliders[i];
+      if (collider.enabled === false) continue;
+      if (
+        x >= collider.minX &&
+        x <= collider.maxX &&
+        z >= collider.minZ &&
+        z <= collider.maxZ
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const sealTunnelAfterStory = (now: number) => {
+    if (tunnelSealed) return;
+    tunnelSealed = true;
+    terminalInRange = false;
+    playableBounds.maxZ = bounds.maxZ;
+    frontWallGate.visible = true;
+    frontWallGateCollider.enabled = true;
+    terminalCollider.enabled = false;
+    tunnelLeftWallCollider.enabled = false;
+    tunnelRightWallCollider.enabled = false;
+    tunnelEndWallCollider.enabled = false;
+    tunnelGroup.visible = false;
+    if (tunnelGroup.parent) {
+      tunnelGroup.parent.remove(tunnelGroup);
+    }
+    emitState(true, now);
+  };
+
+  const startUnifiedMadaBattle = (now: number) => {
+    if (madaBattleRuntime) return;
+    runStartedAtMs = now;
+    elapsedSeconds = 0;
+    score = 0;
+    damageScore = 0;
+    hitPenaltyCount = 0;
+    hitPenaltyScore = 0;
+    victoryTimeBonusScore = 0;
+
+    const unifiedSpawn = madaRig.position.clone();
+    madaCombat.dispose();
+    madaRig.visible = false;
+    if (madaRig.parent) {
+      madaRig.parent.remove(madaRig);
+    }
+
+    const healthMultiplier = Math.max(
+      0.001,
+      madaMaxHealth / MADA_UNIFIED_BASE_MAX_HEALTH
+    );
+
+    madaBattleRuntime = createUnifiedMonsterRuntime({
+      scene,
+      hostGroup: madaRuntimeHostGroup,
+      resourceTracker,
+      monster: {
+        id: "mada",
+        label: "Mada Subject",
+        path: "/assets/monsters/mada/mada.glb",
+      },
+      groundY: MADA_GROUND_Y,
+      spawnPosition: unifiedSpawn,
+      bounds: playableBounds,
+      isBlocked: isBlockedAt,
+      attackTargets,
+      runtimeOptions: {
+        respawnOnDefeat: false,
+        isGameEnded: () => gameEnded,
+        mada: {
+          healthMultiplier,
+          damageMultiplier: madaDamageMultiplier,
+          completenessTier: madaCompletenessTier,
+        },
+      },
+    });
+    madaBattleRuntime.reset(now);
+  };
+
   const handleTerminalUnlock = (event: Event) => {
     const customEvent = event as CustomEvent<MadaTerminalUnlockDetail>;
     if (customEvent.detail?.code !== "1986") return;
     madaDamageMultiplier = normalizeMadaDamageMultiplier(
       customEvent.detail?.madaDamageMultiplier
     );
+    madaCompletenessTier = normalizeMadaCompletenessTier(
+      customEvent.detail?.madaCompletenessTier
+    );
+    madaMaxHealth = resolveMadaLabMaxHealth(customEvent.detail?.madaMaxHealth);
+    madaCombat.setMaxHealth(madaMaxHealth, true);
+    emitState(true, performance.now());
     destroyTerminal(performance.now());
   };
 
@@ -2053,12 +2291,8 @@ export const createMadaLabScene = (
   const madaGrabTarget = new THREE.Vector3();
   const ambushPlayerHitTarget = new THREE.Vector3();
 
-  const worldTick = ({
-    now,
-    delta,
-    player,
-    applyDamage,
-  }: PlayerWorldTickArgs) => {
+  const worldTick = (args: PlayerWorldTickArgs) => {
+    const { now, delta, player, applyDamage } = args;
     const effectiveDelta = delta;
 
     shieldPulse = Math.max(0, shieldPulse - effectiveDelta * 1.5);
@@ -2068,6 +2302,44 @@ export const createMadaLabScene = (
     }
 
     player.getWorldPosition(playerWorldPosition);
+    if (madaBattleRuntime) {
+      terminalInRange = false;
+      if (!gameEnded) {
+        refreshElapsedSeconds(now);
+      }
+      const battleState = madaBattleRuntime.getState();
+      const battleMaxHealth = Math.max(1, battleState.monsterMaxHealth);
+      electricActivity =
+        60 +
+        12 * (0.5 + 0.5 * Math.sin(now * 0.0024)) +
+        shieldPulse * 20 +
+        (battleState.monsterHealth <= battleMaxHealth * 0.35 ? 8 : 0);
+      madaBattleRuntime.tick({
+        ...args,
+        applyDamage: (amount) => {
+          const applied = applyDamage(amount);
+          if (!gameEnded && applied > 0) {
+            hitPenaltyCount += 1;
+            hitPenaltyScore += applyScorePenalty(MADA_SCORE_HIT_PENALTY);
+          }
+          return applied;
+        },
+      });
+      const updatedBattleState = madaBattleRuntime.getState();
+      if (!gameEnded && updatedBattleState.monsterHealth < battleState.monsterHealth) {
+        const gained = addScore(
+          (battleState.monsterHealth - updatedBattleState.monsterHealth) *
+            MADA_SCORE_PER_DAMAGE
+        );
+        damageScore += gained;
+      }
+      if (!gameEnded && !updatedBattleState.monsterAlive) {
+        endBattle(true, now);
+      }
+      emitState(false, now);
+      return;
+    }
+
     const playerInsideTunnel = playerWorldPosition.z > tunnelExitThresholdZ;
     terminalInRange =
       !terminalDestroyed &&
@@ -2087,13 +2359,14 @@ export const createMadaLabScene = (
     const breachActive =
       breachSequenceStarted && (!madaHasVanished || storyTimeline.hasMadaReappeared);
     const madaHealth = madaCombat.getHealth();
+    const madaMaxHealthNow = Math.max(1, madaCombat.getMaxHealth());
 
     electricActivity = breachActive
       ? 94 + (0.5 + 0.5 * Math.sin(now * 0.011)) * 6 + shieldPulse * 12
       : 60 +
         12 * (0.5 + 0.5 * Math.sin(now * 0.0024)) +
         shieldPulse * 20 +
-        (madaHealth <= MADA_LAB_MAX_HEALTH * 0.35 ? 8 : 0);
+        (madaHealth <= madaMaxHealthNow * 0.35 ? 8 : 0);
 
     if (storyModeActive) {
       resolveStoryPlayerPosition(now, breachStoryPlayerPosition);
@@ -2161,10 +2434,11 @@ export const createMadaLabScene = (
       !formalBattleStarted &&
       storyTimeline.isSequenceComplete
     ) {
+      sealTunnelAfterStory(now);
       formalBattleStarted = true;
       storyModeActive = false;
       madaHasVanished = false;
-      madaCombat.beginFormalBattle(now);
+      startUnifiedMadaBattle(now);
       emitState(true, now);
     }
 
@@ -2175,39 +2449,22 @@ export const createMadaLabScene = (
     sceneId: "madaLab",
     groundY: GROUND_Y,
     playerSpawn: new THREE.Vector3(0, GROUND_Y, 28),
+    resetOnDeath: false,
     bounds: playableBounds,
     projectileColliders: [solidGroup, chamberProjectileBlocker],
     attackTargets,
     isInputLocked: () => storyModeActive,
     isMiniMapVisible: () => !storyModeActive,
     getLookOverride: (now) => resolveBreachLookOverride(now),
-    isBlocked: (x, z) => {
-      if (
-        x < playableBounds.minX ||
-        x > playableBounds.maxX ||
-        z < playableBounds.minZ ||
-        z > playableBounds.maxZ
-      ) {
-        return true;
-      }
-      if (z > bounds.maxZ && Math.abs(x) > tunnelWidth / 2 - 0.18) {
-        return true;
-      }
-      for (let i = 0; i < colliders.length; i += 1) {
-        const collider = colliders[i];
-        if (collider.enabled === false) continue;
-        if (
-          x >= collider.minX &&
-          x <= collider.maxX &&
-          z >= collider.minZ &&
-          z <= collider.maxZ
-        ) {
-          return true;
-        }
-      }
-      return false;
-    },
+    isBlocked: isBlockedAt,
     onTick: worldTick,
+    onPlayerDeath: ({ currentStats, now }) => {
+      if (currentStats.health <= 0) {
+        endBattle(false, now);
+        return "handled";
+      }
+      return "ignore";
+    },
   };
 
   emitState(true);
@@ -2222,6 +2479,7 @@ export const createMadaLabScene = (
     context?.onStateChange?.({});
     scene.remove(ambient);
     scene.remove(breachAlarmLight);
+    madaBattleRuntime?.dispose();
     madaCombat.dispose();
     attackTargets.length = 0;
     scene.remove(labGroup);

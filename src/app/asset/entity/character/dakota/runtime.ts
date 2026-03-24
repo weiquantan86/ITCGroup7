@@ -1181,6 +1181,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     energyDrainPerSecond: 5,
     movementMultiplier: 1.2,
     burstShots: 2,
+    healPerHit: 1,
   };
   const sprintLeanRad = THREE.MathUtils.degToRad(10);
   const gravityShellFlickerInterval = 0.05;
@@ -1635,6 +1636,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
           }
         },
         onTargetHit: () => {
+          if (isQExplosiveShell) {
+            applyHealth?.(skillQConfig.healPerHit);
+          }
           if (!isRGravityBurstShell || gravityBurstRewardGranted) return;
           gravityBurstRewardGranted = true;
           applyHealth?.(skillRConfig.impactHeal);

@@ -101,6 +101,7 @@ const skillQHeadReturnDurationMs = 260;
 const skillQKillHealthThreshold = 1000;
 const skillQHighHealthDamage = 500;
 const skillQHighHealthAcGain = 1;
+const skillQHighHealthHeal = 10;
 const skillQConsumeRewardHealth = 30;
 const skillQConsumeRewardMana = 30;
 const skillQConsumeRewardAc = 5;
@@ -1985,6 +1986,17 @@ export const createRuntime: CharacterRuntimeFactory = ({
         point: targetWorldPos.clone(),
         direction: skillQHeadTargetDirection.clone(),
       });
+      let didDealDamage = true;
+      if (typeof healthBefore === "number" && Number.isFinite(healthBefore)) {
+        const healthAfter = resolveRuntimeTargetHealth(target);
+        didDealDamage =
+          typeof healthAfter !== "number" ||
+          !Number.isFinite(healthAfter) ||
+          healthAfter < healthBefore;
+      }
+      if (didDealDamage) {
+        applyHealth?.(skillQHighHealthHeal);
+      }
       setAbsorptionCoefficient(absorptionCoefficient + skillQHighHealthAcGain);
       skillQConsumedTargetIds.add(target.id);
       return;

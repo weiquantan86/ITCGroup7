@@ -1469,6 +1469,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   performMeleeAttack,
   applyEnergy,
   applyMana,
+  applyHealth,
   getCurrentStats,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
@@ -1748,6 +1749,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const skillQSealGlyphChars = ["甲", "乙", "丙", "丁"] as const;
   const skillQSealGlyphEntries: SkillQSealGlyphEntry[] = [];
   const skillQSealGlyphTextureCache = new Map<string, THREE.CanvasTexture>();
+  const baronPassiveHealIntervalMs = 1000;
+  const baronPassiveHealAmountPerTick = 1.5;
+  let baronPassiveHealNextAt = 0;
   let runtimeLastUpdateAt = 0;
   let runtimeAnimationModel: THREE.Object3D | null = null;
   let runtimeAnimationMixer: THREE.AnimationMixer | null = null;
@@ -5805,6 +5809,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const resetState = () => {
+    baronPassiveHealNextAt = 0;
     runtimeLastUpdateAt = 0;
     runtimeAvatarModelRef = null;
     resetRuntimeAnimationPlayback();
@@ -5990,6 +5995,36 @@ export const createRuntime: CharacterRuntimeFactory = ({
         requestArmPoseReset();
         hud.setVisible(false);
         hud.setRatio(0);
+      }
+
+      const hasSkillActivity =
+        skillQState.active ||
+        skillQSuperState.active ||
+        skillRState.active ||
+        skillEChargeState.isCharging ||
+        skillEVolley.active ||
+        runtimeSkillEShootEndsAt > args.now;
+      const hasAttackActivity =
+        chargeState.isCharging ||
+        chargeState.releaseUntil > args.now ||
+        runtimeNormalAttackEndsAt > args.now ||
+        Boolean(primarySwingState.entry);
+      const canPassiveHeal = !args.isMoving && !hasSkillActivity && !hasAttackActivity;
+      if (canPassiveHeal) {
+        if (baronPassiveHealNextAt <= 0) {
+          baronPassiveHealNextAt = args.now + baronPassiveHealIntervalMs;
+        } else if (args.now + 0.001 >= baronPassiveHealNextAt) {
+          const dueTicks =
+            Math.floor(
+              (args.now - baronPassiveHealNextAt) / baronPassiveHealIntervalMs
+            ) + 1;
+          if (dueTicks > 0) {
+            applyHealth?.(dueTicks * baronPassiveHealAmountPerTick);
+            baronPassiveHealNextAt += dueTicks * baronPassiveHealIntervalMs;
+          }
+        }
+      } else {
+        baronPassiveHealNextAt = 0;
       }
 
       if (!args.arms.length) {

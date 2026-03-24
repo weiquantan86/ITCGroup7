@@ -476,9 +476,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
   noCooldown,
   fireProjectile,
   performMeleeAttack,
+  applyHealth,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
   const bypassCooldown = Boolean(noCooldown);
+  const adamPassiveHealIntervalMs = 1000;
+  let adamNextPassiveHealAt = 0;
   const hud = createChargeHud(mount);
   const skillGlow = createSkillGlow();
   const chargeConfig = {
@@ -2100,6 +2103,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const resetState = () => {
+    adamNextPassiveHealAt = 0;
     chargeState.startTime = 0;
     chargeState.ratio = 0;
     chargeState.releaseUntil = 0;
@@ -2174,6 +2178,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetState,
     update: (args) => {
       baseRuntime.update(args);
+      if (adamNextPassiveHealAt <= 0) {
+        adamNextPassiveHealAt = args.now + adamPassiveHealIntervalMs;
+      } else if (args.now + 0.001 >= adamNextPassiveHealAt) {
+        const dueTicks =
+          Math.floor(
+            (args.now - adamNextPassiveHealAt) / adamPassiveHealIntervalMs
+          ) + 1;
+        if (dueTicks > 0) {
+          applyHealth?.(dueTicks);
+          adamNextPassiveHealAt += dueTicks * adamPassiveHealIntervalMs;
+        }
+      }
       if (args.avatarModel) {
         skillGlow.bindModel(args.avatarModel);
       }

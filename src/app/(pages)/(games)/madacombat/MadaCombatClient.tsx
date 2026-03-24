@@ -56,11 +56,13 @@ type RewardClaimResponse = {
   granted?: Partial<SurgeSnackRewards>;
   scoreStep?: number;
   rewardPacks?: number;
+  pointReward?: number;
 };
 
 const MADA_UNLOCK_CODE = "1986";
-const MADA_VICTORY_SCORE = 100;
-const MADA_VICTORY_SCORE_STEP = 100;
+const MADA_SETTLEMENT_SCORE_STEP_VICTORY = 100;
+const MADA_SETTLEMENT_SCORE_STEP_DEFEAT = 400;
+const MADA_VICTORY_POINT_REWARD_BASE = 100;
 const END_SCENE_FADE_OUT_MS = 950;
 const REWARD_REQUEST_TIMEOUT_MS = 12_000;
 const MADA_DAMAGE_MULTIPLIER_OPTIONS = Array.from({ length: 7 }, (_, index) => {
@@ -71,10 +73,50 @@ const MADA_DAMAGE_MULTIPLIER_OPTIONS = Array.from({ length: 7 }, (_, index) => {
     rewardBonus: Number(((value - 1) * 0.3).toFixed(2)),
   };
 });
+const MADA_HEALTH_OPTIONS = [
+  { value: 4000, label: "4000", rewardBonus: 0 },
+  { value: 6000, label: "6000", rewardBonus: 1.5 },
+  { value: 8000, label: "8000", rewardBonus: 3 },
+] as const;
+const MADA_COMPLETENESS_OPTIONS = [
+  {
+    tier: 1,
+    label: "Relax",
+    summary: "Vanish 15s, reveal skillShoot only",
+    rewardBonus: 0.5,
+  },
+  {
+    tier: 2,
+    label: "Half",
+    summary: "Vanish 10s, random skill1/skill3/skillShoot",
+    rewardBonus: 1,
+  },
+  {
+    tier: 3,
+    label: "Full",
+    summary: "Move speed +10%, random all except skillShoot, rage enabled",
+    rewardBonus: 1.5,
+  },
+] as const;
+const MADA_MAX_REWARD_BONUS =
+  MADA_DAMAGE_MULTIPLIER_OPTIONS[MADA_DAMAGE_MULTIPLIER_OPTIONS.length - 1]
+    .rewardBonus +
+  MADA_HEALTH_OPTIONS[MADA_HEALTH_OPTIONS.length - 1].rewardBonus +
+  MADA_COMPLETENESS_OPTIONS[MADA_COMPLETENESS_OPTIONS.length - 1].rewardBonus;
 
 const clampPercent = (value: number) => {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, Math.round(value)));
+};
+
+const resolveMadaSettlementScoreStep = (victory: boolean) =>
+  victory ? MADA_SETTLEMENT_SCORE_STEP_VICTORY : MADA_SETTLEMENT_SCORE_STEP_DEFEAT;
+
+const formatDurationLabel = (seconds: number) => {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainSeconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainSeconds).padStart(2, "0")}`;
 };
 
 const cloneRewards = (rewards: SurgeSnackRewards): SurgeSnackRewards => ({
@@ -170,6 +212,12 @@ export default function MadaCombatClient({
   const [terminalUnlocked, setTerminalUnlocked] = useState(false);
   const [unlockDifficultyOpen, setUnlockDifficultyOpen] = useState(false);
   const [madaDamageMultiplier, setMadaDamageMultiplier] = useState(1);
+  const [madaMaxHealth, setMadaMaxHealth] = useState<
+    (typeof MADA_HEALTH_OPTIONS)[number]["value"]
+  >(MADA_HEALTH_OPTIONS[0].value);
+  const [madaCompletenessTier, setMadaCompletenessTier] = useState<
+    (typeof MADA_COMPLETENESS_OPTIONS)[number]["tier"]
+  >(MADA_COMPLETENESS_OPTIONS[0].tier);
   const [battleRewardMultiplier, setBattleRewardMultiplier] = useState<number | null>(
     null
   );
@@ -179,8 +227,9 @@ export default function MadaCombatClient({
   const [grantedRewards, setGrantedRewards] = useState<SurgeSnackRewards>(
     createEmptySurgeSnackRewards()
   );
-  const [rewardScoreStep, setRewardScoreStep] = useState(MADA_VICTORY_SCORE_STEP);
+  const [rewardScoreStep, setRewardScoreStep] = useState(0);
   const [rewardPackCount, setRewardPackCount] = useState(0);
+  const [grantedPointReward, setGrantedPointReward] = useState(0);
   const [endTransitionPhase, setEndTransitionPhase] =
     useState<EndTransitionPhase>("idle");
   const codeResetTimerRef = useRef<number | null>(null);
@@ -213,26 +262,74 @@ export default function MadaCombatClient({
     [madaDamageMultiplier]
   );
 
+  const selectedHealthOption = useMemo(
+    () =>
+      MADA_HEALTH_OPTIONS.find((option) => option.value === madaMaxHealth) ??
+      MADA_HEALTH_OPTIONS[0],
+    [madaMaxHealth]
+  );
+
+  const selectedCompletenessOption = useMemo(
+    () =>
+      MADA_COMPLETENESS_OPTIONS.find(
+        (option) => option.tier === madaCompletenessTier
+      ) ?? MADA_COMPLETENESS_OPTIONS[0],
+    [madaCompletenessTier]
+  );
+
+  const configuredRewardMultiplier = useMemo(() => {
+    const totalBonus =
+      selectedDamageOption.rewardBonus +
+      selectedHealthOption.rewardBonus +
+      selectedCompletenessOption.rewardBonus;
+    return Number((1 + totalBonus).toFixed(2));
+  }, [
+    selectedDamageOption.rewardBonus,
+    selectedHealthOption.rewardBonus,
+    selectedCompletenessOption.rewardBonus,
+  ]);
+
   const runtimeRewardMultiplier =
-    battleRewardMultiplier ?? selectedDamageOption.value;
-  const isBattleVictory =
-    hasStarted && terminalUnlocked && labState.madaHealth <= 0;
+    battleRewardMultiplier ?? configuredRewardMultiplier;
+  const hasConfiguredDifficulty = battleRewardMultiplier !== null;
+  const showBattleTimePanel =
+    terminalUnlocked &&
+    (Math.max(0, Math.floor(labState.elapsedSeconds || 0)) > 0 || labState.gameEnded);
+  const isBattleEnded = hasStarted && terminalUnlocked && labState.gameEnded;
+  const isBattleVictory = isBattleEnded && labState.victory;
+  const settlementScore = useMemo(
+    () => Math.max(0, Math.floor(labState.score || 0)),
+    [labState.score]
+  );
   const isSettlementVisible =
-    hasStarted && isBattleVictory && endTransitionPhase === "showingResult";
+    hasStarted && isBattleEnded && endTransitionPhase === "showingResult";
   const shouldRenderBattleSection =
-    hasStarted && (!isBattleVictory || endTransitionPhase !== "showingResult");
+    hasStarted && (!isBattleEnded || endTransitionPhase !== "showingResult");
   const rewardConvertedScoreTarget = useMemo(() => {
+    return Math.max(0, Math.floor(settlementScore * runtimeRewardMultiplier));
+  }, [runtimeRewardMultiplier, settlementScore]);
+  const resolvedRewardScoreStep =
+    rewardScoreStep > 0
+      ? rewardScoreStep
+      : resolveMadaSettlementScoreStep(isBattleVictory);
+  const resolvedRewardPackCount = useMemo(() => {
+    if (rewardClaimStatus === "claimed") return Math.max(0, rewardPackCount);
+    return Math.floor(
+      rewardConvertedScoreTarget / Math.max(1, resolvedRewardScoreStep)
+    );
+  }, [
+    rewardClaimStatus,
+    rewardConvertedScoreTarget,
+    resolvedRewardScoreStep,
+    rewardPackCount,
+  ]);
+  const victoryPointRewardTarget = useMemo(() => {
+    if (!isBattleVictory) return 0;
     return Math.max(
       0,
-      Math.floor(MADA_VICTORY_SCORE * runtimeRewardMultiplier)
+      Math.floor(MADA_VICTORY_POINT_REWARD_BASE * runtimeRewardMultiplier)
     );
-  }, [runtimeRewardMultiplier]);
-  const resolvedRewardScoreStep =
-    rewardScoreStep > 0 ? rewardScoreStep : MADA_VICTORY_SCORE_STEP;
-  const resolvedRewardPackCount = useMemo(() => {
-    if (rewardPackCount > 0) return rewardPackCount;
-    return Math.floor(rewardConvertedScoreTarget / resolvedRewardScoreStep);
-  }, [rewardConvertedScoreTarget, resolvedRewardScoreStep, rewardPackCount]);
+  }, [isBattleVictory, runtimeRewardMultiplier]);
 
   const rewardEntries = useMemo<RewardEntry[]>(() => {
     return SURGE_SNACK_KEYS.filter((key) => grantedRewards[key] > 0).map((key) => ({
@@ -243,12 +340,17 @@ export default function MadaCombatClient({
   }, [grantedRewards]);
 
   const difficultyHeatRatio = useMemo(() => {
-    const maxBonus =
-      MADA_DAMAGE_MULTIPLIER_OPTIONS[MADA_DAMAGE_MULTIPLIER_OPTIONS.length - 1]
-        .rewardBonus;
-    const normalized = selectedDamageOption.rewardBonus / Math.max(0.0001, maxBonus);
+    const bonus =
+      selectedDamageOption.rewardBonus +
+      selectedHealthOption.rewardBonus +
+      selectedCompletenessOption.rewardBonus;
+    const normalized = bonus / Math.max(0.0001, MADA_MAX_REWARD_BONUS);
     return Math.max(0, Math.min(1, normalized));
-  }, [selectedDamageOption.rewardBonus]);
+  }, [
+    selectedDamageOption.rewardBonus,
+    selectedHealthOption.rewardBonus,
+    selectedCompletenessOption.rewardBonus,
+  ]);
 
   const difficultyShellStyle = useMemo<CSSProperties>(() => {
     const upperRed = 0.05 + difficultyHeatRatio * 0.22;
@@ -278,6 +380,15 @@ export default function MadaCombatClient({
     setLabState({
       madaHealth: next.madaHealth || 0,
       madaMaxHealth: next.madaMaxHealth || 0,
+      elapsedSeconds: next.elapsedSeconds || 0,
+      score: next.score || 0,
+      damageScore: next.damageScore || 0,
+      hitPenaltyCount: next.hitPenaltyCount || 0,
+      hitPenaltyScore: next.hitPenaltyScore || 0,
+      victoryTimeBonusScore: next.victoryTimeBonusScore || 0,
+      gameEnded: Boolean(next.gameEnded),
+      victory: Boolean(next.victory),
+      playerDead: Boolean(next.playerDead),
       containmentIntegrity: clampPercent(next.containmentIntegrity || 0),
       electricActivity: clampPercent(next.electricActivity || 0),
       fluidPatches: next.fluidPatches || 0,
@@ -406,10 +517,35 @@ export default function MadaCombatClient({
   }, [unlockDifficultyOpen]);
 
   useEffect(() => {
+    if (!unlockDifficultyOpen) return;
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+    const previousBodyCursor = document.body.style.cursor;
+    const previousRootCursor = document.documentElement.style.cursor;
+    document.body.style.cursor = "default";
+    document.documentElement.style.cursor = "default";
+    return () => {
+      document.body.style.cursor = previousBodyCursor;
+      document.documentElement.style.cursor = previousRootCursor;
+    };
+  }, [unlockDifficultyOpen]);
+
+  useEffect(() => {
     const lockedRewardMultiplier = battleRewardMultiplier;
+    const settledScore = Math.max(0, Math.floor(labState.score || 0));
+    const settledVictory = Boolean(labState.victory);
+    const settledPointReward = settledVictory
+      ? Math.max(
+          0,
+          Math.floor(
+            MADA_VICTORY_POINT_REWARD_BASE * (lockedRewardMultiplier ?? 1)
+          )
+        )
+      : 0;
     if (
       !hasStarted ||
-      !isBattleVictory ||
+      !isBattleEnded ||
       rewardSubmittedRef.current ||
       lockedRewardMultiplier == null
     ) {
@@ -427,15 +563,16 @@ export default function MadaCombatClient({
       setRewardClaimStatus("claiming");
       setRewardClaimMessage("");
       try {
-        const response = await fetch("/api/games/mochisoldiersurge/reward", {
+        const response = await fetch("/api/games/reward", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
           body: JSON.stringify({
             gameMode: "mochiGeneralBattle",
-            score: MADA_VICTORY_SCORE,
-            victory: true,
+            score: settledScore,
+            victory: settledVictory,
             rewardMultiplier: lockedRewardMultiplier,
+            pointReward: settledPointReward,
           }),
         });
         const data = (await response.json()) as RewardClaimResponse;
@@ -452,13 +589,19 @@ export default function MadaCombatClient({
           (total, key) => total + granted[key],
           0
         );
+        const normalizedPointRewardRaw = Number(data.pointReward);
+        const normalizedPointReward =
+          Number.isFinite(normalizedPointRewardRaw) && normalizedPointRewardRaw > 0
+            ? Math.max(0, Math.floor(normalizedPointRewardRaw))
+            : 0;
         const normalizedScoreStepRaw = Number(data.scoreStep);
+        const fallbackScoreStep = resolveMadaSettlementScoreStep(settledVictory);
         const normalizedScoreStep =
           Number.isFinite(normalizedScoreStepRaw) && normalizedScoreStepRaw > 0
             ? Math.max(1, Math.floor(normalizedScoreStepRaw))
-            : MADA_VICTORY_SCORE_STEP;
+            : fallbackScoreStep;
         const fallbackPackCount = Math.floor(
-          (MADA_VICTORY_SCORE * lockedRewardMultiplier) / normalizedScoreStep
+          (settledScore * lockedRewardMultiplier) / normalizedScoreStep
         );
         const normalizedPackCountRaw = Number(data.rewardPacks);
         const normalizedPackCount =
@@ -468,10 +611,15 @@ export default function MadaCombatClient({
         setGrantedRewards(granted);
         setRewardScoreStep(normalizedScoreStep);
         setRewardPackCount(normalizedPackCount);
+        setGrantedPointReward(normalizedPointReward);
         setRewardClaimStatus("claimed");
         setRewardClaimMessage(
-          grantedCount > 0
-            ? "Rewards have been added to storage."
+          grantedCount > 0 && normalizedPointReward > 0
+            ? "Snacks and point rewards have been added to storage."
+            : grantedCount > 0
+            ? "Snack rewards have been added to storage."
+            : normalizedPointReward > 0
+            ? "Point rewards have been added to storage."
             : "No reward gained for this settlement."
         );
       } catch (error) {
@@ -497,10 +645,16 @@ export default function MadaCombatClient({
       controller.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [battleRewardMultiplier, hasStarted, isBattleVictory]);
+  }, [
+    battleRewardMultiplier,
+    hasStarted,
+    isBattleEnded,
+    labState.score,
+    labState.victory,
+  ]);
 
   useEffect(() => {
-    if (!hasStarted || !isBattleVictory) {
+    if (!hasStarted || !isBattleEnded) {
       clearEndTransitionTimer();
       setEndTransitionPhase("idle");
       return;
@@ -514,7 +668,7 @@ export default function MadaCombatClient({
       }, END_SCENE_FADE_OUT_MS);
       return "fadingScene";
     });
-  }, [clearEndTransitionTimer, hasStarted, isBattleVictory]);
+  }, [clearEndTransitionTimer, hasStarted, isBattleEnded]);
 
   useEffect(() => {
     return () => {
@@ -531,8 +685,10 @@ export default function MadaCombatClient({
     setRewardClaimStatus("idle");
     setRewardClaimMessage("");
     setGrantedRewards(createEmptySurgeSnackRewards());
-    setRewardScoreStep(MADA_VICTORY_SCORE_STEP);
+    setRewardScoreStep(0);
     setRewardPackCount(0);
+    setGrantedPointReward(0);
+    setLabState(createInitialMadaLabState());
     setTerminalUnlocked(false);
     setUnlockDifficultyOpen(false);
     setBattleRewardMultiplier(null);
@@ -550,16 +706,23 @@ export default function MadaCombatClient({
   const confirmUnlockAndApplyDifficulty = useCallback(() => {
     setUnlockDifficultyOpen(false);
     setTerminalUnlocked(true);
-    setBattleRewardMultiplier(madaDamageMultiplier);
+    setBattleRewardMultiplier(configuredRewardMultiplier);
     window.dispatchEvent(
       new CustomEvent(MADA_TERMINAL_UNLOCK_EVENT, {
         detail: {
           code: MADA_UNLOCK_CODE,
           madaDamageMultiplier,
+          madaMaxHealth,
+          madaCompletenessTier,
         },
       })
     );
-  }, [madaDamageMultiplier]);
+  }, [
+    configuredRewardMultiplier,
+    madaCompletenessTier,
+    madaDamageMultiplier,
+    madaMaxHealth,
+  ]);
 
   const loadLabScene = useCallback(async () => {
     const { createMadaLabScene } = await import("./labSceneDefinition");
@@ -580,7 +743,7 @@ export default function MadaCombatClient({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_16%,rgba(16,185,129,0.16),transparent_34%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(1,9,13,0.18)_0%,rgba(1,9,13,0.72)_58%,rgba(1,9,13,0.95)_100%)]" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1760px] flex-col justify-start px-6 pb-6 pt-16">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-none flex-col justify-start px-3 pb-2 pt-2 md:px-4">
         <section className="w-full rounded-[32px] border border-cyan-200/12 bg-white/[0.03] px-8 py-6 text-center shadow-[0_0_60px_rgba(16,185,129,0.12)] backdrop-blur-md">
           <div className="flex flex-col items-center text-center">
             <h1 className="text-center text-5xl font-black leading-none tracking-[1.01em] text-cyan-100 md:text-6xl">
@@ -673,109 +836,200 @@ export default function MadaCombatClient({
         ) : (
           <>
             {shouldRenderBattleSection ? (
-              <section className="relative mt-4 grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="flex min-h-0 flex-col gap-4">
-              <div className="relative rounded-[28px] border border-cyan-200/12 bg-[#071118]/90 p-4 shadow-[0_28px_80px_-42px_rgba(0,0,0,0.9)]">
-                <SceneLauncher
-                  gameMode="madacombat"
-                  characterPath={selectedCharacter?.path}
-                  sceneLoader={loadLabScene}
-                  onSceneStateChange={handleSceneStateChange}
-                  maxPixelRatio={1.25}
-                  antialias={false}
-                  enableShadows={false}
-                  useDefaultLights={false}
-                  className="h-[74dvh] min-h-[600px] w-full overflow-hidden rounded-[30px] border border-cyan-300/10 bg-[#02090c] shadow-[inset_0_0_48px_rgba(34,211,238,0.08)]"
-                />
-                {labState.terminalInRange && !unlockDifficultyOpen ? (
-                  <div className="pointer-events-none absolute bottom-10 left-1/2 z-10 -translate-x-1/2 rounded-full border border-cyan-300/40 bg-[#021118]/88 px-5 py-2 font-mono text-sm tracking-[0.24em] text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.2)]">
-                    Press [F]
-                  </div>
-                ) : null}
-              </div>
-            </div>
+              <section
+                className={`relative mt-2 grid min-h-[calc(100dvh-150px)] w-full items-stretch gap-3 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
+                  endTransitionPhase === "fadingScene"
+                    ? "pointer-events-none opacity-0 blur-[8px] scale-[0.985]"
+                    : "opacity-100 blur-0 scale-100"
+                }`}
+                style={{ transitionDuration: `${END_SCENE_FADE_OUT_MS}ms` }}
+              >
+                <aside className="min-h-0">
+                  {hasConfiguredDifficulty ? (
+                    <div className="flex h-full min-h-0 flex-col rounded-[24px] border border-cyan-200/20 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
+                      <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+                        Boss Modifiers
+                      </h2>
 
-            <aside className="flex min-h-0 flex-col gap-4">
-              <div className="rounded-[28px] border border-cyan-200/12 bg-[#071118]/92 p-5 shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)]">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
-                  Containment Terminal
-                </p>
-                <div className="mt-3 h-[248px] overflow-hidden rounded-[22px] border border-cyan-300/14 bg-[linear-gradient(180deg,rgba(7,17,24,0.98)_0%,rgba(3,10,14,0.96)_100%)]">
-                  {terminalOpen && !terminalUnlocked ? (
-                    <div className="flex h-full flex-col justify-between px-4 py-4 font-mono text-[12px] leading-6 text-cyan-100">
-                      <div className="flex items-center justify-between border-b border-cyan-300/10 pb-3">
-                        <div>
-                          <p className="font-mono text-sm tracking-[0.22em] text-cyan-100">
-                            ACCESS GATE
+                      <div className="mt-4 space-y-3">
+                        <div className="rounded-xl border border-cyan-200/20 bg-slate-950/65 p-3">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-200/80">
+                            Mada Damage
                           </p>
-                          <p className="mt-1 text-xs uppercase tracking-[0.24em] text-cyan-200/55">
-                            Enter authorization code
+                          <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
+                            {selectedDamageOption.label}
+                          </p>
+                          <p className="mt-1 text-xs text-emerald-300">
+                            Reward +{selectedDamageOption.rewardBonus.toFixed(2)}
                           </p>
                         </div>
-                        <div className="h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.9)]" />
-                      </div>
-                      <div className="flex flex-1 flex-col items-center justify-center">
-                        <div className="flex items-center gap-3">
-                          {terminalDisplayChars.map((char, index) => (
-                            <div
-                              key={`${char}-${index}`}
-                              className={`flex h-14 w-14 items-center justify-center rounded-[14px] border text-2xl tracking-[0.12em] ${
-                                terminalFeedback === "error"
-                                  ? "border-red-400/70 text-red-200 shadow-[0_0_18px_rgba(248,113,113,0.18)]"
-                                  : "border-cyan-300/24 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.08)]"
-                              } bg-[#02141c]`}
-                            >
-                              {char}
-                            </div>
-                          ))}
+
+                        <div className="rounded-xl border border-cyan-200/20 bg-slate-950/65 p-3">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-200/80">
+                            Mada Max Health
+                          </p>
+                          <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-50">
+                            {selectedHealthOption.label}
+                          </p>
+                          <p className="mt-1 text-xs text-emerald-300">
+                            Reward +{selectedHealthOption.rewardBonus.toFixed(2)}
+                          </p>
                         </div>
-                        <p className="mt-5 text-[11px] uppercase tracking-[0.26em] text-cyan-200/55">
-                          Input: 4 digits
-                        </p>
-                        <p
-                          className={`mt-2 text-[11px] uppercase tracking-[0.22em] ${
-                            terminalFeedback === "error"
-                              ? "text-red-300"
-                              : "text-cyan-300/68"
-                          }`}
-                        >
-                          {terminalFeedback === "error"
-                            ? "Invalid code"
-                            : "Awaiting authorization"}
-                        </p>
+
+                        <div className="rounded-xl border border-cyan-200/20 bg-slate-950/65 p-3">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-200/80">
+                            Mada Completeness
+                          </p>
+                          <p className="mt-1 text-xl font-semibold text-cyan-50">
+                            {selectedCompletenessOption.label}
+                          </p>
+                          <p className="mt-1 text-xs text-sky-200">
+                            {selectedCompletenessOption.summary}
+                          </p>
+                          <p className="mt-1 text-xs text-emerald-300">
+                            Reward +{selectedCompletenessOption.rewardBonus.toFixed(2)}
+                          </p>
+                        </div>
                       </div>
-                      <p className="mt-4 text-[11px] uppercase tracking-[0.24em] text-cyan-200/55">
-                        Number keys to enter. Backspace to erase.
+
+                      <div className="mt-4 rounded-xl border border-pink-200/25 bg-[linear-gradient(145deg,rgba(30,41,59,0.88)_0%,rgba(190,24,93,0.2)_100%)] p-3">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-pink-100/80">
+                          Reward Summary
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                          <span className="text-pink-100/80">Total Bonus</span>
+                          <span className="font-semibold tabular-nums text-pink-100">
+                            +{Math.max(0, runtimeRewardMultiplier - 1).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                          <span className="text-pink-100/80">Reward Multiplier</span>
+                          <span className="font-semibold tabular-nums text-pink-100">
+                            x{runtimeRewardMultiplier.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </aside>
+
+                <div className="relative flex w-full justify-center">
+                  <SceneLauncher
+                    gameMode="madacombat"
+                    characterPath={selectedCharacter?.path}
+                    sceneLoader={loadLabScene}
+                    onSceneStateChange={handleSceneStateChange}
+                    maxPixelRatio={1.25}
+                    antialias={false}
+                    enableShadows={false}
+                    useDefaultLights={false}
+                    className="h-[calc(100dvh-150px)] min-h-[700px] w-full max-w-none overflow-hidden rounded-[30px] border border-white/10 bg-[#02090c] shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)]"
+                  />
+                  {labState.terminalInRange && !unlockDifficultyOpen ? (
+                    <div className="pointer-events-none absolute bottom-10 left-1/2 z-10 -translate-x-1/2 rounded-full border border-cyan-300/40 bg-[#021118]/88 px-5 py-2 font-mono text-sm tracking-[0.24em] text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.2)]">
+                      Press [F]
+                    </div>
+                  ) : null}
+                </div>
+
+                <aside className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
+                  {showBattleTimePanel ? (
+                    <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                        Game Time
+                      </p>
+                      <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-100">
+                        {formatDurationLabel(labState.elapsedSeconds)}
                       </p>
                     </div>
-                  ) : (
-                    <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_50%_18%,rgba(34,211,238,0.08),transparent_42%),linear-gradient(180deg,rgba(0,0,0,0.06)_0%,rgba(0,0,0,0.24)_100%)] px-4 py-5">
-                      {terminalUnlocked ? (
-                        <>
-                          <div className="flex flex-1 items-center justify-center">
-                            <MadaEyeGlyph active />
-                          </div>
-                          <p className="text-center text-[11px] uppercase tracking-[0.26em] text-red-200/88">
-                            EMERGENCY!
-                          </p>
-                        </>
-                      ) : null}
+                  ) : null}
+
+                  <div
+                    className={`rounded-[22px] border border-cyan-300/14 bg-[linear-gradient(180deg,rgba(7,17,24,0.98)_0%,rgba(3,10,14,0.96)_100%)] ${
+                      showBattleTimePanel ? "mt-4" : ""
+                    }`}
+                  >
+                    <div className="p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
+                        Containment Terminal
+                      </p>
                     </div>
-                  )}
-                </div>
-              </div>
+                    <div className="h-[248px] overflow-hidden border-t border-cyan-300/10">
+                      {terminalOpen && !terminalUnlocked ? (
+                        <div className="flex h-full flex-col justify-between px-4 py-4 font-mono text-[12px] leading-6 text-cyan-100">
+                          <div className="flex items-center justify-between border-b border-cyan-300/10 pb-3">
+                            <div>
+                              <p className="font-mono text-sm tracking-[0.22em] text-cyan-100">
+                                ACCESS GATE
+                              </p>
+                              <p className="mt-1 text-xs uppercase tracking-[0.24em] text-cyan-200/55">
+                                Enter authorization code
+                              </p>
+                            </div>
+                            <div className="h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.9)]" />
+                          </div>
+                          <div className="flex flex-1 flex-col items-center justify-center">
+                            <div className="flex items-center gap-3">
+                              {terminalDisplayChars.map((char, index) => (
+                                <div
+                                  key={`${char}-${index}`}
+                                  className={`flex h-14 w-14 items-center justify-center rounded-[14px] border text-2xl tracking-[0.12em] ${
+                                    terminalFeedback === "error"
+                                      ? "border-red-400/70 text-red-200 shadow-[0_0_18px_rgba(248,113,113,0.18)]"
+                                      : "border-cyan-300/24 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.08)]"
+                                  } bg-[#02141c]`}
+                                >
+                                  {char}
+                                </div>
+                              ))}
+                            </div>
+                            <p className="mt-5 text-[11px] uppercase tracking-[0.26em] text-cyan-200/55">
+                              Input: 4 digits
+                            </p>
+                            <p
+                              className={`mt-2 text-[11px] uppercase tracking-[0.22em] ${
+                                terminalFeedback === "error"
+                                  ? "text-red-300"
+                                  : "text-cyan-300/68"
+                              }`}
+                            >
+                              {terminalFeedback === "error"
+                                ? "Invalid code"
+                                : "Awaiting authorization"}
+                            </p>
+                          </div>
+                          <p className="mt-4 text-[11px] uppercase tracking-[0.24em] text-cyan-200/55">
+                            Number keys to enter. Backspace to erase.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_50%_18%,rgba(34,211,238,0.08),transparent_42%),linear-gradient(180deg,rgba(0,0,0,0.06)_0%,rgba(0,0,0,0.24)_100%)] px-4 py-5">
+                          {terminalUnlocked ? (
+                            <>
+                              <div className="flex flex-1 items-center justify-center">
+                                <MadaEyeGlyph active />
+                              </div>
+                              <p className="text-center text-[11px] uppercase tracking-[0.26em] text-red-200/88">
+                                EMERGENCY!
+                              </p>
+                            </>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-              <div className="flex min-h-[260px] flex-1 flex-col overflow-hidden rounded-[28px] border border-cyan-200/12 bg-[#071118]/92 p-5 shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)]">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
-                  {terminalUnlocked ? "Mada Preview" : "? ? ?"}
-                </p>
-                <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-[22px] border border-cyan-300/16 bg-[radial-gradient(circle_at_35%_18%,rgba(34,211,238,0.18),transparent_48%),linear-gradient(180deg,rgba(5,18,24,0.92)_0%,rgba(1,8,10,0.98)_100%)]">
-                  {terminalUnlocked ? <MadaPreview /> : null}
-                </div>
-              </div>
-            </aside>
+                  <div className="mt-4 flex min-h-[320px] flex-1 flex-col overflow-hidden rounded-[22px] border border-cyan-200/12 bg-[#071118]/92 p-4 shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)]">
+                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
+                      {terminalUnlocked ? "Mada Preview" : "? ? ?"}
+                    </p>
+                    <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-[18px] border border-cyan-300/16 bg-[radial-gradient(circle_at_35%_18%,rgba(34,211,238,0.18),transparent_48%),linear-gradient(180deg,rgba(5,18,24,0.92)_0%,rgba(1,8,10,0.98)_100%)]">
+                      {terminalUnlocked ? <MadaPreview /> : null}
+                    </div>
+                  </div>
+                </aside>
 
-            {unlockDifficultyOpen ? (
+                {unlockDifficultyOpen ? (
               <div className="absolute inset-0 z-30 flex items-center justify-center rounded-[30px] border border-cyan-200/15 bg-[#04090de0] p-6 backdrop-blur-md md:p-8">
                 <div
                   className="w-full max-w-[1120px] rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-6 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] md:p-8"
@@ -785,7 +1039,7 @@ export default function MadaCombatClient({
                     Battle Difficulty
                   </p>
                   <p className="mt-2 text-center text-xs uppercase tracking-[0.18em] text-slate-300">
-                    Mada Damage Multiplier (password step)
+                    Mada Damage + Max Health + Completeness (password step)
                   </p>
 
                   <div className="mt-6 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
@@ -820,15 +1074,91 @@ export default function MadaCombatClient({
                     </div>
                   </div>
 
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                      2. Mada Max Health
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      {MADA_HEALTH_OPTIONS.map((option) => {
+                        const selected = option.value === selectedHealthOption.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setMadaMaxHealth(option.value)}
+                            className={`rounded-xl border px-4 py-3 text-left transition ${
+                              selected
+                                ? "border-rose-300/70 bg-rose-400/15 shadow-[0_0_20px_rgba(251,113,133,0.22)]"
+                                : "border-white/10 bg-slate-950/65 hover:border-white/30"
+                            }`}
+                          >
+                            <p className="text-base font-semibold text-slate-100">
+                              {option.label}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-300">
+                              {option.rewardBonus > 0
+                                ? `Reward +${option.rewardBonus.toFixed(2)}`
+                                : "No reward bonus"}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                      3. Mada Completeness
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      {MADA_COMPLETENESS_OPTIONS.map((option) => {
+                        const selected =
+                          option.tier === selectedCompletenessOption.tier;
+                        return (
+                          <button
+                            key={option.tier}
+                            type="button"
+                            onClick={() => setMadaCompletenessTier(option.tier)}
+                            className={`rounded-xl border px-4 py-3 text-left transition ${
+                              selected
+                                ? "border-red-300/70 bg-red-400/15 shadow-[0_0_20px_rgba(248,113,113,0.22)]"
+                                : "border-white/10 bg-slate-950/65 hover:border-white/30"
+                            }`}
+                          >
+                            <p className="text-base font-semibold text-slate-100">
+                              {option.label}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-300">
+                              {option.summary}
+                            </p>
+                            <p className="mt-2 text-xs text-slate-300">
+                              Reward +{option.rewardBonus.toFixed(2)}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <div className="mt-6 rounded-2xl border border-cyan-300/35 bg-cyan-950/30 px-4 py-5 text-center">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
                       Selected
                     </p>
+                    <p className="mt-2 text-lg font-semibold text-cyan-50">
+                      Damage {selectedDamageOption.label} | HP{" "}
+                      {selectedHealthOption.label} |{" "}
+                      {selectedCompletenessOption.label}
+                    </p>
                     <p className="mt-2 text-4xl font-bold tabular-nums text-cyan-100 md:text-5xl">
-                      {selectedDamageOption.label}
+                      x{configuredRewardMultiplier.toFixed(2)}
                     </p>
                     <p className="mt-2 text-xs uppercase tracking-[0.16em] text-cyan-100/80">
-                      Reward bonus +{selectedDamageOption.rewardBonus.toFixed(2)}
+                      Reward bonus +
+                      {(
+                        selectedDamageOption.rewardBonus +
+                        selectedHealthOption.rewardBonus +
+                        selectedCompletenessOption.rewardBonus
+                      ).toFixed(2)}
                     </p>
                   </div>
 
@@ -860,21 +1190,60 @@ export default function MadaCombatClient({
                   <p className="text-center text-sm font-semibold uppercase tracking-[0.24em] text-cyan-100 md:text-base">
                     Mada Combat Settlement
                   </p>
-                  <h2 className="mt-3 text-center text-3xl font-semibold text-emerald-300 md:text-4xl">
-                    Victory
+                  <h2
+                    className={`mt-3 text-center text-3xl font-semibold md:text-4xl ${
+                      isBattleVictory ? "text-emerald-300" : "text-rose-300"
+                    }`}
+                  >
+                    {isBattleVictory ? "Victory" : "Defeat"}
                   </h2>
                   <p className="mt-2 text-center text-sm text-slate-300">
-                    Every victory grants {MADA_VICTORY_SCORE} point, then scales
-                    with your reward multiplier.
+                    Score = Damage to Mada - Hit penalties + Victory time bonus.
+                  </p>
+                  <p className="mt-1 text-center text-xs text-slate-400">
+                    Reward conversion step:{" "}
+                    {isBattleVictory
+                      ? `${MADA_SETTLEMENT_SCORE_STEP_VICTORY} score / snack`
+                      : `${MADA_SETTLEMENT_SCORE_STEP_DEFEAT} score / snack`}
                   </p>
 
                   <div className="mt-6 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-xl border border-white/12 bg-slate-900/55 p-4">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                        Base Points
+                        Damage Score
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-emerald-200">
+                        +{Math.max(0, Math.floor(labState.damageScore || 0))}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/12 bg-slate-900/55 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                        Hit Penalty
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-rose-300">
+                        -{Math.max(0, Math.floor(labState.hitPenaltyScore || 0))}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Hits: {Math.max(0, Math.floor(labState.hitPenaltyCount || 0))}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/12 bg-slate-900/55 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                        Victory Time Bonus
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-amber-200">
+                        +{Math.max(0, Math.floor(labState.victoryTimeBonusScore || 0))}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Time: {Math.max(0, Math.floor(labState.elapsedSeconds || 0))}s
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/12 bg-slate-900/55 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                        Final Score
                       </p>
                       <p className="mt-2 text-2xl font-semibold text-slate-100">
-                        {MADA_VICTORY_SCORE}
+                        {settlementScore}
                       </p>
                     </div>
                     <div className="rounded-xl border border-white/12 bg-slate-900/55 p-4">
@@ -887,10 +1256,18 @@ export default function MadaCombatClient({
                     </div>
                     <div className="rounded-xl border border-white/12 bg-slate-900/55 p-4">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                        Converted Points
+                        Converted Score
                       </p>
                       <p className="mt-2 text-2xl font-semibold text-cyan-200">
                         {rewardConvertedScoreTarget}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/12 bg-slate-900/55 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                        Score Step
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-slate-100">
+                        {resolvedRewardScoreStep}
                       </p>
                     </div>
                     <div className="rounded-xl border border-white/12 bg-slate-900/55 p-4">
@@ -901,6 +1278,18 @@ export default function MadaCombatClient({
                         {resolvedRewardPackCount}
                       </p>
                     </div>
+                    {isBattleVictory ? (
+                      <div className="rounded-xl border border-white/12 bg-slate-900/55 p-4 sm:col-span-2">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                          Victory Point Reward
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-fuchsia-200">
+                          {rewardClaimStatus === "claimed"
+                            ? grantedPointReward
+                            : victoryPointRewardTarget}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="mt-5 rounded-xl border border-white/12 bg-slate-900/55 p-4">
@@ -908,7 +1297,9 @@ export default function MadaCombatClient({
                       Rewards
                     </p>
                     {rewardClaimStatus === "claiming" ? (
-                      <p className="mt-2 text-sm text-cyan-200">Claiming rewards...</p>
+                      <p className="mt-2 text-sm text-cyan-200">
+                        Claiming rewards...
+                      </p>
                     ) : rewardEntries.length > 0 ? (
                       <ul className="mt-2 space-y-2 text-sm text-slate-100">
                         {rewardEntries.map((entry) => (
@@ -927,7 +1318,7 @@ export default function MadaCombatClient({
                       <p className="mt-2 text-sm text-slate-400">
                         {rewardClaimStatus === "error"
                           ? "Reward claim failed."
-                          : "No reward granted."}
+                          : "No snack reward granted."}
                       </p>
                     )}
                     <p
@@ -952,12 +1343,14 @@ export default function MadaCombatClient({
                     >
                       Back to Menu
                     </Link>
-                    <Link
-                      href="/storage"
-                      className="inline-flex h-11 items-center justify-center rounded-full border border-white/25 px-7 text-sm font-semibold text-slate-100 transition hover:border-white/45 hover:bg-white/10"
-                    >
-                      Open Storage
-                    </Link>
+                    {isBattleVictory || rewardEntries.length > 0 || grantedPointReward > 0 ? (
+                      <Link
+                        href="/storage"
+                        className="inline-flex h-11 items-center justify-center rounded-full border border-white/25 px-7 text-sm font-semibold text-slate-100 transition hover:border-white/45 hover:bg-white/10"
+                      >
+                        Open Storage
+                      </Link>
+                    ) : null}
                   </div>
                 </div>
               </section>

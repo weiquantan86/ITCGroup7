@@ -26,6 +26,10 @@ import { createMadaSkill4Runtime } from "./skill4";
 import { createMadaSkill5Runtime } from "./skill5";
 import { createMadaSkillShootRuntime } from "./skillShoot";
 import { createMadaRageManager } from "./rageManager";
+import {
+  applyDamageToSlimluThreatOrPlayer,
+  resolveSlimluThreatTargetForEnemy,
+} from "../../character/slimlu/threatRegistry";
 import { normalizeModelToHeight, removeAttackTargetById } from "../unified/runtimeUtils";
 import type {
   UnifiedMonsterRuntime,
@@ -36,10 +40,58 @@ import type {
 const MADA_MAX_HEALTH = 2800;
 const MADA_RESPAWN_DELAY_MS = 1800;
 
+type MadaCompletenessTier = 1 | 2 | 3;
+type MadaRevealSkillName =
+  | "shoot"
+  | "skill1"
+  | "skill2"
+  | "skill3"
+  | "skill4"
+  | "skill5";
+
+const MADA_COMPLETENESS_TIER_DEFAULT: MadaCompletenessTier = 1;
+
+const MADA_COMPLETENESS_CONFIG: Record<
+  MadaCompletenessTier,
+  {
+    vanishIntervalMs: number;
+    revealSkillPool: readonly MadaRevealSkillName[];
+    baseSpeedMultiplier: number;
+    enableRage: boolean;
+  }
+> = {
+  1: {
+    vanishIntervalMs: 15_000,
+    revealSkillPool: ["shoot"],
+    baseSpeedMultiplier: 1,
+    enableRage: false,
+  },
+  2: {
+    vanishIntervalMs: 10_000,
+    revealSkillPool: ["skill1", "skill3", "shoot"],
+    baseSpeedMultiplier: 1,
+    enableRage: false,
+  },
+  3: {
+    vanishIntervalMs: 5_000,
+    revealSkillPool: ["skill1", "skill2", "skill3", "skill4", "skill5"],
+    baseSpeedMultiplier: 1.1,
+    enableRage: true,
+  },
+};
+
 const normalizePositiveMultiplier = (value: unknown, fallback = 1) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return parsed;
+};
+
+const normalizeMadaCompletenessTier = (value: unknown): MadaCompletenessTier => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return MADA_COMPLETENESS_TIER_DEFAULT;
+  if (parsed >= 3) return 3;
+  if (parsed >= 2) return 2;
+  return 1;
 };
 
 export const createMadaUnifiedRuntime = (
@@ -67,14 +119,19 @@ export const createMadaUnifiedRuntime = (
     madaConfig?.damageMultiplier,
     1
   );
-  const tempoMultiplier = normalizePositiveMultiplier(
-    madaConfig?.tempoMultiplier,
-    1
-  );
   const strikeRangeMultiplier = normalizePositiveMultiplier(
     madaConfig?.strikeRangeMultiplier,
     1
   );
+  const completenessTier = normalizeMadaCompletenessTier(
+    madaConfig?.completenessTier
+  );
+  const completenessConfig = MADA_COMPLETENESS_CONFIG[completenessTier];
+  const baseSpeedMultiplier = normalizePositiveMultiplier(
+    completenessConfig.baseSpeedMultiplier,
+    1
+  );
+  const enableRage = completenessConfig.enableRage;
   const resolvedMaxHealth = Math.max(
     1,
     Math.floor(MADA_MAX_HEALTH * healthMultiplier)
@@ -84,8 +141,6 @@ export const createMadaUnifiedRuntime = (
     damageRange: resolvedCrawlDamageRange,
     cooldownMs: resolvedCrawlCooldownMs,
   } = resolveMadaCrawlRuntimeValues({
-    damageMultiplier,
-    tempoMultiplier,
     strikeRangeMultiplier,
   });
 
@@ -179,6 +234,7 @@ export const createMadaUnifiedRuntime = (
   const vanishManager = createMadaVanishManager({
     bounds,
     isBlocked,
+    vanishIntervalMs: completenessConfig.vanishIntervalMs,
   });
   const rageManager = createMadaRageManager({
     scene,
@@ -193,6 +249,59 @@ export const createMadaUnifiedRuntime = (
 
   const applyPresentationState = (state: MadaPresentationState) => {
     madaPresentation.applyState(state);
+  };
+
+  const tryStartRevealSkill = (
+    skill: MadaRevealSkillName,
+    revealNow: number
+  ): boolean => {
+    switch (skill) {
+      case "shoot": {
+        const shootDurationS = madaAnimation.triggerShoot();
+        if (shootDurationS <= 0) return false;
+        shootRuntime.beginCast({
+          now: revealNow,
+          durationMs: shootDurationS * 1000,
+        });
+        return true;
+      }
+      case "skill1":
+        if (!madaAnimation.canPlaySkill1()) return false;
+        return skill1Runtime.beginCast(revealNow);
+      case "skill2":
+        if (!madaAnimation.canPlaySkill2()) return false;
+        return skill2Runtime.beginCast(revealNow, madaRig);
+      case "skill3":
+        if (!madaAnimation.canPlaySkill3()) return false;
+        return skill3Runtime.beginCast(revealNow);
+      case "skill4":
+        if (!madaAnimation.canPlaySkill4()) return false;
+        return skill4Runtime.beginCast(revealNow, madaRig);
+      case "skill5":
+        if (!madaAnimation.canPlaySkill5()) return false;
+        return skill5Runtime.beginCast(revealNow, madaRig);
+      default:
+        return false;
+    }
+  };
+
+  const castRevealSkillFromPool = (
+    revealNow: number
+  ): MadaRevealSkillName | null => {
+    const shuffledPool = [...completenessConfig.revealSkillPool];
+    for (let i = shuffledPool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = shuffledPool[i];
+      shuffledPool[i] = shuffledPool[j];
+      shuffledPool[j] = temp;
+    }
+    for (let i = 0; i < shuffledPool.length; i += 1) {
+      const skill = shuffledPool[i];
+      if (tryStartRevealSkill(skill, revealNow)) {
+        return skill;
+      }
+    }
+    return null;
   };
 
   applyPresentationState({ mode: "active", fadeAlpha: 1 });
@@ -257,14 +366,16 @@ export const createMadaUnifiedRuntime = (
     getMaxHealth: () => resolvedMaxHealth,
     onHit: (hit) => {
       if (health <= 0) return;
-      if (rageManager.shouldIgnoreIncomingDamage()) return;
+      if (enableRage && rageManager.shouldIgnoreIncomingDamage()) return;
       madaPresentation.triggerHitFlash(hit.now);
       health = Math.max(0, health - Math.max(1, Math.floor(hit.damage)));
       if (health <= 0) {
         onDown(hit.now);
         return;
       }
-      rageManager.onHealthChanged(health);
+      if (enableRage) {
+        rageManager.onHealthChanged(health);
+      }
     },
   };
   attackTargets.push(attackTarget);
@@ -332,13 +443,27 @@ export const createMadaUnifiedRuntime = (
       }
 
       const { scaledDelta, now: combatNow } =
-        rageManager.advanceCombatTime(delta);
+        rageManager.advanceCombatTime(delta * baseSpeedMultiplier);
+      const resolvedTarget = resolveSlimluThreatTargetForEnemy({
+        fallbackTarget: player,
+        enemyObject: madaRig,
+      });
       const applyMadaDamage = (amount: number) => {
-        const resolved = rageManager.resolveDamage(amount);
-        return applyDamage(Math.max(1, resolved));
+        const scaledDamage = Math.max(
+          1,
+          Math.floor((Number.isFinite(amount) ? amount : 0) * damageMultiplier)
+        );
+        const resolved = enableRage
+          ? rageManager.resolveDamage(scaledDamage)
+          : scaledDamage;
+        return applyDamageToSlimluThreatOrPlayer({
+          target: resolvedTarget,
+          amount: Math.max(1, Math.floor(resolved)),
+          applyPlayerDamage: applyDamage,
+        });
       };
 
-      player.getWorldPosition(toTarget);
+      resolvedTarget.getWorldPosition(toTarget);
       const dx = toTarget.x - madaRig.position.x;
       const dz = toTarget.z - madaRig.position.z;
       if (Math.abs(dx) > 0.0001 || Math.abs(dz) > 0.0001) {
@@ -356,7 +481,7 @@ export const createMadaUnifiedRuntime = (
       let skill4Active = skill4Runtime.isCasting();
       let skill5Active = skill5Runtime.isCasting();
       let shootActive = shootRuntime.isCasting();
-      let ragePlaying = rageManager.isRagePlaying();
+      let ragePlaying = enableRage && rageManager.isRagePlaying();
 
       // Auto-end crawl when its clip finishes
       if (!crawlActive && crawlStartedAt >= 0) {
@@ -376,7 +501,7 @@ export const createMadaUnifiedRuntime = (
           skill5Active ||
           shootActive ||
           ragePlaying ||
-          rageManager.blocksSkillStart(),
+          (enableRage && rageManager.blocksSkillStart()),
         fallbackPosition: madaRig.position,
         groundY: spawnPosition.y,
         playLookup: () => madaAnimation.triggerLookup(),
@@ -398,18 +523,22 @@ export const createMadaUnifiedRuntime = (
           madaAnimation.stopTransientAnimations();
           madaAnimation.resetPose();
           madaAnimation.applyHeadLook(null);
-          if (rageManager.onReveal()) {
+          if (enableRage && rageManager.onReveal()) {
             return;
           }
-          if (madaAnimation.canPlaySkill5()) {
-            const started = skill5Runtime.beginCast(revealNow, madaRig);
-            skill5Active = started;
-          } else if (madaAnimation.canPlaySkill4()) {
-            const started = skill4Runtime.beginCast(revealNow, madaRig);
-            skill4Active = started;
-          } else if (madaAnimation.canPlaySkill3()) {
-            const started = skill3Runtime.beginCast(revealNow);
-            skill3Active = started;
+          const revealSkill = castRevealSkillFromPool(revealNow);
+          if (revealSkill === "shoot") {
+            shootActive = true;
+          } else if (revealSkill === "skill1") {
+            skill1Active = true;
+          } else if (revealSkill === "skill2") {
+            skill2Active = true;
+          } else if (revealSkill === "skill3") {
+            skill3Active = true;
+          } else if (revealSkill === "skill4") {
+            skill4Active = true;
+          } else if (revealSkill === "skill5") {
+            skill5Active = true;
           }
         },
       });
@@ -425,12 +554,14 @@ export const createMadaUnifiedRuntime = (
         applyPresentationState({ mode: "active", fadeAlpha: 1 });
       }
 
-      rageManager.updateSequence({
-        allowAnimationTrigger: !vanishState.hidden,
-        requestVanish: () =>
-          vanishManager.requestVanishNow(combatNow, { skipLookup: true }),
-      });
-      ragePlaying = rageManager.isRagePlaying();
+      if (enableRage) {
+        rageManager.updateSequence({
+          allowAnimationTrigger: !vanishState.hidden,
+          requestVanish: () =>
+            vanishManager.requestVanishNow(combatNow, { skipLookup: true }),
+        });
+      }
+      ragePlaying = enableRage && rageManager.isRagePlaying();
 
       if (vanishState.hidden) {
         madaAnimation.applyHeadLook(null);
@@ -440,7 +571,7 @@ export const createMadaUnifiedRuntime = (
           now: combatNow,
           delta: scaledDelta,
           rig: madaRig,
-          player,
+          player: resolvedTarget,
           applyDamage: applyMadaDamage,
           projectileBlockers,
           handleProjectileBlockHit,
@@ -449,28 +580,28 @@ export const createMadaUnifiedRuntime = (
           now: combatNow,
           delta: scaledDelta,
           rig: madaRig,
-          player,
+          player: resolvedTarget,
           applyDamage: applyMadaDamage,
         });
         skill3Runtime.tick({
           now: combatNow,
           delta: scaledDelta,
           rig: madaRig,
-          player,
+          player: resolvedTarget,
           applyDamage: applyMadaDamage,
         });
         skill4Runtime.tick({
           now: combatNow,
           delta: scaledDelta,
           rig: madaRig,
-          player,
+          player: resolvedTarget,
           applyDamage: applyMadaDamage,
         });
         skill5Runtime.tick({
           now: combatNow,
           delta: scaledDelta,
           rig: madaRig,
-          player,
+          player: resolvedTarget,
           applyDamage: applyMadaDamage,
         });
         if (skill5Runtime.consumeCastFailed()) {
@@ -480,7 +611,7 @@ export const createMadaUnifiedRuntime = (
           now: combatNow,
           delta: scaledDelta,
           rig: madaRig,
-          player,
+          player: resolvedTarget,
           applyDamage: applyMadaDamage,
           projectileBlockers,
           handleProjectileBlockHit,
@@ -499,7 +630,7 @@ export const createMadaUnifiedRuntime = (
       const skill3Playing = madaAnimation.isSkill3Playing();
       const skill4Playing = madaAnimation.isSkill4Playing();
       const skill5Playing = madaAnimation.isSkill5Playing();
-      ragePlaying = rageManager.isRagePlaying();
+      ragePlaying = enableRage && rageManager.isRagePlaying();
       if (
         lookupActive ||
         shootPlaying ||
@@ -565,14 +696,17 @@ export const createMadaUnifiedRuntime = (
         madaAnimation.resetPose();
       }
 
-      rageManager.updateParticles(scaledDelta, rageManager.isRageActive());
+      rageManager.updateParticles(
+        scaledDelta,
+        enableRage && rageManager.isRageActive()
+      );
       madaAnimation.update(scaledDelta);
       madaRig.updateMatrixWorld(true);
       skill1Runtime.tick({
         now: combatNow,
         delta: scaledDelta,
         rig: madaRig,
-        player,
+        player: resolvedTarget,
         applyDamage: applyMadaDamage,
         projectileBlockers,
         handleProjectileBlockHit,
@@ -581,28 +715,28 @@ export const createMadaUnifiedRuntime = (
         now: combatNow,
         delta: scaledDelta,
         rig: madaRig,
-        player,
+        player: resolvedTarget,
         applyDamage: applyMadaDamage,
       });
       skill3Runtime.tick({
         now: combatNow,
         delta: scaledDelta,
         rig: madaRig,
-        player,
+        player: resolvedTarget,
         applyDamage: applyMadaDamage,
       });
       skill4Runtime.tick({
         now: combatNow,
         delta: scaledDelta,
         rig: madaRig,
-        player,
+        player: resolvedTarget,
         applyDamage: applyMadaDamage,
       });
       skill5Runtime.tick({
         now: combatNow,
         delta: scaledDelta,
         rig: madaRig,
-        player,
+        player: resolvedTarget,
         applyDamage: applyMadaDamage,
       });
       if (skill5Runtime.consumeCastFailed()) {
@@ -612,7 +746,7 @@ export const createMadaUnifiedRuntime = (
         now: combatNow,
         delta: scaledDelta,
         rig: madaRig,
-        player,
+        player: resolvedTarget,
         applyDamage: applyMadaDamage,
         projectileBlockers,
         handleProjectileBlockHit,
@@ -663,7 +797,7 @@ export const createMadaUnifiedRuntime = (
             } else {
               madaAnimation.getRightClawWorldPosition(checkPos);
             }
-            player.getWorldPosition(toTarget);
+            resolvedTarget.getWorldPosition(toTarget);
             if (
               isMadaCrawlDamageHit({
                 strikeOrigin: checkPos,

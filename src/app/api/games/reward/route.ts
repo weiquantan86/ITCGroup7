@@ -1,13 +1,13 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import pool from "../../../../../database/client";
+import pool from "../../../../database/client";
 import {
   SURGE_TOTAL_MONSTERS,
   SURGE_SNACK_KEYS,
   createEmptySurgeSnackRewards,
   resolveSurgeRewardPacksFromKills,
   type SurgeSnackRewards,
-} from "../../../../(pages)/(games)/mochiSoldierSurge/surgeConfig";
+} from "../../../(pages)/(games)/mochiSoldierSurge/surgeConfig";
 
 type RewardRequestBody = {
   gameMode?: string;
@@ -16,6 +16,7 @@ type RewardRequestBody = {
   defeatedMonsters?: number;
   victory?: boolean;
   rewardMultiplier?: number;
+  pointReward?: number;
 };
 
 const MOCHI_GENERAL_VICTORY_SCORE_STEP = 100;
@@ -44,6 +45,12 @@ const normalizeRewardMultiplier = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 1;
   return Math.max(1, parsed);
+};
+
+const normalizePointReward = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(1_000_000, Math.floor(parsed)));
 };
 
 const rollRewards = (count: number): SurgeSnackRewards => {
@@ -94,12 +101,14 @@ export async function POST(request: Request) {
   let winBonusBaseRewards = createEmptySurgeSnackRewards();
   let winBonusMultiplierBonusRewards = createEmptySurgeSnackRewards();
   let rewards = createEmptySurgeSnackRewards();
+  let pointReward = 0;
   let settlementPayload: Record<string, number | boolean> = {};
 
   if (isMochiGeneralBattleMode) {
     const score = normalizeScore(body.score);
     const isVictory = Boolean(body.victory);
     const rewardMultiplier = normalizeRewardMultiplier(body.rewardMultiplier);
+    pointReward = isVictory ? normalizePointReward(body.pointReward) : 0;
     const scoreStep = isVictory
       ? MOCHI_GENERAL_VICTORY_SCORE_STEP
       : MOCHI_GENERAL_DEFEAT_SCORE_STEP;
@@ -124,6 +133,7 @@ export async function POST(request: Request) {
       multiplierBonusRewardPacks,
       rewardMultiplier,
       victory: isVictory,
+      pointReward,
     };
   } else {
     const defeatedMonsters = normalizeDefeatedCount(body.defeatedMonsters);
@@ -168,13 +178,14 @@ export async function POST(request: Request) {
       rewardMultiplier,
       victory: isVictory,
     };
+    pointReward = 0;
   }
 
   const totalReward = SURGE_SNACK_KEYS.reduce(
     (total, key) => total + rewards[key],
     0
   );
-  if (totalReward <= 0) {
+  if (totalReward <= 0 && pointReward <= 0) {
     return NextResponse.json({
       success: true,
       granted: rewards,
@@ -184,6 +195,7 @@ export async function POST(request: Request) {
       winBonus: winBonusRewards,
       winBonusBase: winBonusBaseRewards,
       winBonusMultiplierBonus: winBonusMultiplierBonusRewards,
+      pointReward,
       ...settlementPayload,
       skipped: true,
     });
@@ -197,20 +209,23 @@ export async function POST(request: Request) {
           energy_sugar,
           dream_fruit_dust,
           core_crunch_seed,
-          star_gel_essence
+          star_gel_essence,
+          point
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (user_id)
         DO UPDATE SET
           energy_sugar = user_resources.energy_sugar + EXCLUDED.energy_sugar,
           dream_fruit_dust = user_resources.dream_fruit_dust + EXCLUDED.dream_fruit_dust,
           core_crunch_seed = user_resources.core_crunch_seed + EXCLUDED.core_crunch_seed,
-          star_gel_essence = user_resources.star_gel_essence + EXCLUDED.star_gel_essence
+          star_gel_essence = user_resources.star_gel_essence + EXCLUDED.star_gel_essence,
+          point = COALESCE(user_resources.point, 0) + EXCLUDED.point
         RETURNING
           COALESCE(energy_sugar, 0) AS energy_sugar,
           COALESCE(dream_fruit_dust, 0) AS dream_fruit_dust,
           COALESCE(core_crunch_seed, 0) AS core_crunch_seed,
-          COALESCE(star_gel_essence, 0) AS star_gel_essence;
+          COALESCE(star_gel_essence, 0) AS star_gel_essence,
+          COALESCE(point, 0) AS point;
       `,
       values: [
         userId,
@@ -218,6 +233,7 @@ export async function POST(request: Request) {
         rewards.dream_fruit_dust,
         rewards.core_crunch_seed,
         rewards.star_gel_essence,
+        pointReward,
       ]
       ,
       query_timeout: dbQueryTimeoutMs,
@@ -233,18 +249,20 @@ export async function POST(request: Request) {
       winBonus: winBonusRewards,
       winBonusBase: winBonusBaseRewards,
       winBonusMultiplierBonus: winBonusMultiplierBonusRewards,
+      pointReward,
       ...settlementPayload,
       resources: {
         energy_sugar: Number(resources.energy_sugar) || 0,
         dream_fruit_dust: Number(resources.dream_fruit_dust) || 0,
         core_crunch_seed: Number(resources.core_crunch_seed) || 0,
         star_gel_essence: Number(resources.star_gel_essence) || 0,
+        point: Number(resources.point) || 0,
       },
     });
   } catch (error) {
     console.error(error);
     return NextResponse.json(
-      { error: "Failed to apply mochisoldiersurge rewards" },
+      { error: "Failed to apply game rewards" },
       { status: 500 }
     );
   }

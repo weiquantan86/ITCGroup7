@@ -541,7 +541,7 @@ export default function MochiSoldierSurgeClient({
       setRewardClaimStatus("claiming");
       setRewardClaimMessage("");
       try {
-        const response = await fetch("/api/games/mochisoldiersurge/reward", {
+        const response = await fetch("/api/games/reward", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
