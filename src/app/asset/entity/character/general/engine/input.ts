@@ -180,8 +180,16 @@ export const bindPlayerInput = ({
     }
     if (event.repeat) return;
 
+    const hasDashDirectionInput =
+      pressedKeys.has("w") ||
+      pressedKeys.has("a") ||
+      pressedKeys.has("s") ||
+      pressedKeys.has("d");
+
     if (event.code === "KeyF") {
-      onDash(performance.now());
+      if (hasDashDirectionInput) {
+        onDash(performance.now());
+      }
       return;
     }
 

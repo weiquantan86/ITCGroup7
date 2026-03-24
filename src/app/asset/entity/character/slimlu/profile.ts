@@ -22,7 +22,7 @@ export const profile: CharacterProfile = {
       id: "basic",
       label: "Basic",
       description:
-        "Hold Basic to drain a nearby enemy through a link. Every 0.5s the link deals scaling damage and grants Mana, EN, and Absorption Coefficient. Release to stop draining.",
+        "Hold Basic to link and drain nearby targets. Every 0.5s each link deals damage that scales with Absorption Coefficient, and successful ticks grant Mana, Energy, and more Absorption Coefficient. Release to stop draining.",
     },
     skills: {
       q: {
@@ -31,7 +31,7 @@ export const profile: CharacterProfile = {
         cost: 0,
         cooldownMs: 0,
         description:
-          "Requires full EN and consumes all current EN. Launch Slimlu's head to bite a target. High-HP targets take heavy damage; low-HP targets can be consumed for HP, Mana, and AC rewards.",
+          "Requires full EN and consumes all current EN. Launch Slimlu's head forward to bite/consume targets. High-HP targets take heavy strike damage with sustain rewards; low-HP targets are executed for large HP/Mana/Absorption rewards.",
       },
       e: {
         id: "e",
@@ -39,7 +39,7 @@ export const profile: CharacterProfile = {
         cost: 60,
         cooldownMs: 7000,
         description:
-          "Summon 1 + floor(AC / 5) slime clones (40 HP, decay over time). Clones seek targets and attach; pressing E again during detonation window explodes attached clones for 30 + 0.5 * AC damage.",
+          "Summon 1 + floor(AC / 5) slime clones (40 HP, decays over time). Clones seek and attach to targets. Press E again during detonation window to explode attached clones for AC-scaled damage and resource gain.",
       },
       r: {
         id: "r",
@@ -47,7 +47,7 @@ export const profile: CharacterProfile = {
         cost: 0,
         cooldownMs: 0,
         description:
-          "Dual mode. No attached clones: channel then fire beam for 75 + 0.5 * AC damage (60 Mana, 10s cooldown). With attached clones: recall all attachments; each recalled clone deals 10 + 0.02 * AC, grants AC and resource gain, and reduces R cooldown (30 Mana, 5s base cooldown).",
+          "Dual mode. No attached clones: charge then fire a beam that ticks AC-scaled damage and grants Energy on hit (60 Mana, 10s cooldown). With attached clones: recall attachments; each recall deals AC-scaled damage, grants AC/Mana/Energy, and reduces cooldown time (30 Mana, 5s base cooldown).",
       },
     },
   },

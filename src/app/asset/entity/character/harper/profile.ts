@@ -25,7 +25,7 @@ export const profile: CharacterProfile = {
       id: "basic",
       label: "Basic",
       description:
-        "Bare state: hold to charge and release a projectile; early release cancels before firing. Bare hit restores 4 Mana. Weapon state: 3-stage sword combo with weapon mesh hit detection; each hit restores 2 Mana, and stage 3 has extra forward reach plus a smooth backstep.",
+        "Bare state: hold to charge and release a projectile; early release cancels before firing. Bare hits restore Mana. Weapon state: 3-stage sword combo with per-stage damage/resource gain; stage 3 adds forward reach, backstep, and self-heal on hit.",
     },
     skills: {
       q: {
@@ -33,7 +33,7 @@ export const profile: CharacterProfile = {
         label: "Q",
         cost: 100,
         description:
-          "Cast-state move speed is reduced to 0.1x. Bare Q summons a gate that periodically spawns Purcles; each Purcle hit restores Harper 1 Mana and 1 EN. Weapon Q uses weapon mesh collision to trigger repeated explosion hits during the swing.",
+          "Cast movement is heavily reduced. Bare Q summons a gate that periodically spawns Purcles; Purcle hits restore Harper Mana and Energy. Weapon Q uses weapon collider sweep with repeated explosion-hit windows.",
       },
       e: {
         id: "e",
@@ -41,7 +41,7 @@ export const profile: CharacterProfile = {
         cost: 70,
         cooldownMs: 20_000,
         description:
-          "State-swap skill. Bare E costs 70 Mana to equip weapon and does not start cooldown. Weapon E throws the weapon, applies explosion damage on impact, and starts the 20s E cooldown when the sword is dropped.",
+          "State swap skill. Bare E spends 70 Mana to equip weapon (no E cooldown start). Weapon E throws the weapon as an explosive projectile and leaves a damaging explosion field, then starts E cooldown.",
       },
       r: {
         id: "r",
@@ -49,7 +49,7 @@ export const profile: CharacterProfile = {
         cost: 50,
         cooldownMs: 13_000,
         description:
-          "Both states cost 50 Mana and use a 13s cooldown. Bare R releases a homing projectile barrage and each hit restores 2 EN. Weapon R summons 3 Purcles around Harper.",
+          "Both states cost 50 Mana with 13s cooldown. Bare R releases a homing projectile barrage with Energy gain on hit. Weapon R summons 3 Purcles around Harper.",
       },
     },
   },

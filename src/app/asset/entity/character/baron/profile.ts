@@ -17,14 +17,14 @@ export const profile: CharacterProfile = {
       id: "basic",
       label: "Basic",
       description:
-        "Hold to charge a sword slash. Release to deal charge-scaled melee damage; full charge also fires a fast sword wave. The swing can reflect frontal linear projectiles, and successful hits restore Energy and Mana.",
+        "Hold to charge a sword slash (0.18s-1.8s). Release for charge-scaled melee damage/range; full charge also fires a sword wave. Swing hits and projectile reflections restore Energy and Mana.",
     },
     skills: {
       q: {
         id: "q",
         label: "Q",
         description:
-          "Consume all EN to summon 5 clones for 10s. Clones move with reduced stats, can synchronize with E, and disappear after duration or when consumed by combo actions.",
+          "Consume all EN to summon 5 clones for 10s (reduced HP/speed). Recast Q while clones exist to trigger the super slash chain: clones strike in sequence, then Baron finishes with a stronger slash.",
         cost: "all",
         cooldownMs: 15000,
       },
@@ -32,7 +32,7 @@ export const profile: CharacterProfile = {
         id: "e",
         label: "E",
         description:
-          "Hold to charge shuriken power, release to fire a 3-shuriken explosive volley. Charge increases throw quality. If clones are active, they throw synchronized empowered shurikens and are consumed after the synchronized throw.",
+          "Hold to charge and release a 3-shuriken volley. Charge scales shuriken size/speed/lifetime/explosion. With active clones, shurikens become empowered/homing and clones throw synchronized explosive shurikens before being consumed.",
         cost: 20,
         cooldownMs: 5000,
       },
@@ -40,7 +40,7 @@ export const profile: CharacterProfile = {
         id: "r",
         label: "R",
         description:
-          "Enter dance stance for 5s: move speed is reduced, Baron performs periodic melee pulses and dance waves, and frontal projectiles are reflected. Hits and reflections grant extra Energy.",
+          "Enter dance stance for 5s: move speed is reduced, periodic melee pulses trigger dance slashes, and frontal projectiles are reflected. Skill hits and reflections grant extra Energy and Mana.",
         cost: 35,
         cooldownMs: 10000,
       },

@@ -45,6 +45,14 @@ export default function TrainingScenePage({
     }
   }, []);
 
+  const loadTrainingScene = useCallback(async () => {
+    const { createTrainingScene } = await import("./trainingSceneDefinition");
+    return {
+      id: "training",
+      setupScene: createTrainingScene,
+    };
+  }, []);
+
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     fetch("/api/gen-characters", { method: "POST" }).catch(() => {});
@@ -69,7 +77,7 @@ export default function TrainingScenePage({
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_200px] xl:grid-cols-[minmax(0,1fr)_220px]">
           <div className="flex justify-center">
             <SceneLauncher
-              sceneId="training"
+              sceneLoader={loadTrainingScene}
               gameMode="training"
               characterPath={selectedCharacterPath || undefined}
               infiniteFire={infiniteFire}

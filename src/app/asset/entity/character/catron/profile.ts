@@ -20,14 +20,14 @@ export const profile: CharacterProfile = {
       id: "basic",
       label: "Basic",
       description:
-        "Normal form: hold to charge a long-reach phantom punch with charge-scaled damage. Demon form: Basic no longer punches and instead fires demon projectiles.",
+        "Normal form: hold to charge a long-range phantom punch with charge-scaled damage and resource gain on hit. Demon form: Basic switches to demon shells with explosion and shockwave damage.",
     },
     skills: {
       q: {
         id: "q",
         label: "Q",
         description:
-          "Consume all EN to enter Demon Lord form for 10s. In this form Catron scales up, takes reduced damage, upgrades Basic and E or R behavior, and heals when the demon form ends.",
+          "Consume all EN to enter Demon Lord form. During demon form Catron scales up, takes reduced damage, and upgrades Basic/E/R. Demon form ends with recovery and returns to normal.",
         cost: "all",
         cooldownMs: 30000,
       },
@@ -35,7 +35,7 @@ export const profile: CharacterProfile = {
         id: "e",
         label: "E",
         description:
-          "Normal form: enter shallow phantom briefly; if hit, transition into deep phantom with full damage immunity. Recast during deep phantom to launch a 5-orb deep volley. In demon form, E directly triggers the demon deep-volley variant.",
+          "Normal form: enter shallow phantom; if hit, auto-transition to deep phantom (full damage immunity). Recast during deep phantom to launch a 5-orb volley. In demon form, E triggers the demon volley variant directly.",
         cost: 20,
         cooldownMs: 7000,
       },
@@ -43,7 +43,7 @@ export const profile: CharacterProfile = {
         id: "r",
         label: "R",
         description:
-          "Cast tornado attack. Normal cast fires one exploding tornado forward. In deep phantom or demon form, R fires 3 larger swaying tornadoes across lanes.",
+          "Cast tornado attack. Normal cast fires one exploding tornado. In deep phantom or demon form, R fires 3 larger lane-split swaying tornadoes.",
         cost: 30,
         cooldownMs: 12000,
       },

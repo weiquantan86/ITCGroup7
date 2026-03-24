@@ -20,14 +20,14 @@ export const profile: CharacterProfile = {
       id: "basic",
       label: "Basic",
       description:
-        "Hold to charge an orb (min 0.26s, max 2.4s), then release to fire. Charge level scales projectile speed and travel time. If E is active, the next charged shot becomes an empowered explosive orb and consumes E.",
+        "Hold to charge (0.26s-2.4s), then release an orb. Charge scales speed (8-20), lifetime (0.9s-1.8s), and damage. If E is active, this shot is consumed into an empowered split orb with larger direct and explosion damage.",
     },
     skills: {
       q: {
         id: "q",
         label: "Q",
         description:
-          "After a 2s charge-up, fire a 3-orb spread volley. Hitting the same target twice in one volley applies a 5s Arc debuff that deals periodic damage.",
+          "After a 2s channel, fire 3 large orbs. If one target is hit twice in the same volley, apply Arc for 5s (periodic damage each second).",
         cost: 100,
         cooldownMs: 10000,
       },
@@ -35,7 +35,7 @@ export const profile: CharacterProfile = {
         id: "e",
         label: "E",
         description:
-          "Enter empowerment for up to 5s. Your next charged Basic turns into a large explosive orb (split + explosion) and then E goes on cooldown.",
+          "Arm the next charged Basic for up to 5s. The empowered shot consumes E and starts E cooldown.",
         cost: 20,
         cooldownMs: 5000,
       },
@@ -43,7 +43,7 @@ export const profile: CharacterProfile = {
         id: "r",
         label: "R",
         description:
-          "Create a sphere around Adam for 3s. While active, Adam is locked in place, the sphere deals periodic contact damage and gains stacks from hits and projectile blocks. Press E to launch the sphere as a combo projectile, or press Basic to detonate it in place; explosion damage scales with stacks.",
+          "Create a sphere for 3s (movement locked). The sphere deals periodic contact damage, blocks projectiles, and gains stacks from hits/blocks. Press E to launch it or Basic to detonate in place; explosion scales with stacks and high stacks add lingering area damage.",
         cost: 30,
         cooldownMs: 10000,
       },

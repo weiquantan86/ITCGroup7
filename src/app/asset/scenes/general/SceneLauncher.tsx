@@ -3,15 +3,16 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import * as THREE from "three";
 import { createPlayer, type PlayerUiState } from "../../entity/character/general/player";
-import { loadSceneDefinition } from "../registry";
 import type { SceneDefinition, SceneSetupResult, SceneUiState } from "./sceneTypes";
 
 export default function SceneLauncher({
-  sceneId = "grass",
   gameMode = "default",
   characterPath,
   decorations,
   className,
+  allowPrimaryAttack = true,
+  allowSkills = true,
+  allowJump = true,
   hideLocalHead = true,
   hideLocalBody = false,
   showMiniMap = true,
@@ -25,18 +26,20 @@ export default function SceneLauncher({
   antialias = true,
   enableShadows = true,
 }: {
-  sceneId?: string;
   gameMode?: string;
   characterPath?: string;
   decorations?: ReactNode;
   className?: string;
+  allowPrimaryAttack?: boolean;
+  allowSkills?: boolean;
+  allowJump?: boolean;
   hideLocalHead?: boolean;
   hideLocalBody?: boolean;
   showMiniMap?: boolean;
   infiniteFire?: boolean;
   onSceneStateChange?: (state: SceneUiState) => void;
   onPlayerStateChange?: (state: PlayerUiState) => void;
-  sceneLoader?: () => Promise<SceneDefinition> | SceneDefinition;
+  sceneLoader: () => Promise<SceneDefinition> | SceneDefinition;
   deltaStartAtMs?: number;
   maxPixelRatio?: number;
   useDefaultLights?: boolean;
@@ -76,9 +79,7 @@ export default function SceneLauncher({
 
     const initialize = async () => {
       try {
-        const sceneDefinition = sceneLoader
-          ? await Promise.resolve(sceneLoader())
-          : await loadSceneDefinition(sceneId);
+        const sceneDefinition = await Promise.resolve(sceneLoader());
         if (isDisposed) return;
 
         sceneSetup = sceneDefinition?.setupScene?.(scene, {
@@ -122,6 +123,9 @@ export default function SceneLauncher({
           characterPath,
           world: sceneSetup?.world,
           gameMode,
+          allowPrimaryAttack,
+          allowSkills,
+          allowJump,
           hideLocalHead,
           hideLocalBody,
           showMiniMap,
@@ -174,8 +178,10 @@ export default function SceneLauncher({
     };
   }, [
     characterPath,
-    sceneId,
     gameMode,
+    allowPrimaryAttack,
+    allowSkills,
+    allowJump,
     hideLocalHead,
     hideLocalBody,
     showMiniMap,

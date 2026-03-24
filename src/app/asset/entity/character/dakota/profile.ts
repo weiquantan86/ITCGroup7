@@ -17,7 +17,7 @@ export const profile: CharacterProfile = {
       id: "basic",
       label: "Basic",
       description:
-        "Hold to charge. Projectile only fires at full charge. Base mode fires a single shot; Q and E states change this into a 2-shot burst; R state fires one heavy gravity shell and then exits R.",
+        "Hold to charge; only full charge fires. Base mode is single-shot. Q/E convert full-charge Basic into a 2-shot burst. R converts it into a heavy gravity shell, and firing that shell exits R.",
     },
     skills: {
       q: {
@@ -26,7 +26,7 @@ export const profile: CharacterProfile = {
         cooldownMs: 10000,
         cost: 0,
         description:
-          "Toggle Mech-Electric mode. Requires at least 70 EN to activate, drains EN over time, grants move speed, and changes charged Basic into explosive 2-shot shells.",
+          "Toggle Mech-Electric mode (requires 70+ EN to enable). While active it drains EN continuously, boosts movement speed, and turns full-charge Basic into explosive 2-shot shells. Q-shell hits restore HP.",
       },
       e: {
         id: "e",
@@ -34,7 +34,7 @@ export const profile: CharacterProfile = {
         cooldownMs: 15000,
         cost: 60,
         description:
-          "Enter Light-Jump mode for 10s. Gain move speed and convert charged Basic into a 2-shot burst with improved on-hit sustain.",
+          "Enter Light-Jump mode for 10s. Gain movement speed and convert full-charge Basic into a 2-shot burst with stronger on-hit sustain.",
       },
       r: {
         id: "r",
@@ -42,7 +42,7 @@ export const profile: CharacterProfile = {
         cooldownMs: 20000,
         cost: 40,
         description:
-          "Enter Gravity mode for 10s with reduced move speed. Charged Basic becomes a crimson explosive gravity shell; its first hit restores HP and Energy, and firing it ends Gravity mode.",
+          "Enter Gravity mode for 10s with reduced movement speed. Full-charge Basic becomes a crimson explosive gravity shell; first hit restores HP and Energy, and firing it ends Gravity mode.",
       },
     },
   },

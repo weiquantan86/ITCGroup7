@@ -38,7 +38,7 @@ export const profile: CharacterProfile = {
       id: "basic",
       label: "Basic",
       description:
-        "Three-hit weapon combo with weapon sweep collision. Holding Basic enters a spinning hold attack that deals periodic fire damage, drains stamina, and can reflect incoming projectiles.",
+        "Three-hit weapon combo with sweep collision. Holding Basic enters a spinning attack that deals periodic fire damage, drains stamina, and can reflect incoming linear projectiles.",
     },
     skills: {
       q: {
@@ -47,7 +47,7 @@ export const profile: CharacterProfile = {
         cost: 0,
         cooldownMs: 15000,
         description:
-          "Enter Burning Mode and continuously drain EN at 3.5 per second while active. Burning Mode powers up E and R interactions.",
+          "Toggle Burning Mode. While active: drains EN at 3.5/s, regenerates HP at 3/s, and enables enhanced E/R behavior. Press Q again to cancel.",
       },
       e: {
         id: "e",
@@ -55,7 +55,7 @@ export const profile: CharacterProfile = {
         cost: 0,
         cooldownMs: 5000,
         description:
-          "Normal cast plays Skill E and ignites Secondary Burn. Secondary Burn now drains mana continuously at 2 per second. During Burning Mode, E no longer plays Q_E animation and instead triggers an instant ignite burst.",
+          "Toggle Secondary Burn. While active it drains Mana at 2/s and can be canceled by pressing E again. During Burning Mode, E triggers instant ignite (no long prelude) and enters the enhanced burn state.",
       },
       r: {
         id: "r",
@@ -63,7 +63,7 @@ export const profile: CharacterProfile = {
         cost: 70,
         cooldownMs: 10000,
         description:
-          "Normal cast is a forward strike. With Secondary Burn active, R throws a burn projectile that applies layered burn and explosion effects. In Super Burn, R switches to Q_E_R fan-flame mode with repeated cone damage ticks.",
+          "Mode-based cast: normal R is a forward strike. With Secondary Burn, R fires a burn projectile that applies layered burn and explosion effects. In enhanced burn, R switches to fan-flame mode with repeated cone damage ticks.",
       },
     },
   },

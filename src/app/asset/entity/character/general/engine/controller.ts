@@ -36,6 +36,9 @@ export const createPlayer = ({
   characterPath,
   world,
   gameMode = "default",
+  allowPrimaryAttack = true,
+  allowSkills = true,
+  allowJump = true,
   hideLocalHead = true,
   hideLocalBody = false,
   showMiniMap = true,
@@ -47,6 +50,9 @@ export const createPlayer = ({
   characterPath?: string;
   world?: PlayerWorld;
   gameMode?: string;
+  allowPrimaryAttack?: boolean;
+  allowSkills?: boolean;
+  allowJump?: boolean;
   hideLocalHead?: boolean;
   hideLocalBody?: boolean;
   showMiniMap?: boolean;
@@ -706,12 +712,14 @@ export const createPlayer = ({
     isMovementLocked: isRuntimeMovementLocked,
     isInputLocked: isWorldInputLocked,
     onJump: () => {
+      if (!allowJump) return;
       frameUpdater.jump(jumpVelocity);
     },
     onDash: () => {
       frameUpdater.requestDash();
     },
     onPrimaryDown: () => {
+      if (!allowPrimaryAttack) return;
       if (isRuntimeBasicAttackLocked()) return;
       if (characterRuntime?.handlePrimaryDown) {
         characterRuntime.handlePrimaryDown();
@@ -726,6 +734,7 @@ export const createPlayer = ({
       characterRuntime?.handlePrimaryCancel?.();
     },
     onSkill: (skillKey, now) => {
+      if (!allowSkills) return;
       skillState.tryUseSkill(skillKey, now);
     },
   });
