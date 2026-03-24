@@ -19,6 +19,7 @@ type BindPlayerInputArgs = {
   isMovementLocked: () => boolean;
   isInputLocked: () => boolean;
   onJump: () => void;
+  onDash: (now: number) => void;
   onPrimaryDown: () => void;
   onPrimaryUp: () => void;
   onPrimaryCancel: () => void;
@@ -59,6 +60,7 @@ export const bindPlayerInput = ({
   isMovementLocked,
   isInputLocked,
   onJump,
+  onDash,
   onPrimaryDown,
   onPrimaryUp,
   onPrimaryCancel,
@@ -161,6 +163,7 @@ export const bindPlayerInput = ({
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return;
     if (isInputLocked()) {
       const mapped = keyMap[event.code];
       if (mapped) {
@@ -176,6 +179,11 @@ export const bindPlayerInput = ({
       onJump();
     }
     if (event.repeat) return;
+
+    if (event.code === "KeyF") {
+      onDash(performance.now());
+      return;
+    }
 
     const skillKey = skillCodeMap[event.code];
     if (!skillKey) return;

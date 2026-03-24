@@ -708,6 +708,9 @@ export const createPlayer = ({
     onJump: () => {
       frameUpdater.jump(jumpVelocity);
     },
+    onDash: () => {
+      frameUpdater.requestDash();
+    },
     onPrimaryDown: () => {
       if (isRuntimeBasicAttackLocked()) return;
       if (characterRuntime?.handlePrimaryDown) {

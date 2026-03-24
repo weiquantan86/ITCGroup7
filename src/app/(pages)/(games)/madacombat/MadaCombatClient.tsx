@@ -23,7 +23,7 @@ import {
   MADA_TERMINAL_UNLOCK_EVENT,
   createInitialMadaLabState,
   type MadaLabState,
-} from "./labConfig";
+} from "../../../asset/scenes/lab/labConfig";
 
 type SkillDetail = {
   key: "q" | "e" | "r";
@@ -297,10 +297,15 @@ export default function MadaCombatClient({
     (Math.max(0, Math.floor(labState.elapsedSeconds || 0)) > 0 || labState.gameEnded);
   const isBattleEnded = hasStarted && terminalUnlocked && labState.gameEnded;
   const isBattleVictory = isBattleEnded && labState.victory;
-  const settlementScore = useMemo(
-    () => Math.max(0, Math.floor(labState.score || 0)),
-    [labState.score]
-  );
+  const settlementScore = useMemo(() => {
+    const damageScore = Math.max(0, Math.floor(labState.damageScore || 0));
+    const hitPenaltyScore = Math.max(0, Math.floor(labState.hitPenaltyScore || 0));
+    const timeBonusScore = Math.max(
+      0,
+      Math.floor(labState.victoryTimeBonusScore || 0)
+    );
+    return Math.max(0, damageScore - hitPenaltyScore + timeBonusScore);
+  }, [labState.damageScore, labState.hitPenaltyScore, labState.victoryTimeBonusScore]);
   const isSettlementVisible =
     hasStarted && isBattleEnded && endTransitionPhase === "showingResult";
   const shouldRenderBattleSection =
@@ -533,7 +538,7 @@ export default function MadaCombatClient({
 
   useEffect(() => {
     const lockedRewardMultiplier = battleRewardMultiplier;
-    const settledScore = Math.max(0, Math.floor(labState.score || 0));
+    const settledScore = settlementScore;
     const settledVictory = Boolean(labState.victory);
     const settledPointReward = settledVictory
       ? Math.max(
@@ -649,7 +654,7 @@ export default function MadaCombatClient({
     battleRewardMultiplier,
     hasStarted,
     isBattleEnded,
-    labState.score,
+    settlementScore,
     labState.victory,
   ]);
 
@@ -725,7 +730,9 @@ export default function MadaCombatClient({
   ]);
 
   const loadLabScene = useCallback(async () => {
-    const { createMadaLabScene } = await import("./labSceneDefinition");
+    const { createMadaLabScene } = await import(
+      "../../../asset/scenes/lab/sceneDefinition"
+    );
     return {
       id: "madaLab",
       setupScene: createMadaLabScene,
@@ -909,6 +916,26 @@ export default function MadaCombatClient({
                           </span>
                         </div>
                       </div>
+                      {showBattleTimePanel ? (
+                        <div className="mt-auto space-y-3 pt-4">
+                          <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                              Game Time
+                            </p>
+                            <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-100">
+                              {formatDurationLabel(labState.elapsedSeconds)}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-cyan-200/20 bg-slate-950/65 p-3">
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-200/80">
+                              Current Score
+                            </p>
+                            <p className="mt-1 text-3xl font-semibold tabular-nums text-cyan-100">
+                              {settlementScore}
+                            </p>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </aside>
@@ -933,22 +960,7 @@ export default function MadaCombatClient({
                 </div>
 
                 <aside className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
-                  {showBattleTimePanel ? (
-                    <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3">
-                      <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                        Game Time
-                      </p>
-                      <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-100">
-                        {formatDurationLabel(labState.elapsedSeconds)}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  <div
-                    className={`rounded-[22px] border border-cyan-300/14 bg-[linear-gradient(180deg,rgba(7,17,24,0.98)_0%,rgba(3,10,14,0.96)_100%)] ${
-                      showBattleTimePanel ? "mt-4" : ""
-                    }`}
-                  >
+                  <div className="rounded-[22px] border border-cyan-300/14 bg-[linear-gradient(180deg,rgba(7,17,24,0.98)_0%,rgba(3,10,14,0.96)_100%)]">
                     <div className="p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
                         Containment Terminal

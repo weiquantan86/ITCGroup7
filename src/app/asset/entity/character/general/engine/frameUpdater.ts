@@ -73,6 +73,10 @@ export const createPlayerFrameUpdater = ({
   worldTick,
   emitUiState,
 }: CreatePlayerFrameUpdaterArgs) => {
+  const DASH_STAMINA_COST = 25;
+  const DASH_DISTANCE = 3.5;
+  const DASH_DURATION_SECONDS = 0.16;
+  const DASH_SPEED = DASH_DISTANCE / DASH_DURATION_SECONDS;
   const miniOrbitYawRotateSpeed = 1.8;
   const miniOrbitPitchRotateSpeed = 1.35;
   const miniOrbitDistanceAdjustSpeed = 3.2;
@@ -89,6 +93,7 @@ export const createPlayerFrameUpdater = ({
   let miniOrbitPitchOffset = 0;
   let miniOrbitDistanceOffset = 0;
   const moveDir = new THREE.Vector3();
+  const dashDirection = new THREE.Vector3();
   const forward = new THREE.Vector3();
   const right = new THREE.Vector3();
   const worldTickCurrentStatsSnapshot: CharacterStats = {
@@ -110,6 +115,8 @@ export const createPlayerFrameUpdater = ({
   const movementBlockerPadding = 0.24;
   const cameraScaleSmoothRate = 10;
   let smoothedCameraScaleMultiplier = 1;
+  let dashRequested = false;
+  let dashRemainingDistance = 0;
   const hasPlayerBlockerFlag = (object: THREE.Object3D | null | undefined) => {
     let current = object ?? null;
     while (current) {
@@ -307,7 +314,46 @@ export const createPlayerFrameUpdater = ({
         isMoving = true;
       }
     }
-    const isSprinting = isMoving && canSprint;
+
+    if (dashRequested) {
+      dashRequested = false;
+      if (hasMoveInput && !movementLocked && dashRemainingDistance <= 0) {
+        const currentStamina = statsState.currentStats.stamina;
+        if (currentStamina >= DASH_STAMINA_COST) {
+          const spent = statsState.spendStamina(DASH_STAMINA_COST);
+          if (spent >= DASH_STAMINA_COST - 0.0001) {
+            dashDirection.copy(moveDir).normalize();
+            dashRemainingDistance = DASH_DISTANCE;
+          }
+        }
+      }
+    }
+
+    if (dashRemainingDistance > 0) {
+      const dashStep = Math.max(0, DASH_SPEED * Math.max(0, delta));
+      const moveStep = Math.min(dashRemainingDistance, dashStep);
+      if (moveStep > 0.000001) {
+        const nextX = avatar.position.x + dashDirection.x * moveStep;
+        const nextZ = avatar.position.z + dashDirection.z * moveStep;
+        const clamped = clampToBounds(bounds, nextX, nextZ);
+        if (
+          !isBlocked(clamped.x, clamped.z) &&
+          !isRuntimeMovementBlocked(clamped.x, clamped.z)
+        ) {
+          avatar.position.x = clamped.x;
+          avatar.position.z = clamped.z;
+          dashRemainingDistance -= moveStep;
+          isMoving = true;
+        } else {
+          dashRemainingDistance = 0;
+        }
+      } else {
+        dashRemainingDistance = 0;
+      }
+    }
+
+    const isDashing = dashRemainingDistance > 0;
+    const isSprinting = isMoving && canSprint && !isDashing;
 
     velocityY += gravity * delta;
     avatar.position.y += velocityY * delta;
@@ -440,6 +486,9 @@ export const createPlayerFrameUpdater = ({
     miniOrbitPitchOffset = 0;
     miniOrbitDistanceOffset = 0;
     smoothedCameraScaleMultiplier = 1;
+    dashRequested = false;
+    dashRemainingDistance = 0;
+    dashDirection.set(0, 0, 0);
   };
 
   const jump = (jumpVelocity: number) => {
@@ -451,6 +500,9 @@ export const createPlayerFrameUpdater = ({
     update,
     resetKinematics,
     jump,
+    requestDash: () => {
+      dashRequested = true;
+    },
     isGrounded: () => isGrounded,
   };
 };

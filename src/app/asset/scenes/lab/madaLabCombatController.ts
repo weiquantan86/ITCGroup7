@@ -3,16 +3,16 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
   PlayerAttackTarget,
   PlayerWorldTickArgs,
-} from "../../../asset/entity/character/general/player";
+} from "../../entity/character/general/player";
 import {
   normalizeModelToHeight,
   removeAttackTargetById,
-} from "../../../asset/entity/monster/unified/runtimeUtils";
-import { createMadaAnimationController } from "../../../asset/entity/monster/mada/animation";
+} from "../../entity/monster/unified/runtimeUtils";
+import { createMadaAnimationController } from "../../entity/monster/mada/animation";
 import {
   createMadaPresentationController,
   resolveMadaPresentationState,
-} from "../../../asset/entity/monster/mada/presentation";
+} from "../../entity/monster/mada/presentation";
 
 export const MADA_LAB_MAX_HEALTH = 4000;
 export const MADA_LAB_MAX_HEALTH_OPTIONS = [4000, 6000, 8000] as const;

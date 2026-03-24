@@ -14,7 +14,6 @@ import { profile } from "./profile";
 const walkClipName = "walk";
 const holdAttackClipName = "normalAttackHold";
 const skillQClipName = "skillQ";
-const skillQEClipName = "skillQ_E";
 const skillEClipName = "skillE";
 const skillRClipName = "skillR";
 const skillQESkillRClipName = "skillQ_E_R";
@@ -27,7 +26,9 @@ const legTrackPattern = /shoe|leg|foot/i;
 const primaryHoldActivationMs = 180;
 const primaryHoldTickIntervalMs = 1000;
 const primaryHoldStaminaCostPerSecond = 20;
-const skillQMinEnergyToCast = 100;
+const skillQEnergyDrainPerSecond = 3.5;
+const skillEManaDrainPerSecond = 2;
+const skillQHealthRegenPerSecond = 3;
 const basicAttackHitManaGain = 4.5;
 const burnDamageEnergyGain = 5;
 const primaryHoldBaseDamagePerTick = 20;
@@ -45,7 +46,6 @@ const primaryHoldReflectCenterLift = 0.04;
 const primaryHoldReflectSpeedMultiplier = 1.2;
 const primaryHoldWeaponSpinRadPerSecond = Math.PI * 4;
 const secondaryBurnPrimaryHoldSpinMultiplier = 2;
-const skillQBurningModeDurationMs = 20000;
 const burningModeHeadFallbackRelativeOffset = new THREE.Vector3(0, 1.22, 0);
 // Q flame tuning knobs: offset is x/y/z, rotation is degrees x/y/z.
 const burningModeRelativeOffset = new THREE.Vector3(0, -1.8, -1.2);
@@ -63,7 +63,6 @@ const burningModeFlameGrowthStartProgress = 0.6;
 const burningModeFlameGrowthEndProgress = 1;
 const burningModePreludeClusterRadiusScale = 0.72;
 const burningModeHeadClusterRadiusScale = 0.68;
-const secondaryBurnDurationMs = 10000;
 const secondaryBurnFallbackLocalOffset = new THREE.Vector3(0, 2.6, 0);
 const secondaryBurnOppositeFallbackLocalOffset = new THREE.Vector3(0, 1.62, 0);
 const secondaryBurnTipNudge = -0.06;
@@ -117,7 +116,7 @@ const secondaryBurnSkillRBurnExplosionBurstLifetimeSec =
   0.08;
 const skillRBurnCollisionNamePattern = /hitbox|hurtbox|collider|collision|trigger/i;
 const skillRBurnFxRootFlagKey = "__flareSkillRBurnFxRoot";
-const secondaryBurnSwingTrailPoolSize = 56;
+const secondaryBurnSwingTrailPoolSize = 28;
 const secondaryBurnSwingTrailLifetimeMs = 420;
 const secondaryBurnSwingTrailMinDistance = 0.008;
 const secondaryBurnSwingTrailMaxDistance = 2.4;
@@ -157,10 +156,10 @@ const superBurnThirdAttackPoolForwardOffset = 2.5;
 const superBurnThirdAttackPoolGroundLift = 0.03;
 const superBurnThirdAttackPoolMaxHitsPerTick = 8;
 const superBurnThirdAttackPoolMaxActive = 3;
-const superBurnThirdAttackPoolFlameCount = 12;
-const superBurnThirdAttackPoolSparkCount = 22;
-const superBurnThirdAttackPoolVisualUpdateIntervalMsNear = 16;
-const superBurnThirdAttackPoolVisualUpdateIntervalMsFar = 42;
+const superBurnThirdAttackPoolFlameCount = 8;
+const superBurnThirdAttackPoolSparkCount = 14;
+const superBurnThirdAttackPoolVisualUpdateIntervalMsNear = 24;
+const superBurnThirdAttackPoolVisualUpdateIntervalMsFar = 66;
 const superBurnThirdAttackPoolHighDetailDistance = 11;
 const superBurnThirdAttackPoolHighDetailDistanceSq =
   superBurnThirdAttackPoolHighDetailDistance * superBurnThirdAttackPoolHighDetailDistance;
@@ -180,22 +179,28 @@ const superBurnSkillRFlameIntensityMultiplier = 1.3;
 const superBurnSkillRLightIntensityMultiplier = 1.36;
 const superBurnSkillRSparkSpreadMultiplier = 1.28;
 const superBurnSkillRFanFxLift = 0.04;
-const superBurnSkillRFanFxFlameCount = 40;
-const superBurnSkillRFanFxSparkCount = 96;
+const superBurnSkillRFanFxFlameCount = 24;
+const superBurnSkillRFanFxSparkCount = 48;
 const secondaryBurnWeaponFlameSizeMultiplier = 1.2;
 const secondaryBurnWeaponFlameOpacityMultiplier = 1.24;
 const secondaryBurnWeaponLightDistanceMultiplier = 1.22;
 const secondaryBurnWeaponTongueScaleMultiplier = 1.2;
 const burningModeCameraParticleSuppressDistance = 1.08;
+const flareFxHighDetailDistance = 10;
+const flareFxHighDetailDistanceSq = flareFxHighDetailDistance * flareFxHighDetailDistance;
+const flareFxParticleUpdateIntervalMsNear = 16;
+const flareFxParticleUpdateIntervalMsFar = 48;
 const skillQEPreludeFadeOutMs = 360;
-const skillQEIgniteMinProgress = 0.46;
-const skillQEIgniteFallbackProgress = 0.78;
-const skillQEIgniteMaxDistance = 0.58;
+const skillQEInstantIgniteFlashMs = 220;
 const skillQEPreludeScatterRadiusScale = 2.4;
 const skillQEPreludeVisibility = 0.96;
 const skillQEPreludeGatherStartProgress = 0.52;
 const skillQEPreludeGatherEndProgress = 0.74;
 const skillQEPreludeOpacityBoost = 1.9;
+const secondaryBurnPreludeAuraEmberCount = 36;
+const secondaryBurnPreludeAuraSparkCount = 36;
+const burningModePreludeAuraEmberCount = 96;
+const burningModePreludeAuraSparkCount = 64;
 const flareWeaponSweepRadiusScale = 0.22;
 const flareWeaponContactRadiusScale = 0.16;
 const flareWeaponSweepMaxDistance = 0.72;
@@ -452,6 +457,14 @@ type BurningModeHeadEmber = {
 type BurningModeHeadSmoke = {
   mesh: THREE.Mesh;
   material: THREE.MeshBasicMaterial;
+  phase: number;
+  radius: number;
+  speed: number;
+  lift: number;
+  scale: number;
+};
+
+type InstancedAuraParticle = {
   phase: number;
   radius: number;
   speed: number;
@@ -1101,10 +1114,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
   fireProjectile,
   performMeleeAttack,
+  applyHealth,
   applyEnergy,
   applyMana,
   spendStamina,
   spendEnergy,
+  spendMana,
   getCurrentStats,
 }) => {
   const baseRuntime = createCharacterRuntime({ avatar, profile });
@@ -1145,6 +1160,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const weaponContactMidpointWorldPosition = new THREE.Vector3();
   const primaryHoldForwardContactWorldPosition = new THREE.Vector3();
   const primaryHoldForwardMidContactWorldPosition = new THREE.Vector3();
+  const instancedParticleDummy = new THREE.Object3D();
   const swingDelta = new THREE.Vector3();
   const skillRDirection = new THREE.Vector3();
   const firstPersonHiddenBoneMaskViewport = new THREE.Vector4();
@@ -1467,7 +1483,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       });
       const mesh = new THREE.Mesh(secondaryBurnEmberGeometry, material);
       mesh.visible = false;
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       secondaryBurnFxRoot.add(mesh);
       return {
         mesh,
@@ -1491,7 +1507,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       });
       const mesh = new THREE.Mesh(secondaryBurnSmokeGeometry, material);
       mesh.visible = false;
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       secondaryBurnFxRoot.add(mesh);
       return {
         mesh,
@@ -1505,7 +1521,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   );
   const secondaryBurnSparks: SecondaryBurnSpark[] = Array.from(
-    { length: 36 },
+    { length: 18 },
     (_, index) => {
       const material = new THREE.MeshBasicMaterial({
         color: index % 2 === 0 ? 0xfff3bf : 0xff9a3a,
@@ -1516,12 +1532,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
       });
       const mesh = new THREE.Mesh(secondaryBurnSparkGeometry, material);
       mesh.visible = false;
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       secondaryBurnFxRoot.add(mesh);
       return {
         mesh,
         material,
-        phase: (index / 36) * Math.PI * 2,
+        phase: (index / 18) * Math.PI * 2,
         orbitRadius: 0.09 + index * 0.009,
         orbitSpeed: 2.8 + index * 0.22,
         lift: 0.1 + index * 0.01,
@@ -1530,7 +1546,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   );
   const secondaryBurnHoldTopParticles: SecondaryBurnHoldTopParticle[] = Array.from(
-    { length: 36 },
+    { length: 20 },
     (_, index) => {
       const material = new THREE.MeshBasicMaterial({
         color:
@@ -1541,13 +1557,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
         blending: THREE.AdditiveBlending,
       });
       const mesh = new THREE.Mesh(secondaryBurnEmberGeometry, material);
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       mesh.visible = false;
       secondaryBurnHoldTopFxRoot.add(mesh);
       return {
         mesh,
         material,
-        phase: (index / 36) * Math.PI * 2,
+        phase: (index / 20) * Math.PI * 2,
         radius: 0.03 + index * 0.008,
         speed: 1.4 + index * 0.18,
         lift: 0.16 + index * 0.024,
@@ -1556,7 +1572,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   );
   const secondaryBurnHoldTopSparks: SecondaryBurnHoldTopSpark[] = Array.from(
-    { length: 42 },
+    { length: 24 },
     (_, index) => {
       const material = new THREE.MeshBasicMaterial({
         color: index % 2 === 0 ? 0xfff3bf : 0xff9f3a,
@@ -1566,13 +1582,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
         blending: THREE.AdditiveBlending,
       });
       const mesh = new THREE.Mesh(secondaryBurnSparkGeometry, material);
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       mesh.visible = false;
       secondaryBurnHoldTopFxRoot.add(mesh);
       return {
         mesh,
         material,
-        phase: (index / 42) * Math.PI * 2,
+        phase: (index / 24) * Math.PI * 2,
         orbitRadius: 0.04 + index * 0.012,
         speed: 2.2 + index * 0.26,
         lift: 0.12 + index * 0.016,
@@ -1647,7 +1663,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   );
   const secondaryBurnPreludeEmbers: SecondaryBurnEmber[] = Array.from(
-    { length: 24 },
+    { length: 16 },
     (_, index) => {
       const material = new THREE.MeshBasicMaterial({
         color:
@@ -1659,12 +1675,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
       });
       const mesh = new THREE.Mesh(secondaryBurnEmberGeometry, material);
       mesh.visible = false;
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       secondaryBurnPreludeFxRoot.add(mesh);
       return {
         mesh,
         material,
-        phase: (index / 24) * Math.PI * 2,
+        phase: (index / 16) * Math.PI * 2,
         radius: 0.036 + index * 0.0072,
         speed: 1.36 + index * 0.11,
         lift: 0.15 + index * 0.022,
@@ -1673,7 +1689,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   );
   const secondaryBurnPreludeSparks: SecondaryBurnSpark[] = Array.from(
-    { length: 30 },
+    { length: 20 },
     (_, index) => {
       const material = new THREE.MeshBasicMaterial({
         color: index % 2 === 0 ? 0xfff3bf : 0xff9a3a,
@@ -1684,12 +1700,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
       });
       const mesh = new THREE.Mesh(secondaryBurnSparkGeometry, material);
       mesh.visible = false;
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       secondaryBurnPreludeFxRoot.add(mesh);
       return {
         mesh,
         material,
-        phase: (index / 30) * Math.PI * 2,
+        phase: (index / 20) * Math.PI * 2,
         orbitRadius: 0.056 + index * 0.008,
         orbitSpeed: 2.3 + index * 0.16,
         lift: 0.1 + index * 0.012,
@@ -1697,31 +1713,37 @@ export const createRuntime: CharacterRuntimeFactory = ({
       };
     }
   );
-  const secondaryBurnPreludeAuraEmbers: SecondaryBurnEmber[] = Array.from(
-    { length: 72 },
+  const secondaryBurnPreludeAuraEmberMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const secondaryBurnPreludeAuraEmberInstances = new THREE.InstancedMesh(
+    secondaryBurnEmberGeometry,
+    secondaryBurnPreludeAuraEmberMaterial,
+    secondaryBurnPreludeAuraEmberCount
+  );
+  secondaryBurnPreludeAuraEmberInstances.visible = false;
+  secondaryBurnPreludeAuraEmberInstances.instanceMatrix.setUsage(
+    THREE.DynamicDrawUsage
+  );
+  secondaryBurnPreludeAuraFxRoot.add(secondaryBurnPreludeAuraEmberInstances);
+  const secondaryBurnPreludeAuraEmbers: InstancedAuraParticle[] = Array.from(
+    { length: secondaryBurnPreludeAuraEmberCount },
     (_, index) => {
-      const material = new THREE.MeshBasicMaterial({
-        color:
-          index % 4 === 0
-            ? 0xfff2be
-            : index % 3 === 0
-              ? 0xffcf73
-              : index % 2 === 0
-                ? 0xff9a3a
-                : 0xff6f22,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      });
-      const mesh = new THREE.Mesh(secondaryBurnEmberGeometry, material);
-      mesh.visible = false;
-      mesh.frustumCulled = false;
-      secondaryBurnPreludeAuraFxRoot.add(mesh);
+      const color =
+        index % 4 === 0
+          ? 0xfff2be
+          : index % 3 === 0
+            ? 0xffcf73
+            : index % 2 === 0
+              ? 0xff9a3a
+              : 0xff6f22;
+      secondaryBurnPreludeAuraEmberInstances.setColorAt(index, new THREE.Color(color));
       return {
-        mesh,
-        material,
-        phase: (index / 72) * Math.PI * 2,
+        phase: (index / secondaryBurnPreludeAuraEmberCount) * Math.PI * 2,
         radius: 0.5 + (index % 7) * 0.09,
         speed: 1.08 + index * 0.038,
         lift: 0.86 + (index % 8) * 0.09,
@@ -1729,31 +1751,45 @@ export const createRuntime: CharacterRuntimeFactory = ({
       };
     }
   );
-  const secondaryBurnPreludeAuraSparks: SecondaryBurnSpark[] = Array.from(
-    { length: 72 },
+  if (secondaryBurnPreludeAuraEmberInstances.instanceColor) {
+    secondaryBurnPreludeAuraEmberInstances.instanceColor.needsUpdate = true;
+  }
+
+  const secondaryBurnPreludeAuraSparkMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const secondaryBurnPreludeAuraSparkInstances = new THREE.InstancedMesh(
+    secondaryBurnSparkGeometry,
+    secondaryBurnPreludeAuraSparkMaterial,
+    secondaryBurnPreludeAuraSparkCount
+  );
+  secondaryBurnPreludeAuraSparkInstances.visible = false;
+  secondaryBurnPreludeAuraSparkInstances.instanceMatrix.setUsage(
+    THREE.DynamicDrawUsage
+  );
+  secondaryBurnPreludeAuraFxRoot.add(secondaryBurnPreludeAuraSparkInstances);
+  const secondaryBurnPreludeAuraSparks: InstancedAuraParticle[] = Array.from(
+    { length: secondaryBurnPreludeAuraSparkCount },
     (_, index) => {
-      const material = new THREE.MeshBasicMaterial({
-        color: index % 3 === 0 ? 0xfff3bf : index % 2 === 0 ? 0xffb04a : 0xff8129,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      });
-      const mesh = new THREE.Mesh(secondaryBurnSparkGeometry, material);
-      mesh.visible = false;
-      mesh.frustumCulled = false;
-      secondaryBurnPreludeAuraFxRoot.add(mesh);
+      const color =
+        index % 3 === 0 ? 0xfff3bf : index % 2 === 0 ? 0xffb04a : 0xff8129;
+      secondaryBurnPreludeAuraSparkInstances.setColorAt(index, new THREE.Color(color));
       return {
-        mesh,
-        material,
-        phase: (index / 72) * Math.PI * 2,
-        orbitRadius: 0.62 + (index % 6) * 0.11,
-        orbitSpeed: 1.44 + index * 0.048,
+        phase: (index / secondaryBurnPreludeAuraSparkCount) * Math.PI * 2,
+        radius: 0.62 + (index % 6) * 0.11,
+        speed: 1.44 + index * 0.048,
         lift: 0.72 + (index % 6) * 0.078,
         scale: 0.4 + (index % 5) * 0.052,
       };
     }
   );
+  if (secondaryBurnPreludeAuraSparkInstances.instanceColor) {
+    secondaryBurnPreludeAuraSparkInstances.instanceColor.needsUpdate = true;
+  }
   const burningModeHeadShellMaterial = new THREE.MeshStandardMaterial({
     color: 0xff8d28,
     emissive: 0xff6119,
@@ -2076,31 +2112,37 @@ export const createRuntime: CharacterRuntimeFactory = ({
   );
   const burningModePreludeAuraFxRoot = new THREE.Group();
   burningModePreludeAuraFxRoot.visible = false;
-  const burningModePreludeAuraEmbers: BurningModeHeadEmber[] = Array.from(
-    { length: 224 },
+  const burningModePreludeAuraEmberMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const burningModePreludeAuraEmberInstances = new THREE.InstancedMesh(
+    burningModeHeadEmberGeometry,
+    burningModePreludeAuraEmberMaterial,
+    burningModePreludeAuraEmberCount
+  );
+  burningModePreludeAuraEmberInstances.visible = false;
+  burningModePreludeAuraEmberInstances.instanceMatrix.setUsage(
+    THREE.DynamicDrawUsage
+  );
+  burningModePreludeAuraFxRoot.add(burningModePreludeAuraEmberInstances);
+  const burningModePreludeAuraEmbers: InstancedAuraParticle[] = Array.from(
+    { length: burningModePreludeAuraEmberCount },
     (_, index) => {
-      const material = new THREE.MeshBasicMaterial({
-        color:
-          index % 4 === 0
-            ? 0xfff4bf
-            : index % 3 === 0
-              ? 0xffc861
-              : index % 2 === 0
-                ? 0xff932b
-                : 0xff6d1a,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      });
-      const mesh = new THREE.Mesh(burningModeHeadEmberGeometry, material);
-      mesh.visible = false;
-      mesh.frustumCulled = false;
-      burningModePreludeAuraFxRoot.add(mesh);
+      const color =
+        index % 4 === 0
+          ? 0xfff4bf
+          : index % 3 === 0
+            ? 0xffc861
+            : index % 2 === 0
+              ? 0xff932b
+              : 0xff6d1a;
+      burningModePreludeAuraEmberInstances.setColorAt(index, new THREE.Color(color));
       return {
-        mesh,
-        material,
-        phase: (index / 224) * Math.PI * 2,
+        phase: (index / burningModePreludeAuraEmberCount) * Math.PI * 2,
         radius: 0.54 + (index % 9) * 0.102,
         speed: 1.12 + index * 0.02,
         lift: 1 + (index % 11) * 0.096,
@@ -2108,25 +2150,35 @@ export const createRuntime: CharacterRuntimeFactory = ({
       };
     }
   );
-  const burningModePreludeAuraSparks: BurningModeHeadSpark[] = Array.from(
-    { length: 160 },
+  if (burningModePreludeAuraEmberInstances.instanceColor) {
+    burningModePreludeAuraEmberInstances.instanceColor.needsUpdate = true;
+  }
+
+  const burningModePreludeAuraSparkMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const burningModePreludeAuraSparkInstances = new THREE.InstancedMesh(
+    burningModeHeadSparkGeometry,
+    burningModePreludeAuraSparkMaterial,
+    burningModePreludeAuraSparkCount
+  );
+  burningModePreludeAuraSparkInstances.visible = false;
+  burningModePreludeAuraSparkInstances.instanceMatrix.setUsage(
+    THREE.DynamicDrawUsage
+  );
+  burningModePreludeAuraFxRoot.add(burningModePreludeAuraSparkInstances);
+  const burningModePreludeAuraSparks: InstancedAuraParticle[] = Array.from(
+    { length: burningModePreludeAuraSparkCount },
     (_, index) => {
-      const material = new THREE.MeshBasicMaterial({
-        color:
-          index % 3 === 0 ? 0xfff3c4 : index % 2 === 0 ? 0xffd98c : 0xff9b37,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      });
-      const mesh = new THREE.Mesh(burningModeHeadSparkGeometry, material);
-      mesh.visible = false;
-      mesh.frustumCulled = false;
-      burningModePreludeAuraFxRoot.add(mesh);
+      const color =
+        index % 3 === 0 ? 0xfff3c4 : index % 2 === 0 ? 0xffd98c : 0xff9b37;
+      burningModePreludeAuraSparkInstances.setColorAt(index, new THREE.Color(color));
       return {
-        mesh,
-        material,
-        phase: (index / 160) * Math.PI * 2,
+        phase: (index / burningModePreludeAuraSparkCount) * Math.PI * 2,
         radius: 0.66 + (index % 8) * 0.12,
         speed: 1.42 + index * 0.026,
         lift: 0.9 + (index % 9) * 0.086,
@@ -2134,6 +2186,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
       };
     }
   );
+  if (burningModePreludeAuraSparkInstances.instanceColor) {
+    burningModePreludeAuraSparkInstances.instanceColor.needsUpdate = true;
+  }
   const superBurnSkillRFanFxRoot = new THREE.Group();
   superBurnSkillRFanFxRoot.visible = false;
   const superBurnSkillRFanFillMaterial = new THREE.MeshBasicMaterial({
@@ -2220,7 +2275,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(superBurnSkillRFanFlameGeometry, material);
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       superBurnSkillRFanFxRoot.add(mesh);
       const t =
         superBurnSkillRFanFxFlameCount <= 1
@@ -2256,7 +2311,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       });
       const mesh = new THREE.Mesh(secondaryBurnSparkGeometry, material);
       mesh.visible = false;
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       superBurnSkillRFanFxRoot.add(mesh);
       const t =
         superBurnSkillRFanFxSparkCount <= 1
@@ -3273,7 +3328,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let superBurnAttackBindings: AttackClipBinding[] = [];
   let holdAttackBinding: ActionBinding | null = null;
   let skillQBinding: ActionBinding | null = null;
-  let skillQEBinding: ActionBinding | null = null;
   let skillEBinding: ActionBinding | null = null;
   let skillRBinding: ActionBinding | null = null;
   let skillQERSkillBinding: ActionBinding | null = null;
@@ -3281,6 +3335,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let lastCompletedAttackIndex = -1;
   let lastCompletedAttackAt = -Infinity;
   let runtimeFrameStamp = 0;
+  let lastBurningPreludeAuraUpdateAt = -Infinity;
+  let lastSecondaryPreludeAuraUpdateAt = -Infinity;
   let boundWeaponMatrixFrameStamp = -1;
   let secondaryBurnAnchorLastResolvedAt = -Infinity;
 
@@ -3327,12 +3383,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     durationMs: 0,
   };
 
-  const skillQEState = {
-    active: false,
-    startedAt: 0,
-    durationMs: 0,
-    ignited: false,
-  };
   let skillQEPreludeFadeOutEndsAt = 0;
 
   const skillRState = {
@@ -3370,16 +3420,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const getCurrentEnergy = () => getCurrentStats?.().energy ?? 0;
+  const getCurrentMana = () => getCurrentStats?.().mana ?? 0;
 
-  const canCastSkillQByEnergy = () =>
-    getCurrentEnergy() + 0.0001 >= skillQMinEnergyToCast;
-
-  const consumeAllEnergy = () => {
-    if (!spendEnergy) return;
-    const energy = getCurrentEnergy();
-    if (energy <= 0) return;
-    spendEnergy(energy);
-  };
+  const canCastSkillQByEnergy = () => getCurrentEnergy() > 0.0001;
 
   const grantEnergyFromBurnDamage = () => {
     applyEnergy?.(burnDamageEnergyGain);
@@ -3429,7 +3472,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const stopAllSkillActions = () => {
     stopActionBinding(skillQBinding);
-    stopActionBinding(skillQEBinding);
     stopActionBinding(skillEBinding);
     stopActionBinding(skillRBinding);
     stopActionBinding(skillQERSkillBinding);
@@ -3599,10 +3641,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const activateSuperBurn = (now: number) => {
     superBurnState.active = true;
     superBurnState.activatedAt = now;
-    superBurnState.endsAt = Math.max(
-      now + secondaryBurnDurationMs,
-      burningModeState.endsAt || now
-    );
+    superBurnState.endsAt = Number.POSITIVE_INFINITY;
   };
 
   const deactivateBurningMode = () => {
@@ -3612,16 +3651,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     burningModePreludeAuraFxRoot.visible = false;
     burningModeHeadFxRoot.visible = false;
     burningModeHeadLight.visible = false;
-    for (let i = 0; i < burningModePreludeAuraSparks.length; i += 1) {
-      const spark = burningModePreludeAuraSparks[i];
-      spark.mesh.visible = false;
-      spark.material.opacity = 0;
-    }
-    for (let i = 0; i < burningModePreludeAuraEmbers.length; i += 1) {
-      const ember = burningModePreludeAuraEmbers[i];
-      ember.mesh.visible = false;
-      ember.material.opacity = 0;
-    }
+    burningModePreludeAuraSparkInstances.visible = false;
+    burningModePreludeAuraEmberInstances.visible = false;
+    burningModePreludeAuraSparkMaterial.opacity = 0;
+    burningModePreludeAuraEmberMaterial.opacity = 0;
     for (let i = 0; i < burningModeHeadJets.length; i += 1) {
       const jet = burningModeHeadJets[i];
       jet.shell.material.opacity = 0;
@@ -3656,7 +3689,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const activateBurningMode = (now: number) => {
     burningModeState.active = true;
     burningModeState.activatedAt = now;
-    burningModeState.endsAt = now + skillQBurningModeDurationMs;
+    burningModeState.endsAt = Number.POSITIVE_INFINITY;
     attachBurningModeHeadFx();
     burningModeHeadFxRoot.visible = true;
   };
@@ -4158,16 +4191,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     secondaryBurnFxRoot.visible = false;
     secondaryBurnHoldTopFxRoot.visible = false;
     secondaryBurnLight.visible = false;
-    for (let i = 0; i < secondaryBurnPreludeAuraEmbers.length; i += 1) {
-      const ember = secondaryBurnPreludeAuraEmbers[i];
-      ember.mesh.visible = false;
-      ember.material.opacity = 0;
-    }
-    for (let i = 0; i < secondaryBurnPreludeAuraSparks.length; i += 1) {
-      const spark = secondaryBurnPreludeAuraSparks[i];
-      spark.mesh.visible = false;
-      spark.material.opacity = 0;
-    }
+    secondaryBurnPreludeAuraEmberInstances.visible = false;
+    secondaryBurnPreludeAuraSparkInstances.visible = false;
+    secondaryBurnPreludeAuraEmberMaterial.opacity = 0;
+    secondaryBurnPreludeAuraSparkMaterial.opacity = 0;
     for (let i = 0; i < secondaryBurnPreludeEmbers.length; i += 1) {
       const ember = secondaryBurnPreludeEmbers[i];
       ember.mesh.visible = false;
@@ -4249,10 +4276,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     secondaryBurnState.activatedAt = now;
     secondaryBurnState.linkedToBurningMode =
       linkToBurningMode && burningModeState.active;
-    const baseEndAt = now + secondaryBurnDurationMs;
-    secondaryBurnState.endsAt = secondaryBurnState.linkedToBurningMode
-      ? Math.max(baseEndAt, burningModeState.endsAt)
-      : baseEndAt;
+    secondaryBurnState.endsAt = Number.POSITIVE_INFINITY;
     secondaryBurnState.fadingOut = false;
     secondaryBurnState.fadeOutStartedAt = 0;
     attachSecondaryBurnFx();
@@ -4304,18 +4328,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     skillQState.durationMs = 0;
   };
 
-  const resetSkillQEState = ({
-    preservePreludeFade = false,
-  }: {
-    preservePreludeFade?: boolean;
-  } = {}) => {
-    skillQEState.active = false;
-    skillQEState.startedAt = 0;
-    skillQEState.durationMs = 0;
-    skillQEState.ignited = false;
-    if (!preservePreludeFade) {
-      skillQEPreludeFadeOutEndsAt = 0;
-    }
+  const resetSkillQEPreludeState = () => {
+    skillQEPreludeFadeOutEndsAt = 0;
   };
 
   const resetSkillRState = () => {
@@ -4472,7 +4486,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     superBurnAttackBindings = [];
     holdAttackBinding = null;
     skillQBinding = null;
-    skillQEBinding = null;
     skillEBinding = null;
     skillRBinding = null;
     skillQERSkillBinding = null;
@@ -4485,11 +4498,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
     secondaryBurnAnchorLastResolvedAt = -Infinity;
     boundWeaponMeshes = [];
     lastAnimationUpdateAt = 0;
+    lastBurningPreludeAuraUpdateAt = -Infinity;
+    lastSecondaryPreludeAuraUpdateAt = -Infinity;
     resetAttackState();
     resetPrimaryHoldState();
     resetSkillEState();
     resetSkillQState();
-    resetSkillQEState();
+    resetSkillQEPreludeState();
     resetSkillRState();
     deactivateSecondaryBurn({ immediate: true });
     deactivateBurningMode();
@@ -4588,12 +4603,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
         mixer,
         resolveInPlaceClip(model, skillQClipName),
         skillQClipName
-      );
-      skillQEBinding = createOneShotBinding(
-        mixer,
-        resolveInPlaceClip(model, skillQEClipName) ??
-          resolveInPlaceClip(model, "skillQE"),
-        skillQEClipName
       );
       skillEBinding = createOneShotBinding(
         mixer,
@@ -5104,35 +5113,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetSkillQState();
   };
 
-  const startSkillQE = (now: number) => {
-    if (!skillQEBinding) return false;
-    stopAllSkillActions();
-    resetSkillQState();
-    resetSkillQEState();
-    resetSkillEState();
-    skillQEPreludeFadeOutEndsAt = 0;
-    skillQEState.active = true;
-    skillQEState.startedAt = now;
-    skillQEState.durationMs = Math.max(1, skillQEBinding.clip.duration * 1000);
-    getAttackDirection(skillQDirection);
-    avatar.rotation.y = Math.atan2(skillQDirection.x, skillQDirection.z);
-    return playActionBinding(skillQEBinding);
-  };
-
-  const finishSkillQE = () => {
-    stopActionBinding(skillQEBinding);
-    resetSkillQEState({ preservePreludeFade: true });
-  };
-
-  const igniteSkillQE = (now: number) => {
-    if (skillQEState.ignited) return;
-    skillQEState.ignited = true;
+  const triggerSkillQEInstantIgnite = (now: number) => {
     skillQEPreludeFadeOutEndsAt = Math.max(
       skillQEPreludeFadeOutEndsAt,
-      now + skillQEPreludeFadeOutMs
+      now + skillQEInstantIgniteFlashMs
     );
     activateSecondaryBurn(now, { linkToBurningMode: true });
     activateSuperBurn(now);
+    return true;
   };
 
   const startSkillE = (now: number) => {
@@ -6192,39 +6180,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   };
 
-  const updateSkillQEState = (now: number) => {
-    if (!skillQEState.active) return;
-    const progress = THREE.MathUtils.clamp(
-      (now - skillQEState.startedAt) / skillQEState.durationMs,
-      0,
-      1
-    );
-    if (!skillQEState.ignited) {
-      let shouldIgnite =
-        progress >= skillQEIgniteFallbackProgress;
-      if (progress >= skillQEIgniteMinProgress) {
-        const hasWeaponSample = getWeaponSweepSamplePosition(currentWeaponWorldPosition);
-        if (hasWeaponSample) {
-          const headAnchor = getBurningModeHeadFxAnchor();
-          headAnchor.updateMatrixWorld(true);
-          headAnchor.getWorldPosition(burningModePreludeWorldTarget);
-          const weaponToHeadDistance =
-            currentWeaponWorldPosition.distanceTo(burningModePreludeWorldTarget);
-          shouldIgnite = shouldIgnite || weaponToHeadDistance <= skillQEIgniteMaxDistance;
-        }
-      }
-      if (shouldIgnite) {
-        igniteSkillQE(now);
-      }
-    }
-    if (progress >= 0.999) {
-      if (!skillQEState.ignited) {
-        igniteSkillQE(now);
-      }
-      finishSkillQE();
-    }
-  };
-
   const updateSuperBurnState = (now: number) => {
     if (!superBurnState.active) return;
     if (
@@ -6242,7 +6197,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
       primaryHoldState.active ||
       attackState.active ||
       skillQState.active ||
-      skillQEState.active ||
       skillEState.active ||
       skillRState.active
     ) {
@@ -6538,23 +6492,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       0,
       1
     );
-    const skillQEPreludeLive = skillQEState.active && !skillQEState.ignited;
-    const skillQEPreludeBlend = skillQEPreludeLive ? 1 : skillQEPreludeFade;
+    const skillQEPreludeBlend = skillQEPreludeFade;
     const skillQEPreludeActive = skillQEPreludeBlend > 0.001;
-    const skillQEProgress =
-      skillQEState.durationMs > 0
-        ? THREE.MathUtils.clamp(
-            (now - skillQEState.startedAt) / skillQEState.durationMs,
-            0,
-            1
-          )
-        : 1;
     const skillQEGatherBase = skillQEPreludeActive
-      ? THREE.MathUtils.smoothstep(
-          skillQEProgress,
-          skillQEPreludeGatherStartProgress,
-          skillQEPreludeGatherEndProgress
-        )
+      ? 1 - skillQEPreludeBlend
       : 0;
     const skillQEGather = skillQEPreludeActive
       ? Math.max(skillQEGatherBase, 1 - skillQEPreludeBlend * 0.18)
@@ -6603,106 +6544,135 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const coverRadiusZ = (coverHalfZ + 0.24) * burningModeHeadClusterRadiusScale;
     const coverHeight = Math.max(1.34, burningModeHeadSurfaceSize.y);
 
-    for (let i = 0; i < burningModePreludeAuraSparks.length; i += 1) {
-      const spark = burningModePreludeAuraSparks[i];
-      if (suppressCameraFrontParticles) {
-        spark.mesh.visible = false;
-        spark.material.opacity = 0;
-        continue;
-      }
-      const spin = t * (spark.speed * 0.84) + spark.phase;
-      const risePhase = (t * (0.58 + i * 0.016) + spark.phase * 0.42) % 1;
-      const burst = 0.68 + 0.32 * Math.sin(t * (10.8 + i * 0.18) + spark.phase);
-      const ring = spark.radius * (0.92 + (i % 5) * 0.08);
-      const particleGatherBase = THREE.MathUtils.clamp(
-        (gatherProgress - i * 0.004) / 0.82,
-        0,
-        1
-      );
-      const particleGather = 1 - Math.pow(1 - particleGatherBase, 3.2);
-      const effectiveParticleGather = skillQEPreludeActive
-        ? Math.max(particleGather, skillQEGather)
-        : particleGather;
-      spark.mesh.visible = effectivePreludeVisibility > 0.001;
-      burningModePreludeParticlePosition.set(
-        Math.cos(spin) *
-          ring *
-          burningModePreludeClusterRadiusScale *
-          skillQEClusterRadiusScale,
-        0.42 + risePhase * spark.lift,
-        Math.sin(spin) *
-          ring *
-          burningModePreludeClusterRadiusScale *
-          skillQEClusterRadiusScale
-      );
-      burningModePreludeParticlePosition.lerp(
-        burningModePreludeAuraTargetLocal,
-        effectiveParticleGather
-      );
-      spark.mesh.position.copy(burningModePreludeParticlePosition);
-      spark.mesh.rotation.set(spin * 1.2, spin * 0.9, spin * 1.7);
-      spark.mesh.scale.setScalar(
-        spark.scale *
-          (0.9 + burst * 0.42 + flameGrowth * 0.1) *
-          (1 - effectiveParticleGather * 0.28)
-      );
-      spark.material.opacity =
-        effectivePreludeVisibility *
-        (1 - risePhase * (0.7 - effectiveParticleGather * 0.36)) *
-        (0.28 + burst * 0.38 + effectiveParticleGather * 0.24) *
-        preludeOpacityBoost;
+    const preludeDistanceSq = hasAimOriginWorld
+      ? latestAimOriginWorld.distanceToSquared(burningModePreludeWorldTarget)
+      : 0;
+    const preludeUpdateIntervalMs =
+      hasAimOriginWorld && preludeDistanceSq > flareFxHighDetailDistanceSq
+        ? flareFxParticleUpdateIntervalMsFar
+        : flareFxParticleUpdateIntervalMsNear;
+    const shouldUpdatePreludeAuraParticles =
+      suppressCameraFrontParticles ||
+      now - lastBurningPreludeAuraUpdateAt >= preludeUpdateIntervalMs;
+    if (shouldUpdatePreludeAuraParticles) {
+      lastBurningPreludeAuraUpdateAt = now;
     }
+    const preludeAuraVisible =
+      effectivePreludeVisibility > 0.001 && !suppressCameraFrontParticles;
+    burningModePreludeAuraSparkInstances.visible = preludeAuraVisible;
+    burningModePreludeAuraEmberInstances.visible = preludeAuraVisible;
+    burningModePreludeAuraSparkMaterial.opacity = preludeAuraVisible
+      ? Math.min(1, effectivePreludeVisibility * preludeOpacityBoost)
+      : 0;
+    burningModePreludeAuraEmberMaterial.opacity = preludeAuraVisible
+      ? Math.min(1, effectivePreludeVisibility * preludeOpacityBoost)
+      : 0;
 
-    for (let i = 0; i < burningModePreludeAuraEmbers.length; i += 1) {
-      const ember = burningModePreludeAuraEmbers[i];
-      if (suppressCameraFrontParticles) {
-        ember.mesh.visible = false;
-        ember.material.opacity = 0;
-        continue;
+    if (preludeAuraVisible && shouldUpdatePreludeAuraParticles) {
+      for (let i = 0; i < burningModePreludeAuraSparks.length; i += 1) {
+        const spark = burningModePreludeAuraSparks[i];
+        const spin = t * (spark.speed * 0.84) + spark.phase;
+        const risePhase = (t * (0.58 + i * 0.016) + spark.phase * 0.42) % 1;
+        const burst = 0.68 + 0.32 * Math.sin(t * (10.8 + i * 0.18) + spark.phase);
+        const ring = spark.radius * (0.92 + (i % 5) * 0.08);
+        const particleGatherBase = THREE.MathUtils.clamp(
+          (gatherProgress - i * 0.004) / 0.82,
+          0,
+          1
+        );
+        const particleGather = 1 - Math.pow(1 - particleGatherBase, 3.2);
+        const effectiveParticleGather = skillQEPreludeActive
+          ? Math.max(particleGather, skillQEGather)
+          : particleGather;
+        burningModePreludeParticlePosition.set(
+          Math.cos(spin) *
+            ring *
+            burningModePreludeClusterRadiusScale *
+            skillQEClusterRadiusScale,
+          0.42 + risePhase * spark.lift,
+          Math.sin(spin) *
+            ring *
+            burningModePreludeClusterRadiusScale *
+            skillQEClusterRadiusScale
+        );
+        burningModePreludeParticlePosition.lerp(
+          burningModePreludeAuraTargetLocal,
+          effectiveParticleGather
+        );
+        const particleScale =
+          spark.scale *
+          (0.9 + burst * 0.42 + flameGrowth * 0.1) *
+          (1 - effectiveParticleGather * 0.28);
+        const particleAlpha =
+          effectivePreludeVisibility *
+          (1 - risePhase * (0.7 - effectiveParticleGather * 0.36)) *
+          (0.28 + burst * 0.38 + effectiveParticleGather * 0.24);
+        instancedParticleDummy.position.copy(burningModePreludeParticlePosition);
+        instancedParticleDummy.rotation.set(0, 0, 0);
+        instancedParticleDummy.scale.setScalar(
+          Math.max(0.0001, particleScale * Math.max(0.16, particleAlpha))
+        );
+        instancedParticleDummy.updateMatrix();
+        burningModePreludeAuraSparkInstances.setMatrixAt(
+          i,
+          instancedParticleDummy.matrix
+        );
       }
-      const orbitPhase = t * (ember.speed * 0.7) + ember.phase;
-      const risePhase = (t * (0.34 + i * 0.01) + ember.phase * 0.28) % 1;
-      const band = (i % 5) / 4;
-      const radius = ember.radius * (0.88 + band * 0.34);
-      const yBase = 0.28 + band * 0.34;
-      const crackle =
-        0.58 + 0.42 * Math.sin(t * (8.6 + i * 0.16) + ember.phase * 2.2);
-      const particleGatherBase = THREE.MathUtils.clamp(
-        (gatherProgress - i * 0.003) / 0.86,
-        0,
-        1
-      );
-      const particleGather = 1 - Math.pow(1 - particleGatherBase, 3);
-      const effectiveParticleGather = skillQEPreludeActive
-        ? Math.max(particleGather, skillQEGather)
-        : particleGather;
-      ember.mesh.visible = effectivePreludeVisibility > 0.001;
-      burningModePreludeParticlePosition.set(
-        Math.cos(orbitPhase) *
-          radius *
-          burningModePreludeClusterRadiusScale *
-          skillQEClusterRadiusScale,
-        yBase + risePhase * ember.lift,
-        Math.sin(orbitPhase) *
-          radius *
-          burningModePreludeClusterRadiusScale *
-          skillQEClusterRadiusScale
-      );
-      burningModePreludeParticlePosition.lerp(
-        burningModePreludeAuraTargetLocal,
-        effectiveParticleGather
-      );
-      ember.mesh.position.copy(burningModePreludeParticlePosition);
-      ember.mesh.scale.setScalar(
-        ember.scale *
+      burningModePreludeAuraSparkInstances.instanceMatrix.needsUpdate = true;
+
+      for (let i = 0; i < burningModePreludeAuraEmbers.length; i += 1) {
+        const ember = burningModePreludeAuraEmbers[i];
+        const orbitPhase = t * (ember.speed * 0.7) + ember.phase;
+        const risePhase = (t * (0.34 + i * 0.01) + ember.phase * 0.28) % 1;
+        const band = (i % 5) / 4;
+        const radius = ember.radius * (0.88 + band * 0.34);
+        const yBase = 0.28 + band * 0.34;
+        const crackle =
+          0.58 + 0.42 * Math.sin(t * (8.6 + i * 0.16) + ember.phase * 2.2);
+        const particleGatherBase = THREE.MathUtils.clamp(
+          (gatherProgress - i * 0.003) / 0.86,
+          0,
+          1
+        );
+        const particleGather = 1 - Math.pow(1 - particleGatherBase, 3);
+        const effectiveParticleGather = skillQEPreludeActive
+          ? Math.max(particleGather, skillQEGather)
+          : particleGather;
+        burningModePreludeParticlePosition.set(
+          Math.cos(orbitPhase) *
+            radius *
+            burningModePreludeClusterRadiusScale *
+            skillQEClusterRadiusScale,
+          yBase + risePhase * ember.lift,
+          Math.sin(orbitPhase) *
+            radius *
+            burningModePreludeClusterRadiusScale *
+            skillQEClusterRadiusScale
+        );
+        burningModePreludeParticlePosition.lerp(
+          burningModePreludeAuraTargetLocal,
+          effectiveParticleGather
+        );
+        const particleScale =
+          ember.scale *
           (0.78 + crackle * 0.46 + flameGrowth * 0.08) *
-          (1 - effectiveParticleGather * 0.32)
-      );
-      ember.material.opacity =
-        effectivePreludeVisibility *
-        (1 - risePhase * (0.66 - effectiveParticleGather * 0.38)) *
-        (0.34 + crackle * 0.42 + effectiveParticleGather * 0.22) *
-        preludeOpacityBoost;
+          (1 - effectiveParticleGather * 0.32);
+        const particleAlpha =
+          effectivePreludeVisibility *
+          (1 - risePhase * (0.66 - effectiveParticleGather * 0.38)) *
+          (0.34 + crackle * 0.42 + effectiveParticleGather * 0.22);
+        instancedParticleDummy.position.copy(burningModePreludeParticlePosition);
+        instancedParticleDummy.rotation.set(0, 0, 0);
+        instancedParticleDummy.scale.setScalar(
+          Math.max(0.0001, particleScale * Math.max(0.16, particleAlpha))
+        );
+        instancedParticleDummy.updateMatrix();
+        burningModePreludeAuraEmberInstances.setMatrixAt(
+          i,
+          instancedParticleDummy.matrix
+        );
+      }
+      burningModePreludeAuraEmberInstances.instanceMatrix.needsUpdate = true;
     }
 
     burningModeHeadShell.position.y = THREE.MathUtils.lerp(
@@ -7532,21 +7502,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
       0,
       1
     );
-    const skillQEPreludeLive = skillQEState.active && !skillQEState.ignited;
-    const skillQEPreludeActive = skillQEPreludeLive || skillQEPreludeFade > 0.001;
-    const skillQEPreludeBlend = skillQEPreludeLive ? 1 : skillQEPreludeFade;
+    const skillQEPreludeActive = skillQEPreludeFade > 0.001;
+    const skillQEPreludeBlend = skillQEPreludeFade;
     if (!boundWeapon || (!skillEPreludeActive && !skillQEPreludeActive)) {
       secondaryBurnPreludeAuraFxRoot.visible = false;
-      for (let i = 0; i < secondaryBurnPreludeAuraEmbers.length; i += 1) {
-        const ember = secondaryBurnPreludeAuraEmbers[i];
-        ember.mesh.visible = false;
-        ember.material.opacity = 0;
-      }
-      for (let i = 0; i < secondaryBurnPreludeAuraSparks.length; i += 1) {
-        const spark = secondaryBurnPreludeAuraSparks[i];
-        spark.mesh.visible = false;
-        spark.material.opacity = 0;
-      }
+      secondaryBurnPreludeAuraEmberInstances.visible = false;
+      secondaryBurnPreludeAuraSparkInstances.visible = false;
+      secondaryBurnPreludeAuraEmberMaterial.opacity = 0;
+      secondaryBurnPreludeAuraSparkMaterial.opacity = 0;
       secondaryBurnPreludeFxRoot.visible = false;
       for (let i = 0; i < secondaryBurnPreludeEmbers.length; i += 1) {
         const ember = secondaryBurnPreludeEmbers[i];
@@ -7569,9 +7532,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const usingSkillQEPrelude = skillQEPreludeActive;
     const progress = THREE.MathUtils.clamp(
       usingSkillQEPrelude
-        ? (skillQEState.durationMs > 0
-            ? (now - skillQEState.startedAt) / skillQEState.durationMs
-            : 1)
+        ? 1 - skillQEPreludeBlend
         : (now - skillEState.startedAt) / skillEState.durationMs,
       0,
       1
@@ -7725,77 +7686,117 @@ export const createRuntime: CharacterRuntimeFactory = ({
         (0.28 + burst * 0.38 + particleGather * 0.16);
     }
 
-    for (let i = 0; i < secondaryBurnPreludeAuraEmbers.length; i += 1) {
-      const ember = secondaryBurnPreludeAuraEmbers[i];
-      const orbitPhase = t * (ember.speed * 0.72) + ember.phase;
-      const risePhase = (t * (0.32 + i * 0.012) + ember.phase * 0.24) % 1;
-      const band = (i % 4) / 3;
-      const radius =
-        ember.radius * (1.1 + band * 0.54 + landingBoost * 0.18) * preludeSpread;
-      const yBase = 0.28 + band * 0.36;
-      const shimmer = 0.62 + 0.38 * Math.sin(t * (6.2 + i * 0.14) + ember.phase * 2.2);
-      const particleGather = THREE.MathUtils.clamp(
-        (gatherProgress - i * 0.008) / 0.74,
-        0,
-        1
-      );
-      ember.mesh.visible = auraVisibility > 0.001;
-      secondaryBurnPreludeParticlePosition.set(
-        Math.cos(orbitPhase) * radius,
-        yBase + risePhase * ember.lift * 1.1,
-        Math.sin(orbitPhase) * radius
-      );
-      secondaryBurnPreludeParticlePosition.lerp(
-        secondaryBurnPreludeAuraTargetLocal,
-        particleGather
-      );
-      ember.mesh.position.copy(secondaryBurnPreludeParticlePosition);
-      ember.mesh.scale.setScalar(
-        ember.scale *
+    const preludeAuraDistanceSq = hasAimOriginWorld
+      ? latestAimOriginWorld.distanceToSquared(secondaryBurnPreludeWorldTarget)
+      : 0;
+    const preludeAuraUpdateIntervalMs =
+      hasAimOriginWorld && preludeAuraDistanceSq > flareFxHighDetailDistanceSq
+        ? flareFxParticleUpdateIntervalMsFar
+        : flareFxParticleUpdateIntervalMsNear;
+    const shouldUpdatePreludeAuraParticles =
+      now - lastSecondaryPreludeAuraUpdateAt >= preludeAuraUpdateIntervalMs;
+    if (shouldUpdatePreludeAuraParticles) {
+      lastSecondaryPreludeAuraUpdateAt = now;
+    }
+    const preludeAuraVisible = auraVisibility > 0.001;
+    secondaryBurnPreludeAuraEmberInstances.visible = preludeAuraVisible;
+    secondaryBurnPreludeAuraSparkInstances.visible = preludeAuraVisible;
+    secondaryBurnPreludeAuraEmberMaterial.opacity = preludeAuraVisible
+      ? Math.min(1, auraVisibility * 1.06)
+      : 0;
+    secondaryBurnPreludeAuraSparkMaterial.opacity = preludeAuraVisible
+      ? Math.min(1, auraVisibility * 1.04)
+      : 0;
+
+    if (preludeAuraVisible && shouldUpdatePreludeAuraParticles) {
+      for (let i = 0; i < secondaryBurnPreludeAuraEmbers.length; i += 1) {
+        const ember = secondaryBurnPreludeAuraEmbers[i];
+        const orbitPhase = t * (ember.speed * 0.72) + ember.phase;
+        const risePhase = (t * (0.32 + i * 0.012) + ember.phase * 0.24) % 1;
+        const band = (i % 4) / 3;
+        const radius =
+          ember.radius * (1.1 + band * 0.54 + landingBoost * 0.18) * preludeSpread;
+        const yBase = 0.28 + band * 0.36;
+        const shimmer =
+          0.62 + 0.38 * Math.sin(t * (6.2 + i * 0.14) + ember.phase * 2.2);
+        const particleGather = THREE.MathUtils.clamp(
+          (gatherProgress - i * 0.008) / 0.74,
+          0,
+          1
+        );
+        secondaryBurnPreludeParticlePosition.set(
+          Math.cos(orbitPhase) * radius,
+          yBase + risePhase * ember.lift * 1.1,
+          Math.sin(orbitPhase) * radius
+        );
+        secondaryBurnPreludeParticlePosition.lerp(
+          secondaryBurnPreludeAuraTargetLocal,
+          particleGather
+        );
+        const particleScale =
+          ember.scale *
           (0.92 + shimmer * 0.54 + landingBoost * 0.26) *
           (1 - particleGather * 0.22) *
-          preludeIntensity
-      );
-      ember.material.opacity =
-        auraVisibility *
-        (1 - risePhase * (0.68 - particleGather * 0.28)) *
-        (0.3 + shimmer * 0.42 + emberDrift * 0.12 + particleGather * 0.14);
-    }
+          preludeIntensity;
+        const particleAlpha =
+          auraVisibility *
+          (1 - risePhase * (0.68 - particleGather * 0.28)) *
+          (0.3 + shimmer * 0.42 + emberDrift * 0.12 + particleGather * 0.14);
+        instancedParticleDummy.position.copy(secondaryBurnPreludeParticlePosition);
+        instancedParticleDummy.rotation.set(0, 0, 0);
+        instancedParticleDummy.scale.setScalar(
+          Math.max(0.0001, particleScale * Math.max(0.16, particleAlpha))
+        );
+        instancedParticleDummy.updateMatrix();
+        secondaryBurnPreludeAuraEmberInstances.setMatrixAt(
+          i,
+          instancedParticleDummy.matrix
+        );
+      }
+      secondaryBurnPreludeAuraEmberInstances.instanceMatrix.needsUpdate = true;
 
-    for (let i = 0; i < secondaryBurnPreludeAuraSparks.length; i += 1) {
-      const spark = secondaryBurnPreludeAuraSparks[i];
-      const spin = t * (spark.orbitSpeed * 0.82) + spark.phase;
-      const risePhase = (t * (0.54 + i * 0.02) + spark.phase * 0.34) % 1;
-      const burst = 0.64 + 0.36 * Math.sin(t * (10.6 + i * 0.3) + spark.phase);
-      const ring =
-        (1.02 + (i % 4) * 0.22 + landingBoost * 0.18) * preludeSpread;
-      const particleGather = THREE.MathUtils.clamp(
-        (gatherProgress - i * 0.006) / 0.78,
-        0,
-        1
-      );
-      spark.mesh.visible = auraVisibility > 0.001;
-      secondaryBurnPreludeParticlePosition.set(
-        Math.cos(spin) * spark.orbitRadius * ring,
-        0.48 + risePhase * spark.lift * 1.08,
-        Math.sin(spin) * spark.orbitRadius * ring
-      );
-      secondaryBurnPreludeParticlePosition.lerp(
-        secondaryBurnPreludeAuraTargetLocal,
-        particleGather
-      );
-      spark.mesh.position.copy(secondaryBurnPreludeParticlePosition);
-      spark.mesh.rotation.set(spin * 1.2, spin * 0.9, spin * 1.7);
-      spark.mesh.scale.setScalar(
-        spark.scale *
+      for (let i = 0; i < secondaryBurnPreludeAuraSparks.length; i += 1) {
+        const spark = secondaryBurnPreludeAuraSparks[i];
+        const spin = t * (spark.speed * 0.82) + spark.phase;
+        const risePhase = (t * (0.54 + i * 0.02) + spark.phase * 0.34) % 1;
+        const burst = 0.64 + 0.36 * Math.sin(t * (10.6 + i * 0.3) + spark.phase);
+        const ring =
+          (1.02 + (i % 4) * 0.22 + landingBoost * 0.18) * preludeSpread;
+        const particleGather = THREE.MathUtils.clamp(
+          (gatherProgress - i * 0.006) / 0.78,
+          0,
+          1
+        );
+        secondaryBurnPreludeParticlePosition.set(
+          Math.cos(spin) * spark.radius * ring,
+          0.48 + risePhase * spark.lift * 1.08,
+          Math.sin(spin) * spark.radius * ring
+        );
+        secondaryBurnPreludeParticlePosition.lerp(
+          secondaryBurnPreludeAuraTargetLocal,
+          particleGather
+        );
+        const particleScale =
+          spark.scale *
           (1.08 + burst * 0.48 + landingBoost * 0.26) *
           (1 - particleGather * 0.18) *
-          preludeIntensity
-      );
-      spark.material.opacity =
-        auraVisibility *
-        (1 - risePhase * (0.72 - particleGather * 0.34)) *
-        (0.26 + burst * 0.34 + particleGather * 0.16);
+          preludeIntensity;
+        const particleAlpha =
+          auraVisibility *
+          (1 - risePhase * (0.72 - particleGather * 0.34)) *
+          (0.26 + burst * 0.34 + particleGather * 0.16);
+        instancedParticleDummy.position.copy(secondaryBurnPreludeParticlePosition);
+        instancedParticleDummy.rotation.set(0, 0, 0);
+        instancedParticleDummy.scale.setScalar(
+          Math.max(0.0001, particleScale * Math.max(0.16, particleAlpha))
+        );
+        instancedParticleDummy.updateMatrix();
+        secondaryBurnPreludeAuraSparkInstances.setMatrixAt(
+          i,
+          instancedParticleDummy.matrix
+        );
+      }
+      secondaryBurnPreludeAuraSparkInstances.instanceMatrix.needsUpdate = true;
     }
   };
 
@@ -7823,7 +7824,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
         !attackState.active &&
         !primaryHoldState.active &&
         !skillQState.active &&
-        !skillQEState.active &&
         !skillEState.active &&
         !skillRState.active;
       const currentWeight = walkAction.getEffectiveWeight();
@@ -7879,7 +7879,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const handlePrimaryDown = () => {
     const now = performance.now();
     if (!normalAttackBindings.length && !superBurnAttackBindings.length) return;
-    if (skillQState.active || skillQEState.active || skillEState.active || skillRState.active) {
+    if (skillQState.active || skillEState.active || skillRState.active) {
       return;
     }
 
@@ -7926,6 +7926,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const handleSkillQ = () => {
     const now = performance.now();
+    if (burningModeState.active || skillQState.active) {
+      finishSkillQ();
+      deactivateBurningMode();
+      return true;
+    }
     if (!canCastSkillQByEnergy()) {
       return false;
     }
@@ -7933,7 +7938,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
       attackState.active ||
       primaryHoldState.active ||
       skillQState.active ||
-      skillQEState.active ||
       skillEState.active ||
       skillRState.active ||
       burningModeState.active
@@ -7942,22 +7946,28 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
     const started = startSkillQ(now);
     if (!started) return false;
-    consumeAllEnergy();
     return true;
   };
 
   const handleSkillE = () => {
     const now = performance.now();
+    if (secondaryBurnState.active || secondaryBurnState.fadingOut) {
+      deactivateSecondaryBurn({ immediate: true, now });
+      finishSkillE();
+      return true;
+    }
     if (
       attackState.active ||
       primaryHoldState.active ||
-      skillQEState.active ||
       skillRState.active
     ) {
       return false;
     }
+    if (getCurrentMana() <= 0.0001) {
+      return false;
+    }
     if (burningModeState.active || skillQState.active) {
-      return startSkillQE(now);
+      return triggerSkillQEInstantIgnite(now);
     }
     if (
       skillEState.active
@@ -7973,7 +7983,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
       attackState.active ||
       primaryHoldState.active ||
       skillQState.active ||
-      skillQEState.active ||
       skillEState.active ||
       skillRState.active
     ) {
@@ -7991,6 +8000,34 @@ export const createRuntime: CharacterRuntimeFactory = ({
       primaryHoldState.pressing = false;
       primaryHoldState.pressedAt = 0;
       finishPrimaryHold();
+    }
+  };
+
+  const updateSkillQEnergyDrain = (delta: number) => {
+    if (!burningModeState.active || !spendEnergy || delta <= 0) return;
+    const energyDrain = skillQEnergyDrainPerSecond * delta;
+    if (energyDrain <= 0) return;
+    spendEnergy(energyDrain);
+    if (getCurrentEnergy() <= 0.0001) {
+      deactivateBurningMode();
+    }
+  };
+
+  const updateSkillEManaDrain = (delta: number) => {
+    if (!secondaryBurnState.active || !spendMana || delta <= 0) return;
+    const manaDrain = skillEManaDrainPerSecond * delta;
+    if (manaDrain <= 0) return;
+    spendMana(manaDrain);
+    if (getCurrentMana() <= 0.0001) {
+      deactivateSecondaryBurn();
+    }
+  };
+
+  const updateSkillQHealthRegen = (delta: number) => {
+    if (!burningModeState.active || !applyHealth || delta <= 0) return;
+    const heal = skillQHealthRegenPerSecond * delta;
+    if (heal > 0) {
+      applyHealth(heal);
     }
   };
 
@@ -8081,7 +8118,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetPrimaryHoldState();
     resetSkillEState();
     resetSkillQState();
-    resetSkillQEState();
+    resetSkillQEPreludeState();
     resetSkillRState();
     deactivateSecondaryBurn({ immediate: true });
     deactivateBurningMode();
@@ -8094,6 +8131,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     lastCompletedAttackIndex = -1;
     lastCompletedAttackAt = -Infinity;
     lastAnimationUpdateAt = 0;
+    lastBurningPreludeAuraUpdateAt = -Infinity;
+    lastSecondaryPreludeAuraUpdateAt = -Infinity;
     baseRuntime.resetState?.();
   };
 
@@ -8113,7 +8152,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
       !attackState.active &&
       !primaryHoldState.active &&
       !skillQState.active &&
-      !skillQEState.active &&
       !skillEState.active &&
       !skillRState.active;
     baseRuntime.update({
@@ -8128,7 +8166,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     updatePrimaryHoldTrailFx(args.now);
     updatePrimaryHoldProjectileReflectBlocker();
     updateSkillQState(args.now);
-    updateSkillQEState(args.now);
     updateSkillEState(args.now);
     updateSkillRState(args.now);
     updateSuperBurnSkillRFanFx(args.now);
@@ -8168,13 +8205,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
       Boolean(baseRuntime.isBasicAttackLocked?.()) ||
       primaryHoldState.active ||
       skillQState.active ||
-      skillQEState.active ||
       skillEState.active ||
       skillRState.active,
     isMovementLocked: () =>
       Boolean(baseRuntime.isMovementLocked?.()) ||
       skillQState.active ||
-      skillQEState.active ||
       skillEState.active ||
       skillRState.active,
     getSkillCooldownRemainingMs: baseRuntime.getSkillCooldownRemainingMs,
@@ -8182,13 +8217,22 @@ export const createRuntime: CharacterRuntimeFactory = ({
     getSkillHudIndicators,
     beforeSkillUse: ({ key, now }) => {
       const baseModifierResult = baseRuntime.beforeSkillUse?.({ key, now });
-      if (key !== "r" || superBurnState.active) {
-        return baseModifierResult;
-      }
       const baseModifier =
         baseModifierResult && typeof baseModifierResult === "object"
           ? baseModifierResult
           : {};
+      if (
+        (key === "q" && (burningModeState.active || skillQState.active)) ||
+        (key === "e" && (secondaryBurnState.active || secondaryBurnState.fadingOut))
+      ) {
+        return {
+          ...baseModifier,
+          ignoreCostAndCooldown: true,
+        };
+      }
+      if (key !== "r" || superBurnState.active) {
+        return baseModifierResult;
+      }
       return {
         ...baseModifier,
         ignoreCostAndCooldown: true,
@@ -8199,6 +8243,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     isImmuneToStatus: baseRuntime.isImmuneToStatus,
     onTick: (args) => {
       updatePrimaryHoldStaminaDrain(args.delta);
+      updateSkillQEnergyDrain(args.delta);
+      updateSkillEManaDrain(args.delta);
+      updateSkillQHealthRegen(args.delta);
       baseRuntime.onTick?.(args);
     },
     resetState,
@@ -8210,6 +8257,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       disposeAllSuperBurnFlamePools();
       primaryHoldReflectBlocker.removeFromParent();
       superBurnSkillRFanFxRoot.removeFromParent();
+      secondaryBurnPreludeAuraEmberInstances.dispose();
+      secondaryBurnPreludeAuraSparkInstances.dispose();
+      burningModePreludeAuraEmberInstances.dispose();
+      burningModePreludeAuraSparkInstances.dispose();
       secondaryBurnFlameGeometry.dispose();
       skillRProjectileShellGeometry.dispose();
       skillRProjectileCoreGeometry.dispose();
@@ -8249,12 +8300,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       burningModeHeadAlphaMap.dispose();
       burningModeHeadShellMaterial.dispose();
       burningModeHeadCoreMaterial.dispose();
-      for (let i = 0; i < secondaryBurnPreludeAuraEmbers.length; i += 1) {
-        secondaryBurnPreludeAuraEmbers[i].material.dispose();
-      }
-      for (let i = 0; i < secondaryBurnPreludeAuraSparks.length; i += 1) {
-        secondaryBurnPreludeAuraSparks[i].material.dispose();
-      }
+      secondaryBurnPreludeAuraEmberMaterial.dispose();
+      secondaryBurnPreludeAuraSparkMaterial.dispose();
       for (let i = 0; i < secondaryBurnPreludeEmbers.length; i += 1) {
         secondaryBurnPreludeEmbers[i].material.dispose();
       }
@@ -8316,15 +8363,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
       for (let i = 0; i < burningModeHeadSparks.length; i += 1) {
         burningModeHeadSparks[i].material.dispose();
       }
-      for (let i = 0; i < burningModePreludeAuraSparks.length; i += 1) {
-        burningModePreludeAuraSparks[i].material.dispose();
-      }
+      burningModePreludeAuraSparkMaterial.dispose();
       for (let i = 0; i < burningModeHeadEmbers.length; i += 1) {
         burningModeHeadEmbers[i].material.dispose();
       }
-      for (let i = 0; i < burningModePreludeAuraEmbers.length; i += 1) {
-        burningModePreludeAuraEmbers[i].material.dispose();
-      }
+      burningModePreludeAuraEmberMaterial.dispose();
       for (let i = 0; i < burningModeHeadSmokeWisps.length; i += 1) {
         burningModeHeadSmokeWisps[i].material.dispose();
       }
@@ -8333,7 +8376,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     isFacingLocked: () =>
       baseRuntime.isFacingLocked() ||
       skillQState.active ||
-      skillQEState.active ||
       skillEState.active ||
       skillRState.active,
   });

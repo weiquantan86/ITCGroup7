@@ -47,15 +47,15 @@ export const profile: CharacterProfile = {
         cost: 0,
         cooldownMs: 15000,
         description:
-          "Requires full EN and consumes all EN to cast. Enter Burning Mode for 20s and maintain the flame aura state used by enhanced E and R interactions.",
+          "Enter Burning Mode and continuously drain EN at 3.5 per second while active. Burning Mode powers up E and R interactions.",
       },
       e: {
         id: "e",
         label: "E",
-        cost: 30,
+        cost: 0,
         cooldownMs: 5000,
         description:
-          "Normal cast plays Skill E and ignites Secondary Burn (weapon fire state). If Burning Mode is active, E upgrades to Q_E, ignites immediately, and enables Super Burn attacks.",
+          "Normal cast plays Skill E and ignites Secondary Burn. Secondary Burn now drains mana continuously at 2 per second. During Burning Mode, E no longer plays Q_E animation and instead triggers an instant ignite burst.",
       },
       r: {
         id: "r",

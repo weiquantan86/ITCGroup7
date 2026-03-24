@@ -34,7 +34,7 @@ type MenuArtKind =
   | "surge"
   | "battle"
   | "lab"
-  | "subgame"
+  | "origin"
   | "starshop";
 
 function MenuArtwork({ kind }: { kind: MenuArtKind }) {
@@ -107,7 +107,7 @@ function MenuArtwork({ kind }: { kind: MenuArtKind }) {
           <circle {...baseProps} cx="151" cy="110" r="4" />
         </svg>
       );
-    case "subgame":
+    case "origin":
       return (
         <svg viewBox="0 0 240 180" className="h-full w-full text-white/70" aria-hidden="true">
           <path {...baseProps} d="M49 129 90 88l33 17 52-44" />
@@ -371,7 +371,7 @@ export default async function UserPage() {
             </Panel>
 
             <Panel className="grid h-full min-h-0 grid-rows-2 gap-6">
-              <MenuButton label="Subgame1" art="subgame" className="h-full" />
+              <MenuButton label="Origin" art="origin" className="h-full" href="/origin"/>
               <MenuButton label="Star Shop" art="starshop" className="h-full" href="/starshop" />
             </Panel>
             </div>

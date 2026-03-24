@@ -279,6 +279,8 @@ export const createMadaPresentationController = ({
     } else if (currentState.mode === "vanishing") {
       eyeAlpha = currentState.fadeAlpha;
       bodyAlpha = currentState.fadeAlpha;
+      // Keep the body as a black silhouette while fading out.
+      forcePureBlack = true;
     } else if (currentState.mode === "vanished") {
       eyeAlpha = 0;
       bodyAlpha = 0;

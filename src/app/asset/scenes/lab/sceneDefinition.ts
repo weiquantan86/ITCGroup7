@@ -3,12 +3,12 @@ import type {
   PlayerAttackTarget,
   PlayerWorld,
   PlayerWorldTickArgs,
-} from "../../../asset/entity/character/general/player";
-import { createSceneResourceTracker } from "../../../asset/scenes/general/resourceTracker";
+} from "../../entity/character/general/player";
+import { createSceneResourceTracker } from "../general/resourceTracker";
 import type {
   SceneSetupContext,
   SceneSetupResult,
-} from "../../../asset/scenes/general/sceneTypes";
+} from "../general/sceneTypes";
 import {
   MADA_LAB_STATE_KEY,
   MADA_TERMINAL_UNLOCK_EVENT,
@@ -23,9 +23,9 @@ import {
 import {
   MADA_AMBUSH_CRAWL_DAMAGE,
   canApplyMadaAmbushCrawlDamage,
-} from "../../../asset/entity/monster/mada/skillCrawl";
-import { createUnifiedMonsterRuntime } from "../../../asset/entity/monster/unified/registry";
-import type { UnifiedMonsterRuntime } from "../../../asset/entity/monster/unified/types";
+} from "../../entity/monster/mada/skillCrawl";
+import { createUnifiedMonsterRuntime } from "../../entity/monster/unified/registry";
+import type { UnifiedMonsterRuntime } from "../../entity/monster/unified/types";
 
 type BoxCollider = {
   minX: number;
@@ -644,19 +644,8 @@ export const createMadaLabScene = (
     return target;
   };
 
-  const addScore = (amount: number) => {
-    if (!Number.isFinite(amount) || amount <= 0) return 0;
-    const normalized = Math.max(0, amount);
-    score = Math.max(0, score + normalized);
-    return normalized;
-  };
-
-  const applyScorePenalty = (amount: number) => {
-    if (!Number.isFinite(amount) || amount <= 0) return 0;
-    const normalized = Math.max(0, amount);
-    const before = score;
-    score = Math.max(0, score - normalized);
-    return before - score;
+  const recomputeScore = () => {
+    score = Math.max(0, damageScore - hitPenaltyScore + victoryTimeBonusScore);
   };
 
   const refreshElapsedSeconds = (nowMs: number) => {
@@ -687,7 +676,8 @@ export const createMadaLabScene = (
     playerDead = !didWin;
     if (didWin) {
       const bonus = resolveVictoryTimeBonus(elapsedSeconds);
-      victoryTimeBonusScore += addScore(bonus);
+      victoryTimeBonusScore += Math.max(0, bonus);
+      recomputeScore();
     }
     emitState(true, now);
   };
@@ -2225,6 +2215,7 @@ export const createMadaLabScene = (
     hitPenaltyCount = 0;
     hitPenaltyScore = 0;
     victoryTimeBonusScore = 0;
+    recomputeScore();
 
     const unifiedSpawn = madaRig.position.clone();
     madaCombat.dispose();
@@ -2320,18 +2311,21 @@ export const createMadaLabScene = (
           const applied = applyDamage(amount);
           if (!gameEnded && applied > 0) {
             hitPenaltyCount += 1;
-            hitPenaltyScore += applyScorePenalty(MADA_SCORE_HIT_PENALTY);
+            hitPenaltyScore += MADA_SCORE_HIT_PENALTY;
+            recomputeScore();
           }
           return applied;
         },
       });
       const updatedBattleState = madaBattleRuntime.getState();
-      if (!gameEnded && updatedBattleState.monsterHealth < battleState.monsterHealth) {
-        const gained = addScore(
-          (battleState.monsterHealth - updatedBattleState.monsterHealth) *
+      if (!gameEnded) {
+        const totalDamageScore = Math.max(
+          0,
+          (updatedBattleState.monsterMaxHealth - updatedBattleState.monsterHealth) *
             MADA_SCORE_PER_DAMAGE
         );
-        damageScore += gained;
+        damageScore = totalDamageScore;
+        recomputeScore();
       }
       if (!gameEnded && !updatedBattleState.monsterAlive) {
         endBattle(true, now);
