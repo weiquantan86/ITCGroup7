@@ -9,6 +9,8 @@ export type StoryChapterUiState = {
   chapter1PrimaryAttackUnlocked?: boolean;
   chapter1WoodCollected?: number;
   chapter1WoodTotal?: number;
+  chapter1WoodObjectiveCompleted?: boolean;
+  chapter1ChapterCompleted?: boolean;
 };
 
 export type StoryChapterComponentProps = {

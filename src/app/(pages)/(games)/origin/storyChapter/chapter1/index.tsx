@@ -71,14 +71,20 @@ const CHAPTER1_FLARE_AVOIDANCE_SEGMENT_LENGTH = 0.22;
 const CHAPTER1_FLARE_AVOIDANCE_SAMPLE_ANGLES_DEG = [
   0, 16, -16, 32, -32, 48, -48, 64, -64, 84, -84, 112, -112, 144, -144,
 ] as const;
+const CHAPTER1_FLARE_AVOIDANCE_SIDE_LOCK_MS = 480;
+const CHAPTER1_FLARE_AVOIDANCE_STEER_SMOOTHING = 12;
 const CHAPTER1_WOOD_NODE_COUNT = 5;
 const CHAPTER1_WOOD_PICKUP_DISTANCE = 1.3;
 const CHAPTER1_RIGHT_PANEL_FADE_MS = 280;
 const CHAPTER1_RIGHT_PANEL_FADE_FLOOR_OPACITY = 0.18;
+const CHAPTER1_POST_WOOD_EXIT_DELAY_MS = 10000;
+const CHAPTER1_FLARE_SKILLQ_REPEAT_GAP_MS = 500;
 const CHAPTER1_FLARE_DIALOGUE =
   'Flare: "Why so slow? The campfire festival is about to begin. You are new here, so I still need to teach you a few things. Follow me."';
 const CHAPTER1_FLARE_DESTINATION_DIALOGUE =
   'Flare: "Keeping up? The campfire party needs more wood. You, go collect some."';
+const CHAPTER1_FLARE_OBJECTIVE_DONE_DIALOGUE =
+  'Flare: "Nice work, buddy."';
 
 type Chapter1SceneUiState = {
   chapter1FlareNearby?: boolean;
@@ -86,13 +92,16 @@ type Chapter1SceneUiState = {
   chapter1PrimaryAttackUnlocked?: boolean;
   chapter1WoodCollected?: number;
   chapter1WoodTotal?: number;
+  chapter1WoodObjectiveCompleted?: boolean;
 };
 
 function Chapter1GameFrame({
   chapterUiState,
   setChapterUiState,
 }: StoryChapterComponentProps) {
-  const [phase, setPhase] = useState<"idle" | "intro" | "transition" | "scene">(
+  const [phase, setPhase] = useState<
+    "idle" | "intro" | "transition" | "scene" | "complete"
+  >(
     "idle"
   );
   const [introIndex, setIntroIndex] = useState(0);
@@ -104,6 +113,7 @@ function Chapter1GameFrame({
   const sceneCurtainStartTimerRef = useRef<number | null>(null);
   const sceneCurtainHideTimerRef = useRef<number | null>(null);
   const sceneControlHintTimerRef = useRef<number | null>(null);
+  const chapterCompleteTimerRef = useRef<number | null>(null);
 
   const clearTimers = useCallback(() => {
     if (introTransitionTimerRef.current !== null) {
@@ -121,6 +131,10 @@ function Chapter1GameFrame({
     if (sceneControlHintTimerRef.current !== null) {
       window.clearTimeout(sceneControlHintTimerRef.current);
       sceneControlHintTimerRef.current = null;
+    }
+    if (chapterCompleteTimerRef.current !== null) {
+      window.clearTimeout(chapterCompleteTimerRef.current);
+      chapterCompleteTimerRef.current = null;
     }
   }, []);
 
@@ -152,6 +166,8 @@ function Chapter1GameFrame({
       chapter1PrimaryAttackUnlocked: false,
       chapter1WoodCollected: 0,
       chapter1WoodTotal: CHAPTER1_WOOD_NODE_COUNT,
+      chapter1WoodObjectiveCompleted: false,
+      chapter1ChapterCompleted: false,
     }));
   }, [clearTimers, setChapterUiState]);
 
@@ -176,6 +192,8 @@ function Chapter1GameFrame({
             chapter1PrimaryAttackUnlocked: false,
             chapter1WoodCollected: 0,
             chapter1WoodTotal: CHAPTER1_WOOD_NODE_COUNT,
+            chapter1WoodObjectiveCompleted: false,
+            chapter1ChapterCompleted: false,
           }));
         }, CHAPTER1_INTRO_TRANSITION_MS);
         return currentIndex;
@@ -288,8 +306,13 @@ function Chapter1GameFrame({
         let flareReachedFollowTarget = false;
         let flareReachStateEmitted = false;
         let woodNodesSpawned = false;
+        let woodObjectiveCompleted = false;
+        let woodObjectiveStateEmitted = false;
         let flareAnimationMixer: THREE.AnimationMixer | null = null;
         let flareWalkAction: THREE.AnimationAction | null = null;
+        let flareSkillQAction: THREE.AnimationAction | null = null;
+        let flareSkillQDurationMs = 0;
+        let flareSkillQNextPlayAt = 0;
         let flareWalkPlaying = false;
         let flareAnimationRoot: THREE.Object3D | null = null;
 
@@ -312,6 +335,10 @@ function Chapter1GameFrame({
 
         const flareAvoidanceCandidateDirection = new THREE.Vector3();
         const flareAvoidanceUpAxis = new THREE.Vector3(0, 1, 0);
+        const flareAvoidanceSmoothedDirection = new THREE.Vector3();
+        let flareAvoidanceSmoothedDirectionInitialized = false;
+        let flareAvoidancePreferredSide: -1 | 1 = 1;
+        let flareAvoidanceSideLockUntil = 0;
 
         const isFlarePositionWalkable = (x: number, z: number) => {
           const isBlocked = world?.isBlocked;
@@ -354,7 +381,9 @@ function Chapter1GameFrame({
 
         const resolveFlareMoveDirection = (
           desiredDirection: THREE.Vector3,
-          distance: number
+          distance: number,
+          now: number,
+          delta: number
         ) => {
           if (distance <= 0.000001) return null;
           if (desiredDirection.lengthSq() < 0.000001) return null;
@@ -365,33 +394,93 @@ function Chapter1GameFrame({
             .setY(0)
             .normalize();
 
-          for (
-            let angleIndex = 0;
-            angleIndex < CHAPTER1_FLARE_AVOIDANCE_SAMPLE_ANGLES_DEG.length;
-            angleIndex += 1
-          ) {
-            const angleRad =
-              CHAPTER1_FLARE_AVOIDANCE_SAMPLE_ANGLES_DEG[angleIndex] *
-              THREE.MathUtils.DEG2RAD;
-            const candidateDirection = flareAvoidanceCandidateDirection
-              .clone()
-              .applyAxisAngle(flareAvoidanceUpAxis, angleRad)
-              .normalize();
-            const dotToDesired = candidateDirection.dot(flareToTargetDirection);
-            if (dotToDesired < -0.15) continue;
-            if (
-              !isFlarePathWalkable(
-                startX,
-                startZ,
-                candidateDirection,
-                distance
-              )
+          const sideLocked = now < flareAvoidanceSideLockUntil;
+          let chosenDirection: THREE.Vector3 | null = null;
+          let chosenSide = 0;
+
+          const tryResolveCandidate = (
+            sideFilter: -1 | 0 | 1 | null
+          ): THREE.Vector3 | null => {
+            for (
+              let angleIndex = 0;
+              angleIndex < CHAPTER1_FLARE_AVOIDANCE_SAMPLE_ANGLES_DEG.length;
+              angleIndex += 1
             ) {
-              continue;
+              const angleDeg = CHAPTER1_FLARE_AVOIDANCE_SAMPLE_ANGLES_DEG[angleIndex];
+              const angleSign = Math.sign(angleDeg) as -1 | 0 | 1;
+              if (sideFilter !== null && angleSign !== 0 && angleSign !== sideFilter) {
+                continue;
+              }
+              const angleRad = angleDeg * THREE.MathUtils.DEG2RAD;
+              const candidateDirection = flareAvoidanceCandidateDirection
+                .clone()
+                .applyAxisAngle(flareAvoidanceUpAxis, angleRad)
+                .normalize();
+              const dotToDesired = candidateDirection.dot(flareToTargetDirection);
+              if (dotToDesired < -0.15) continue;
+              if (
+                !isFlarePathWalkable(
+                  startX,
+                  startZ,
+                  candidateDirection,
+                  distance
+                )
+              ) {
+                continue;
+              }
+              chosenSide = angleSign;
+              return candidateDirection;
             }
-            return candidateDirection;
+            return null;
+          };
+
+          chosenDirection = tryResolveCandidate(
+            sideLocked ? flareAvoidancePreferredSide : null
+          );
+          if (!chosenDirection && sideLocked) {
+            chosenDirection = tryResolveCandidate(null);
           }
-          return null;
+          if (!chosenDirection) {
+            return null;
+          }
+
+          if (chosenSide !== 0 && chosenSide !== flareAvoidancePreferredSide) {
+            flareAvoidancePreferredSide = chosenSide as -1 | 1;
+            flareAvoidanceSideLockUntil = now + CHAPTER1_FLARE_AVOIDANCE_SIDE_LOCK_MS;
+          } else if (chosenSide !== 0 && now >= flareAvoidanceSideLockUntil) {
+            flareAvoidanceSideLockUntil = now + CHAPTER1_FLARE_AVOIDANCE_SIDE_LOCK_MS * 0.5;
+          }
+
+          if (!flareAvoidanceSmoothedDirectionInitialized) {
+            flareAvoidanceSmoothedDirection.copy(chosenDirection);
+            flareAvoidanceSmoothedDirectionInitialized = true;
+          } else {
+            const blend =
+              1 -
+              Math.exp(
+                -Math.max(0, delta) * CHAPTER1_FLARE_AVOIDANCE_STEER_SMOOTHING
+              );
+            flareAvoidanceSmoothedDirection.lerp(chosenDirection, blend);
+            flareAvoidanceSmoothedDirection.y = 0;
+            if (flareAvoidanceSmoothedDirection.lengthSq() < 0.000001) {
+              flareAvoidanceSmoothedDirection.copy(chosenDirection);
+            } else {
+              flareAvoidanceSmoothedDirection.normalize();
+            }
+          }
+
+          if (
+            isFlarePathWalkable(
+              startX,
+              startZ,
+              flareAvoidanceSmoothedDirection,
+              distance
+            )
+          ) {
+            return flareAvoidanceSmoothedDirection.clone();
+          }
+
+          return chosenDirection;
         };
 
         emitSceneState({
@@ -400,6 +489,7 @@ function Chapter1GameFrame({
           chapter1PrimaryAttackUnlocked: false,
           chapter1WoodCollected: 0,
           chapter1WoodTotal: CHAPTER1_WOOD_NODE_COUNT,
+          chapter1WoodObjectiveCompleted: false,
         });
 
         const resolveValidWoodPosition = (
@@ -644,11 +734,27 @@ function Chapter1GameFrame({
                   clip.name.trim().toLowerCase().includes("walk")
                 ) ??
                 null;
+              const skillQClip =
+                gltf.animations.find(
+                  (clip) => clip.name.trim().toLowerCase() === "skillq"
+                ) ??
+                gltf.animations.find((clip) =>
+                  clip.name.trim().toLowerCase().includes("skillq")
+                ) ??
+                null;
               if (walkClip) {
                 flareWalkAction = flareAnimationMixer.clipAction(walkClip);
                 flareWalkAction.enabled = true;
                 flareWalkAction.setLoop(THREE.LoopRepeat, Infinity);
                 flareWalkAction.clampWhenFinished = false;
+              }
+              if (skillQClip) {
+                flareSkillQAction = flareAnimationMixer.clipAction(skillQClip);
+                flareSkillQAction.enabled = true;
+                flareSkillQAction.setLoop(THREE.LoopOnce, 1);
+                flareSkillQAction.clampWhenFinished = true;
+                flareSkillQDurationMs = Math.max(200, skillQClip.duration * 1000);
+                flareSkillQNextPlayAt = 0;
               }
             }
           },
@@ -672,7 +778,11 @@ function Chapter1GameFrame({
             args.player.getWorldPosition(playerPosition);
             flareAnchor.getWorldPosition(flarePosition);
             let flareMovingThisFrame = false;
-            if (flareTalkedRef.current && !flareReachedFollowTarget) {
+            if (
+              flareTalkedRef.current &&
+              !flareReachedFollowTarget &&
+              !woodObjectiveCompleted
+            ) {
               flareToTargetDirection.set(
                 flareFollowTarget.x - flareAnchor.position.x,
                 0,
@@ -717,7 +827,9 @@ function Chapter1GameFrame({
                 );
                   const resolvedMoveDirection = resolveFlareMoveDirection(
                     flareToTargetDirection,
-                    moveStep
+                    moveStep,
+                    args.now,
+                    args.delta
                   );
                   if (resolvedMoveDirection) {
                     flareAnchor.position.x += resolvedMoveDirection.x * moveStep;
@@ -739,6 +851,32 @@ function Chapter1GameFrame({
                 }
               }
               flareAnchor.getWorldPosition(flarePosition);
+            }
+
+            if (woodObjectiveCompleted) {
+              flareToPlayerDirection.set(
+                playerPosition.x - flarePosition.x,
+                0,
+                playerPosition.z - flarePosition.z
+              );
+              if (flareToPlayerDirection.lengthSq() > 0.000001) {
+                rotateFlareToward(
+                  Math.atan2(flareToPlayerDirection.x, flareToPlayerDirection.z),
+                  args.delta
+                );
+              }
+              if (
+                flareSkillQAction &&
+                (flareSkillQNextPlayAt <= 0 || args.now >= flareSkillQNextPlayAt)
+              ) {
+                flareSkillQAction.reset();
+                flareSkillQAction.fadeIn(0.14);
+                flareSkillQAction.play();
+                flareSkillQNextPlayAt =
+                  args.now +
+                  flareSkillQDurationMs +
+                  CHAPTER1_FLARE_SKILLQ_REPEAT_GAP_MS;
+              }
             }
 
             if (flareReachedFollowTarget && !flareReachStateEmitted) {
@@ -795,6 +933,19 @@ function Chapter1GameFrame({
                 }
               }
             }
+
+            if (
+              !woodObjectiveCompleted &&
+              woodCollectedCount >= CHAPTER1_WOOD_NODE_COUNT
+            ) {
+              woodObjectiveCompleted = true;
+            }
+            if (woodObjectiveCompleted && !woodObjectiveStateEmitted) {
+              woodObjectiveStateEmitted = true;
+              emitSceneState({
+                chapter1WoodObjectiveCompleted: true,
+              });
+            }
           };
         }
 
@@ -803,6 +954,10 @@ function Chapter1GameFrame({
           if (flareWalkAction) {
             flareWalkAction.stop();
             flareWalkAction = null;
+          }
+          if (flareSkillQAction) {
+            flareSkillQAction.stop();
+            flareSkillQAction = null;
           }
           if (flareAnimationMixer) {
             flareAnimationMixer.stopAllAction();
@@ -906,6 +1061,19 @@ function Chapter1GameFrame({
             changed = true;
           }
         }
+        if (hasOwn("chapter1WoodObjectiveCompleted")) {
+          const nextWoodObjectiveCompleted = Boolean(
+            typedState.chapter1WoodObjectiveCompleted
+          );
+          if (
+            Boolean(previous.chapter1WoodObjectiveCompleted) !==
+            nextWoodObjectiveCompleted
+          ) {
+            nextUiState.chapter1WoodObjectiveCompleted =
+              nextWoodObjectiveCompleted;
+            changed = true;
+          }
+        }
         return changed ? nextUiState : previous;
       });
     },
@@ -986,6 +1154,36 @@ function Chapter1GameFrame({
       window.removeEventListener("keydown", handleTalkKeyDown);
     };
   }, [phase, sceneReady, setChapterUiState]);
+
+  useEffect(() => {
+    if (phase !== "scene" || !sceneReady) return;
+    if (!chapterUiState.chapter1WoodObjectiveCompleted) return;
+    if (chapterCompleteTimerRef.current !== null) return;
+
+    chapterCompleteTimerRef.current = window.setTimeout(() => {
+      chapterCompleteTimerRef.current = null;
+      setPhase("complete");
+      setChapterUiState((previous) => ({
+        ...previous,
+        hideRightPanel: true,
+        chapter1ControlHintVisible: false,
+        chapter1PrimaryAttackUnlocked: false,
+        chapter1ChapterCompleted: true,
+      }));
+    }, CHAPTER1_POST_WOOD_EXIT_DELAY_MS);
+
+    return () => {
+      if (chapterCompleteTimerRef.current !== null) {
+        window.clearTimeout(chapterCompleteTimerRef.current);
+        chapterCompleteTimerRef.current = null;
+      }
+    };
+  }, [
+    chapterUiState.chapter1WoodObjectiveCompleted,
+    phase,
+    sceneReady,
+    setChapterUiState,
+  ]);
 
   const primaryAttackUnlocked = Boolean(
     chapterUiState.chapter1PrimaryAttackUnlocked
@@ -1186,6 +1384,50 @@ function Chapter1GameFrame({
             </div>
           ) : null}
         </div>
+      ) : phase === "complete" ? (
+        <div
+          className={originStyles.chapter1IntroBackdropAnimated}
+          style={{
+            width: "100%",
+            height: "100%",
+            borderRadius: "22px",
+            border: "1px solid rgba(56, 189, 248, 0.34)",
+            background:
+              "radial-gradient(circle at 50% 44%, rgba(14, 116, 144, 0.24), transparent 58%), linear-gradient(180deg, rgba(1, 9, 23, 0.96), rgba(2, 6, 23, 0.99))",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "12px",
+            color: "rgba(186, 230, 253, 0.94)",
+            textAlign: "center",
+            padding: "24px",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.76rem",
+              letterSpacing: "0.22em",
+              textTransform: "uppercase",
+              color: "rgba(148, 163, 184, 0.9)",
+              fontWeight: 700,
+            }}
+          >
+            Chapter Complete
+          </p>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "clamp(1.45rem, 2.5vw, 2.25rem)",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "rgba(224, 242, 254, 0.98)",
+            }}
+          >
+            Congratulations, you completed Chapter 1.
+          </h2>
+        </div>
       ) : (
         <div
           style={{
@@ -1279,8 +1521,13 @@ function Chapter1RightPanel({ chapterUiState }: StoryChapterComponentProps) {
     1,
     Math.floor(chapterUiState.chapter1WoodTotal ?? CHAPTER1_WOOD_NODE_COUNT)
   );
-  const activeStage: "find" | "follow" | "collect" = !flareTalked
+  const woodObjectiveCompleted = Boolean(
+    chapterUiState.chapter1WoodObjectiveCompleted
+  );
+  const activeStage: "find" | "follow" | "collect" | "complete" = !flareTalked
     ? "find"
+    : woodObjectiveCompleted
+      ? "complete"
     : flareReachedDestination
       ? "collect"
       : "follow";
@@ -1311,7 +1558,9 @@ function Chapter1RightPanel({ chapterUiState }: StoryChapterComponentProps) {
     : showCameraTutorial
       ? "Follow Flare."
       : "Find Flare and talk to him.";
-  const dialogueText = showWoodTutorial
+  const dialogueText = displayStage === "complete"
+    ? CHAPTER1_FLARE_OBJECTIVE_DONE_DIALOGUE
+    : showWoodTutorial
     ? CHAPTER1_FLARE_DESTINATION_DIALOGUE
     : CHAPTER1_FLARE_DIALOGUE;
 
@@ -1612,52 +1861,54 @@ function Chapter1RightPanel({ chapterUiState }: StoryChapterComponentProps) {
         </div>
       </div>
 
-      <div
-        style={{
-          borderRadius: "16px",
-          border: "1px solid rgba(248, 250, 252, 0.16)",
-          background:
-            "linear-gradient(180deg, rgba(10, 17, 32, 0.86), rgba(7, 12, 24, 0.94))",
-          padding: "14px 14px",
-          fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
-        }}
-      >
-        <p
+      {!woodObjectiveCompleted ? (
+        <div
           style={{
-            margin: 0,
-            fontSize: "0.74rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.18em",
-            color: "rgba(253, 224, 71, 0.95)",
-            fontWeight: 800,
+            borderRadius: "16px",
+            border: "1px solid rgba(248, 250, 252, 0.16)",
+            background:
+              "linear-gradient(180deg, rgba(10, 17, 32, 0.86), rgba(7, 12, 24, 0.94))",
+            padding: "14px 14px",
+            fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
           }}
         >
-          Task
-        </p>
-        <p
-          style={{
-            margin: "8px 0 0",
-            fontSize: "0.92rem",
-            lineHeight: 1.55,
-            color: "rgba(248, 250, 252, 0.94)",
-            fontWeight: 700,
-          }}
-        >
-          {taskText}
-        </p>
-        {flareNearby && displayStage === "find" ? (
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.74rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.18em",
+              color: "rgba(253, 224, 71, 0.95)",
+              fontWeight: 800,
+            }}
+          >
+            Task
+          </p>
           <p
             style={{
               margin: "8px 0 0",
-              fontSize: "0.84rem",
-              color: "rgba(125, 211, 252, 0.95)",
+              fontSize: "0.92rem",
+              lineHeight: 1.55,
+              color: "rgba(248, 250, 252, 0.94)",
               fontWeight: 700,
             }}
           >
-            Flare is nearby. Press F to talk.
+            {taskText}
           </p>
-        ) : null}
-      </div>
+          {flareNearby && displayStage === "find" ? (
+            <p
+              style={{
+                margin: "8px 0 0",
+                fontSize: "0.84rem",
+                color: "rgba(125, 211, 252, 0.95)",
+                fontWeight: 700,
+              }}
+            >
+              Flare is nearby. Press F to talk.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {flareTalked ? (
         <div
@@ -1714,6 +1965,8 @@ const chapter1: StoryChapterDefinition = {
     chapter1PrimaryAttackUnlocked: false,
     chapter1WoodCollected: 0,
     chapter1WoodTotal: CHAPTER1_WOOD_NODE_COUNT,
+    chapter1WoodObjectiveCompleted: false,
+    chapter1ChapterCompleted: false,
   },
 };
 
