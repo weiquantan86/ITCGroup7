@@ -1,9 +1,11 @@
 import SceneLauncher from "@/app/asset/scenes/general/SceneLauncher";
 import { createSceneResourceTracker } from "@/app/asset/scenes/general/resourceTracker";
 import type {
+  PlayerAttackTarget,
   PlayerUiState,
   PlayerWorldTickArgs,
 } from "@/app/asset/entity/character/general/player";
+import { Monster } from "@/app/asset/entity/monster/general";
 import type {
   SceneDefinition,
   SceneSetupContext,
@@ -57,16 +59,33 @@ const CHAPTER1_FLARE_SPAWN_X = 7;
 const CHAPTER1_FLARE_SPAWN_Z = -6;
 const CHAPTER1_FLARE_TALK_RANGE = 4.8;
 const CHAPTER1_FLARE_GROUND_CLEARANCE = 0.015;
-const CHAPTER1_FLARE_FOLLOW_TARGET_X = 24;
-const CHAPTER1_FLARE_FOLLOW_TARGET_Z = -20;
+const CHAPTER1_FLARE_FOLLOW_TARGET_X = 34;
+const CHAPTER1_FLARE_FOLLOW_TARGET_Z = -34;
 const CHAPTER1_FLARE_FOLLOW_SPEED = 1.85;
 const CHAPTER1_FLARE_FOLLOW_LEASH_DISTANCE = 5;
 const CHAPTER1_FLARE_TURN_SPEED = Math.PI * 3.6;
+const CHAPTER1_FLARE_FOLLOW_ARRIVAL_DISTANCE = 0.35;
+const CHAPTER1_FLARE_BLOCKED_TARGET_ARRIVAL_DISTANCE = 1.4;
+const CHAPTER1_FLARE_AVOIDANCE_CLEARANCE = 0.55;
+const CHAPTER1_FLARE_AVOIDANCE_SEGMENT_LENGTH = 0.22;
+const CHAPTER1_FLARE_AVOIDANCE_SAMPLE_ANGLES_DEG = [
+  0, 16, -16, 32, -32, 48, -48, 64, -64, 84, -84, 112, -112, 144, -144,
+] as const;
+const CHAPTER1_WOOD_NODE_COUNT = 5;
+const CHAPTER1_WOOD_PICKUP_DISTANCE = 1.3;
+const CHAPTER1_RIGHT_PANEL_FADE_MS = 280;
+const CHAPTER1_RIGHT_PANEL_FADE_FLOOR_OPACITY = 0.18;
 const CHAPTER1_FLARE_DIALOGUE =
   'Flare: "Why so slow? The campfire festival is about to begin. You are new here, so I still need to teach you a few things. Follow me."';
+const CHAPTER1_FLARE_DESTINATION_DIALOGUE =
+  'Flare: "Keeping up? The campfire party needs more wood. You, go collect some."';
 
 type Chapter1SceneUiState = {
   chapter1FlareNearby?: boolean;
+  chapter1FlareReachedDestination?: boolean;
+  chapter1PrimaryAttackUnlocked?: boolean;
+  chapter1WoodCollected?: number;
+  chapter1WoodTotal?: number;
 };
 
 function Chapter1GameFrame({
@@ -129,6 +148,10 @@ function Chapter1GameFrame({
       chapter1ControlHintVisible: false,
       chapter1FlareNearby: false,
       chapter1FlareTalked: false,
+      chapter1FlareReachedDestination: false,
+      chapter1PrimaryAttackUnlocked: false,
+      chapter1WoodCollected: 0,
+      chapter1WoodTotal: CHAPTER1_WOOD_NODE_COUNT,
     }));
   }, [clearTimers, setChapterUiState]);
 
@@ -149,6 +172,10 @@ function Chapter1GameFrame({
             chapter1ControlHintVisible: false,
             chapter1FlareNearby: false,
             chapter1FlareTalked: false,
+            chapter1FlareReachedDestination: false,
+            chapter1PrimaryAttackUnlocked: false,
+            chapter1WoodCollected: 0,
+            chapter1WoodTotal: CHAPTER1_WOOD_NODE_COUNT,
           }));
         }, CHAPTER1_INTRO_TRANSITION_MS);
         return currentIndex;
@@ -170,6 +197,10 @@ function Chapter1GameFrame({
       ): SceneSetupResult => {
         const baseResult = createForestScene(scene);
         const world = baseResult.world;
+        const attackTargets = world?.attackTargets ?? [];
+        if (world && !world.attackTargets) {
+          world.attackTargets = attackTargets;
+        }
         const flareGroundY = world?.groundY ?? -1.4;
         const flareSpawn = new THREE.Vector3(
           CHAPTER1_FLARE_SPAWN_X,
@@ -218,20 +249,344 @@ function Chapter1GameFrame({
         flareAnchor.add(flareFallback);
         trackMesh(flareFallback);
 
+        type ChapterWoodNode = {
+          id: string;
+          root: THREE.Group;
+          markerMesh: THREE.Mesh;
+          beamMesh: THREE.Mesh;
+          markerMaterial: THREE.MeshStandardMaterial;
+          beamMaterial: THREE.MeshStandardMaterial;
+          ringMaterial: THREE.MeshStandardMaterial;
+          collectible: boolean;
+          collected: boolean;
+          pulseOffset: number;
+          pickupScale: number;
+          pickupSpinSpeed: number;
+          monster: Monster;
+          attackTarget: PlayerAttackTarget;
+        };
+
         const playerPosition = new THREE.Vector3();
         const flarePosition = new THREE.Vector3();
         const flareAnchorWorldPosition = new THREE.Vector3();
         const flareToPlayerDirection = new THREE.Vector3();
         const flareToTargetDirection = new THREE.Vector3();
+        const woodPosition = new THREE.Vector3();
+        const woodOffsets = [
+          new THREE.Vector2(6.2, 3.8),
+          new THREE.Vector2(-6.3, 2.4),
+          new THREE.Vector2(5.4, -5.6),
+          new THREE.Vector2(-5.8, -4.4),
+          new THREE.Vector2(0.9, 7.1),
+        ] as const;
+        const woodNodes: ChapterWoodNode[] = [];
+        let woodCollectedCount = 0;
         let isDisposed = false;
         let flareNearby = false;
         let flareBreathTime = 0;
         let flareModelLoaded = false;
         let flareReachedFollowTarget = false;
+        let flareReachStateEmitted = false;
+        let woodNodesSpawned = false;
         let flareAnimationMixer: THREE.AnimationMixer | null = null;
         let flareWalkAction: THREE.AnimationAction | null = null;
         let flareWalkPlaying = false;
         let flareAnimationRoot: THREE.Object3D | null = null;
+
+        const emitSceneState = (nextState: Chapter1SceneUiState) => {
+          context?.onStateChange?.(nextState);
+        };
+
+        const emitFlareNearby = (isNearby: boolean, force = false) => {
+          if (!force && flareNearby === isNearby) return;
+          flareNearby = isNearby;
+          emitSceneState({ chapter1FlareNearby: isNearby });
+        };
+
+        const emitWoodCollected = () => {
+          emitSceneState({
+            chapter1WoodCollected: woodCollectedCount,
+            chapter1WoodTotal: CHAPTER1_WOOD_NODE_COUNT,
+          });
+        };
+
+        const flareAvoidanceCandidateDirection = new THREE.Vector3();
+        const flareAvoidanceUpAxis = new THREE.Vector3(0, 1, 0);
+
+        const isFlarePositionWalkable = (x: number, z: number) => {
+          const isBlocked = world?.isBlocked;
+          if (!isBlocked) return true;
+          const clearance = CHAPTER1_FLARE_AVOIDANCE_CLEARANCE;
+          const diagonalOffset = clearance * 0.7;
+          if (isBlocked(x, z)) return false;
+          if (isBlocked(x + clearance, z)) return false;
+          if (isBlocked(x - clearance, z)) return false;
+          if (isBlocked(x, z + clearance)) return false;
+          if (isBlocked(x, z - clearance)) return false;
+          if (isBlocked(x + diagonalOffset, z + diagonalOffset)) return false;
+          if (isBlocked(x + diagonalOffset, z - diagonalOffset)) return false;
+          if (isBlocked(x - diagonalOffset, z + diagonalOffset)) return false;
+          if (isBlocked(x - diagonalOffset, z - diagonalOffset)) return false;
+          return true;
+        };
+
+        const isFlarePathWalkable = (
+          startX: number,
+          startZ: number,
+          direction: THREE.Vector3,
+          distance: number
+        ) => {
+          if (distance <= 0.000001) return true;
+          const sampleCount = Math.max(
+            1,
+            Math.ceil(distance / CHAPTER1_FLARE_AVOIDANCE_SEGMENT_LENGTH)
+          );
+          for (let sampleIndex = 1; sampleIndex <= sampleCount; sampleIndex += 1) {
+            const progress = sampleIndex / sampleCount;
+            const sampleX = startX + direction.x * distance * progress;
+            const sampleZ = startZ + direction.z * distance * progress;
+            if (!isFlarePositionWalkable(sampleX, sampleZ)) {
+              return false;
+            }
+          }
+          return true;
+        };
+
+        const resolveFlareMoveDirection = (
+          desiredDirection: THREE.Vector3,
+          distance: number
+        ) => {
+          if (distance <= 0.000001) return null;
+          if (desiredDirection.lengthSq() < 0.000001) return null;
+          const startX = flareAnchor.position.x;
+          const startZ = flareAnchor.position.z;
+          flareAvoidanceCandidateDirection
+            .copy(desiredDirection)
+            .setY(0)
+            .normalize();
+
+          for (
+            let angleIndex = 0;
+            angleIndex < CHAPTER1_FLARE_AVOIDANCE_SAMPLE_ANGLES_DEG.length;
+            angleIndex += 1
+          ) {
+            const angleRad =
+              CHAPTER1_FLARE_AVOIDANCE_SAMPLE_ANGLES_DEG[angleIndex] *
+              THREE.MathUtils.DEG2RAD;
+            const candidateDirection = flareAvoidanceCandidateDirection
+              .clone()
+              .applyAxisAngle(flareAvoidanceUpAxis, angleRad)
+              .normalize();
+            const dotToDesired = candidateDirection.dot(flareToTargetDirection);
+            if (dotToDesired < -0.15) continue;
+            if (
+              !isFlarePathWalkable(
+                startX,
+                startZ,
+                candidateDirection,
+                distance
+              )
+            ) {
+              continue;
+            }
+            return candidateDirection;
+          }
+          return null;
+        };
+
+        emitSceneState({
+          chapter1FlareNearby: false,
+          chapter1FlareReachedDestination: false,
+          chapter1PrimaryAttackUnlocked: false,
+          chapter1WoodCollected: 0,
+          chapter1WoodTotal: CHAPTER1_WOOD_NODE_COUNT,
+        });
+
+        const resolveValidWoodPosition = (
+          desiredX: number,
+          desiredZ: number
+        ) => {
+          const bounds = world?.bounds;
+          const clampToBounds = (value: number, isX: boolean) => {
+            if (!bounds) return value;
+            return THREE.MathUtils.clamp(
+              value,
+              (isX ? bounds.minX : bounds.minZ) + 1.2,
+              (isX ? bounds.maxX : bounds.maxZ) - 1.2
+            );
+          };
+
+          const isAvailable = (x: number, z: number) =>
+            !(world?.isBlocked?.(x, z) ?? false);
+
+          const baseX = clampToBounds(desiredX, true);
+          const baseZ = clampToBounds(desiredZ, false);
+          if (isAvailable(baseX, baseZ)) {
+            return new THREE.Vector3(baseX, flareGroundY + 0.06, baseZ);
+          }
+
+          for (let radius = 1.2; radius <= 8; radius += 0.8) {
+            for (let step = 0; step < 12; step += 1) {
+              const angle = (Math.PI * 2 * step) / 12;
+              const candidateX = clampToBounds(baseX + Math.cos(angle) * radius, true);
+              const candidateZ = clampToBounds(baseZ + Math.sin(angle) * radius, false);
+              if (!isAvailable(candidateX, candidateZ)) continue;
+              return new THREE.Vector3(
+                candidateX,
+                flareGroundY + 0.06,
+                candidateZ
+              );
+            }
+          }
+
+          return new THREE.Vector3(baseX, flareGroundY + 0.06, baseZ);
+        };
+
+        const spawnWoodNodes = () => {
+          if (woodNodesSpawned) return;
+          woodNodesSpawned = true;
+          woodCollectedCount = 0;
+          emitWoodCollected();
+
+          for (
+            let nodeIndex = 0;
+            nodeIndex < CHAPTER1_WOOD_NODE_COUNT;
+            nodeIndex += 1
+          ) {
+            const offset = woodOffsets[nodeIndex % woodOffsets.length];
+            const spawnPos = resolveValidWoodPosition(
+              flareFollowTarget.x + offset.x,
+              flareFollowTarget.z + offset.y
+            );
+            const nodeRoot = new THREE.Group();
+            nodeRoot.name = `chapter1WoodNode_${nodeIndex + 1}`;
+            nodeRoot.position.copy(spawnPos);
+            nodeRoot.rotation.y = (nodeIndex * Math.PI) / 5;
+
+            const logMesh = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.24, 0.3, 2.3, 14),
+              new THREE.MeshStandardMaterial({
+                color: 0x8f5527,
+                roughness: 0.88,
+                metalness: 0.06,
+                emissive: 0x251204,
+                emissiveIntensity: 0.22,
+              })
+            );
+            logMesh.rotation.z = Math.PI / 2;
+            logMesh.position.y = 0.24;
+            logMesh.castShadow = true;
+            logMesh.receiveShadow = true;
+            nodeRoot.add(logMesh);
+            trackMesh(logMesh);
+
+            const ringMaterial = new THREE.MeshStandardMaterial({
+              color: 0x9f1239,
+              roughness: 0.35,
+              metalness: 0.22,
+              emissive: 0x7f1d1d,
+              emissiveIntensity: 0.72,
+            });
+            const ringMesh = new THREE.Mesh(
+              new THREE.TorusGeometry(0.5, 0.07, 12, 28),
+              ringMaterial
+            );
+            ringMesh.position.y = 1.05;
+            ringMesh.rotation.x = Math.PI / 2;
+            ringMesh.castShadow = false;
+            ringMesh.receiveShadow = false;
+            nodeRoot.add(ringMesh);
+            trackMesh(ringMesh);
+
+            const markerMaterial = new THREE.MeshStandardMaterial({
+              color: 0xf43f5e,
+              roughness: 0.2,
+              metalness: 0.1,
+              emissive: 0x9f1239,
+              emissiveIntensity: 1.25,
+            });
+            const markerMesh = new THREE.Mesh(
+              new THREE.OctahedronGeometry(0.18, 0),
+              markerMaterial
+            );
+            markerMesh.position.y = 1.12;
+            markerMesh.castShadow = false;
+            markerMesh.receiveShadow = false;
+            nodeRoot.add(markerMesh);
+            trackMesh(markerMesh);
+
+            const beamMaterial = new THREE.MeshStandardMaterial({
+              color: 0xf43f5e,
+              roughness: 0.15,
+              metalness: 0.05,
+              emissive: 0xbe123c,
+              emissiveIntensity: 0.95,
+              transparent: true,
+              opacity: 0.52,
+            });
+            const beamMesh = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.09, 0.15, 1.5, 10),
+              beamMaterial
+            );
+            beamMesh.position.y = 1.28;
+            beamMesh.castShadow = false;
+            beamMesh.receiveShadow = false;
+            nodeRoot.add(beamMesh);
+            trackMesh(beamMesh);
+
+            scene.add(nodeRoot);
+            const woodMonster = new Monster({
+              model: nodeRoot,
+              profile: {
+                id: `chapter1_wood_node_${nodeIndex + 1}`,
+                label: "Wood Node",
+                stats: {
+                  health: 1,
+                },
+              },
+            });
+
+            const nodeState: ChapterWoodNode = {
+              id: `chapter1_wood_node_${nodeIndex + 1}`,
+              root: nodeRoot,
+              markerMesh,
+              beamMesh,
+              markerMaterial,
+              beamMaterial,
+              ringMaterial,
+              collectible: false,
+              collected: false,
+              pulseOffset: nodeIndex * 0.8,
+              pickupScale: 0.48,
+              pickupSpinSpeed: 2.7 + nodeIndex * 0.18,
+              monster: woodMonster,
+              attackTarget: {
+                id: `chapter1_wood_node_${nodeIndex + 1}`,
+                object: nodeRoot,
+                isActive: () => !nodeState.collectible && !nodeState.collected,
+                onHit: (hit) => {
+                  if (nodeState.collected || nodeState.collectible) return;
+                  const appliedDamage = nodeState.monster.takeDamage(hit.damage);
+                  if (appliedDamage <= 0) return;
+                  nodeState.collectible = true;
+                  nodeState.ringMaterial.color.setHex(0x84cc16);
+                  nodeState.ringMaterial.emissive.setHex(0x14532d);
+                  nodeState.ringMaterial.emissiveIntensity = 0.92;
+                  nodeState.markerMaterial.color.setHex(0xbef264);
+                  nodeState.markerMaterial.emissive.setHex(0x65a30d);
+                  nodeState.markerMaterial.emissiveIntensity = 1.48;
+                  nodeState.beamMaterial.color.setHex(0xbef264);
+                  nodeState.beamMaterial.emissive.setHex(0x84cc16);
+                  nodeState.beamMaterial.emissiveIntensity = 1.16;
+                  nodeState.beamMaterial.opacity = 0.7;
+                  nodeState.root.scale.setScalar(nodeState.pickupScale);
+                },
+              },
+            };
+            woodNodes.push(nodeState);
+            attackTargets.push(nodeState.attackTarget);
+          }
+        };
 
         const rotateFlareToward = (targetYaw: number, delta: number) => {
           const currentYaw = flareAnchor.rotation.y;
@@ -240,20 +595,15 @@ function Chapter1GameFrame({
               targetYaw - currentYaw + Math.PI,
               Math.PI * 2
             ) - Math.PI;
-          const maxStep = Math.max(0, CHAPTER1_FLARE_TURN_SPEED * Math.max(0, delta));
+          const maxStep = Math.max(
+            0,
+            CHAPTER1_FLARE_TURN_SPEED * Math.max(0, delta)
+          );
           if (Math.abs(yawDelta) <= maxStep) {
             flareAnchor.rotation.y = targetYaw;
             return;
           }
           flareAnchor.rotation.y = currentYaw + Math.sign(yawDelta) * maxStep;
-        };
-
-        const emitFlareNearby = (isNearby: boolean, force = false) => {
-          if (!force && flareNearby === isNearby) return;
-          flareNearby = isNearby;
-          context?.onStateChange?.({
-            chapter1FlareNearby: isNearby,
-          });
         };
 
         emitFlareNearby(false, true);
@@ -323,46 +673,81 @@ function Chapter1GameFrame({
             flareAnchor.getWorldPosition(flarePosition);
             let flareMovingThisFrame = false;
             if (flareTalkedRef.current && !flareReachedFollowTarget) {
-              flareToPlayerDirection
-                .set(
+              flareToTargetDirection.set(
+                flareFollowTarget.x - flareAnchor.position.x,
+                0,
+                flareFollowTarget.z - flareAnchor.position.z
+              );
+              const immediateTargetDistance = flareToTargetDirection.length();
+              const followTargetBlocked = Boolean(
+                world?.isBlocked?.(flareFollowTarget.x, flareFollowTarget.z)
+              );
+              if (
+                immediateTargetDistance <= CHAPTER1_FLARE_FOLLOW_ARRIVAL_DISTANCE ||
+                (followTargetBlocked &&
+                  immediateTargetDistance <=
+                    CHAPTER1_FLARE_BLOCKED_TARGET_ARRIVAL_DISTANCE)
+              ) {
+                flareReachedFollowTarget = true;
+              }
+
+              if (flareReachedFollowTarget) {
+                flareAnchor.getWorldPosition(flarePosition);
+              } else {
+                flareToTargetDirection.divideScalar(
+                  Math.max(0.000001, immediateTargetDistance)
+                );
+                flareToPlayerDirection.set(
                   playerPosition.x - flarePosition.x,
                   0,
                   playerPosition.z - flarePosition.z
                 );
-              const playerDistanceSq = flareToPlayerDirection.lengthSq();
-              if (playerDistanceSq > flareLeashDistanceSq) {
-                if (playerDistanceSq > 0.000001) {
-                  rotateFlareToward(
-                    Math.atan2(flareToPlayerDirection.x, flareToPlayerDirection.z),
-                    args.delta
-                  );
-                }
-              } else {
-                flareToTargetDirection
-                  .set(
-                    flareFollowTarget.x - flareAnchor.position.x,
-                    0,
-                    flareFollowTarget.z - flareAnchor.position.z
-                  );
-                const targetDistance = flareToTargetDirection.length();
-                if (targetDistance <= 0.1) {
-                  flareReachedFollowTarget = true;
+                const playerDistanceSq = flareToPlayerDirection.lengthSq();
+                if (playerDistanceSq > flareLeashDistanceSq) {
+                  if (playerDistanceSq > 0.000001) {
+                    rotateFlareToward(
+                      Math.atan2(flareToPlayerDirection.x, flareToPlayerDirection.z),
+                      args.delta
+                    );
+                  }
                 } else {
-                  flareToTargetDirection.divideScalar(Math.max(0.000001, targetDistance));
-                  const moveStep = Math.min(
-                    targetDistance,
-                    CHAPTER1_FLARE_FOLLOW_SPEED * Math.max(0, args.delta)
+                const moveStep = Math.min(
+                  immediateTargetDistance,
+                  CHAPTER1_FLARE_FOLLOW_SPEED * Math.max(0, args.delta)
+                );
+                  const resolvedMoveDirection = resolveFlareMoveDirection(
+                    flareToTargetDirection,
+                    moveStep
                   );
-                  flareAnchor.position.x += flareToTargetDirection.x * moveStep;
-                  flareAnchor.position.z += flareToTargetDirection.z * moveStep;
-                  flareMovingThisFrame = moveStep > 0.00001;
-                  rotateFlareToward(
-                    Math.atan2(flareToTargetDirection.x, flareToTargetDirection.z),
-                    args.delta
-                  );
+                  if (resolvedMoveDirection) {
+                    flareAnchor.position.x += resolvedMoveDirection.x * moveStep;
+                    flareAnchor.position.z += resolvedMoveDirection.z * moveStep;
+                    flareMovingThisFrame = moveStep > 0.00001;
+                    rotateFlareToward(
+                      Math.atan2(
+                        resolvedMoveDirection.x,
+                        resolvedMoveDirection.z
+                      ),
+                      args.delta
+                    );
+                  } else {
+                    rotateFlareToward(
+                      Math.atan2(flareToTargetDirection.x, flareToTargetDirection.z),
+                      args.delta
+                    );
+                  }
                 }
               }
               flareAnchor.getWorldPosition(flarePosition);
+            }
+
+            if (flareReachedFollowTarget && !flareReachStateEmitted) {
+              flareReachStateEmitted = true;
+              emitSceneState({
+                chapter1FlareReachedDestination: true,
+                chapter1PrimaryAttackUnlocked: true,
+              });
+              spawnWoodNodes();
             }
 
             if (flareWalkAction) {
@@ -382,8 +767,35 @@ function Chapter1GameFrame({
             const dx = playerPosition.x - flarePosition.x;
             const dz = playerPosition.z - flarePosition.z;
             emitFlareNearby(dx * dx + dz * dz <= flareTalkRangeSq);
-          };
 
+            for (let nodeIndex = 0; nodeIndex < woodNodes.length; nodeIndex += 1) {
+              const node = woodNodes[nodeIndex];
+              if (node.collected) continue;
+              const nodePulse = Math.sin(flareBreathTime * 3.4 + node.pulseOffset);
+              node.markerMesh.rotation.y += args.delta * 1.8;
+              node.beamMesh.rotation.y += args.delta * 0.9;
+              node.ringMaterial.emissiveIntensity = node.collectible
+                ? 0.92 + Math.max(0, nodePulse) * 0.52
+                : 0.62 + Math.max(0, nodePulse) * 0.4;
+              if (node.collectible) {
+                node.root.position.y =
+                  flareGroundY + 0.06 + Math.sin(flareBreathTime * 2 + node.pulseOffset) * 0.08;
+                node.root.rotation.y += args.delta * node.pickupSpinSpeed;
+                node.root.getWorldPosition(woodPosition);
+                const woodDx = playerPosition.x - woodPosition.x;
+                const woodDz = playerPosition.z - woodPosition.z;
+                if (
+                  woodDx * woodDx + woodDz * woodDz <=
+                  CHAPTER1_WOOD_PICKUP_DISTANCE * CHAPTER1_WOOD_PICKUP_DISTANCE
+                ) {
+                  node.collected = true;
+                  node.root.visible = false;
+                  woodCollectedCount += 1;
+                  emitWoodCollected();
+                }
+              }
+            }
+          };
         }
 
         const dispose = () => {
@@ -398,6 +810,16 @@ function Chapter1GameFrame({
               flareAnimationMixer.uncacheRoot(flareAnimationRoot);
             }
           }
+          for (let nodeIndex = 0; nodeIndex < woodNodes.length; nodeIndex += 1) {
+            const node = woodNodes[nodeIndex];
+            node.monster.dispose();
+            const targetIndex = attackTargets.indexOf(node.attackTarget);
+            if (targetIndex >= 0) {
+              attackTargets.splice(targetIndex, 1);
+            }
+            scene.remove(node.root);
+          }
+          woodNodes.length = 0;
           flareAnimationMixer = null;
           flareAnimationRoot = null;
           context?.onStateChange?.({});
@@ -424,15 +846,67 @@ function Chapter1GameFrame({
   const handleSceneStateChange = useCallback(
     (nextState: SceneUiState) => {
       const typedState = nextState as Chapter1SceneUiState;
-      const isFlareNearby = Boolean(typedState.chapter1FlareNearby);
+      const hasOwn = (key: keyof Chapter1SceneUiState) =>
+        Object.prototype.hasOwnProperty.call(typedState, key);
       setChapterUiState((previous) => {
-        if (Boolean(previous.chapter1FlareNearby) === isFlareNearby) {
-          return previous;
+        let changed = false;
+        const nextUiState = { ...previous };
+        if (hasOwn("chapter1FlareNearby")) {
+          const nextNearby = Boolean(typedState.chapter1FlareNearby);
+          if (Boolean(previous.chapter1FlareNearby) !== nextNearby) {
+            nextUiState.chapter1FlareNearby = nextNearby;
+            changed = true;
+          }
         }
-        return {
-          ...previous,
-          chapter1FlareNearby: isFlareNearby,
-        };
+        if (hasOwn("chapter1FlareReachedDestination")) {
+          const reachedDestination = Boolean(
+            typedState.chapter1FlareReachedDestination
+          );
+          if (
+            Boolean(previous.chapter1FlareReachedDestination) !==
+            reachedDestination
+          ) {
+            nextUiState.chapter1FlareReachedDestination = reachedDestination;
+            changed = true;
+          }
+        }
+        if (hasOwn("chapter1PrimaryAttackUnlocked")) {
+          const nextPrimaryAttackUnlocked = Boolean(
+            typedState.chapter1PrimaryAttackUnlocked
+          );
+          if (
+            Boolean(previous.chapter1PrimaryAttackUnlocked) !==
+            nextPrimaryAttackUnlocked
+          ) {
+            nextUiState.chapter1PrimaryAttackUnlocked =
+              nextPrimaryAttackUnlocked;
+            changed = true;
+          }
+        }
+        if (hasOwn("chapter1WoodCollected")) {
+          const nextWoodCollected = Number.isFinite(
+            typedState.chapter1WoodCollected
+          )
+            ? Math.max(0, Math.floor(typedState.chapter1WoodCollected ?? 0))
+            : 0;
+          if ((previous.chapter1WoodCollected ?? 0) !== nextWoodCollected) {
+            nextUiState.chapter1WoodCollected = nextWoodCollected;
+            changed = true;
+          }
+        }
+        if (hasOwn("chapter1WoodTotal")) {
+          const nextWoodTotal = Number.isFinite(typedState.chapter1WoodTotal)
+            ? Math.max(0, Math.floor(typedState.chapter1WoodTotal ?? 0))
+            : CHAPTER1_WOOD_NODE_COUNT;
+          if (
+            (previous.chapter1WoodTotal ?? CHAPTER1_WOOD_NODE_COUNT) !==
+            nextWoodTotal
+          ) {
+            nextUiState.chapter1WoodTotal = nextWoodTotal;
+            changed = true;
+          }
+        }
+        return changed ? nextUiState : previous;
       });
     },
     [setChapterUiState]
@@ -512,6 +986,10 @@ function Chapter1GameFrame({
       window.removeEventListener("keydown", handleTalkKeyDown);
     };
   }, [phase, sceneReady, setChapterUiState]);
+
+  const primaryAttackUnlocked = Boolean(
+    chapterUiState.chapter1PrimaryAttackUnlocked
+  );
 
   return (
     <div
@@ -630,7 +1108,7 @@ function Chapter1GameFrame({
             sceneLoader={loadForestScene}
             gameMode="originChapter1"
             characterPath={CHAPTER1_ADAM_PATH}
-            allowPrimaryAttack={false}
+            allowPrimaryAttack={primaryAttackUnlocked}
             allowSkills={false}
             allowJump={false}
             onPlayerStateChange={handlePlayerStateChange}
@@ -784,22 +1262,70 @@ function Chapter1GameFrame({
 }
 
 function Chapter1RightPanel({ chapterUiState }: StoryChapterComponentProps) {
-  if (chapterUiState.hideRightPanel) {
-    return null;
-  }
-
-  if (!chapterUiState.chapter1ControlHintVisible) {
-    return null;
-  }
+  const isPanelVisible =
+    !chapterUiState.hideRightPanel &&
+    Boolean(chapterUiState.chapter1ControlHintVisible);
 
   const flareTalked = Boolean(chapterUiState.chapter1FlareTalked);
   const flareNearby = Boolean(chapterUiState.chapter1FlareNearby);
+  const flareReachedDestination = Boolean(
+    chapterUiState.chapter1FlareReachedDestination
+  );
+  const woodCollected = Math.max(
+    0,
+    Math.floor(chapterUiState.chapter1WoodCollected ?? 0)
+  );
+  const woodTotal = Math.max(
+    1,
+    Math.floor(chapterUiState.chapter1WoodTotal ?? CHAPTER1_WOOD_NODE_COUNT)
+  );
+  const activeStage: "find" | "follow" | "collect" = !flareTalked
+    ? "find"
+    : flareReachedDestination
+      ? "collect"
+      : "follow";
+  const [displayStage, setDisplayStage] = useState(activeStage);
+  const [contentOpacity, setContentOpacity] = useState(1);
+
+  useEffect(() => {
+    if (activeStage === displayStage) return;
+    setContentOpacity(CHAPTER1_RIGHT_PANEL_FADE_FLOOR_OPACITY);
+    const stageSwapDelay = Math.max(
+      80,
+      Math.round(CHAPTER1_RIGHT_PANEL_FADE_MS * 0.55)
+    );
+    const transitionTimer = window.setTimeout(() => {
+      setDisplayStage(activeStage);
+      setContentOpacity(1);
+    }, stageSwapDelay);
+    return () => {
+      window.clearTimeout(transitionTimer);
+    };
+  }, [activeStage, displayStage]);
+
+  const showMovementTutorial = displayStage === "find";
+  const showCameraTutorial = displayStage === "follow";
+  const showWoodTutorial = displayStage === "collect";
+  const taskText = showWoodTutorial
+    ? `Collect wood ${Math.min(woodCollected, woodTotal)}/${woodTotal}.`
+    : showCameraTutorial
+      ? "Follow Flare."
+      : "Find Flare and talk to him.";
+  const dialogueText = showWoodTutorial
+    ? CHAPTER1_FLARE_DESTINATION_DIALOGUE
+    : CHAPTER1_FLARE_DIALOGUE;
+
+  if (!isPanelVisible) {
+    return null;
+  }
 
   return (
     <div
       style={{
         display: "grid",
         gap: "12px",
+        opacity: contentOpacity,
+        transition: `opacity ${CHAPTER1_RIGHT_PANEL_FADE_MS}ms ease`,
       }}
     >
       <div
@@ -837,207 +1363,250 @@ function Chapter1RightPanel({ chapterUiState }: StoryChapterComponentProps) {
         >
           {flareTalked ? (
             <>
-              <div
-                style={{
-                  borderRadius: "11px",
-                  border: "1px solid rgba(56, 189, 248, 0.4)",
-                  background: "rgba(2, 16, 36, 0.82)",
-                  padding: "9px 10px",
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr",
-                  alignItems: "center",
-                  gap: "10px",
-                }}
-              >
-                <span
+              {showCameraTutorial ? (
+                <>
+                  <div
+                    style={{
+                      borderRadius: "11px",
+                      border: "1px solid rgba(56, 189, 248, 0.4)",
+                      background: "rgba(2, 16, 36, 0.82)",
+                      padding: "9px 10px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: "6px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.96rem",
+                        fontWeight: 900,
+                        letterSpacing: "0.14em",
+                        color: "rgba(125, 211, 252, 1)",
+                      }}
+                    >
+                      Z / X
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.92rem",
+                        fontWeight: 700,
+                        color: "rgba(226, 232, 240, 0.96)",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Orbit third-person camera around Adam. Hold Z for left orbit,
+                      hold X for right orbit.
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      borderRadius: "11px",
+                      border: "1px solid rgba(56, 189, 248, 0.4)",
+                      background: "rgba(2, 16, 36, 0.82)",
+                      padding: "9px 10px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: "6px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.96rem",
+                        fontWeight: 900,
+                        letterSpacing: "0.14em",
+                        color: "rgba(125, 211, 252, 1)",
+                      }}
+                    >
+                      C / V
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.92rem",
+                        fontWeight: 700,
+                        color: "rgba(226, 232, 240, 0.96)",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Adjust camera pitch offset. Hold C to raise the viewpoint,
+                      hold V to lower it. Pitch is clamped to keep visibility stable.
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      borderRadius: "11px",
+                      border: "1px solid rgba(56, 189, 248, 0.4)",
+                      background: "rgba(2, 16, 36, 0.82)",
+                      padding: "9px 10px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: "6px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.96rem",
+                        fontWeight: 900,
+                        letterSpacing: "0.14em",
+                        color: "rgba(125, 211, 252, 1)",
+                      }}
+                    >
+                      B / N
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.92rem",
+                        fontWeight: 700,
+                        color: "rgba(226, 232, 240, 0.96)",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Change camera orbit distance. Hold B to zoom out farther, hold
+                      N to zoom in closer.
+                    </span>
+                  </div>
+                </>
+              ) : showWoodTutorial ? (
+                <div
                   style={{
-                    fontSize: "0.96rem",
-                    fontWeight: 900,
-                    letterSpacing: "0.14em",
-                    color: "rgba(125, 211, 252, 1)",
+                    borderRadius: "11px",
+                    border: "1px solid rgba(74, 222, 128, 0.55)",
+                    background: "rgba(7, 28, 18, 0.84)",
+                    padding: "10px 11px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: "6px",
                   }}
                 >
-                  Z / X
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.92rem",
-                    fontWeight: 700,
-                    color: "rgba(226, 232, 240, 0.96)",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  Orbit third-person camera around Adam. Hold Z for left orbit,
-                  hold X for right orbit.
-                </span>
-              </div>
-              <div
-                style={{
-                  borderRadius: "11px",
-                  border: "1px solid rgba(56, 189, 248, 0.4)",
-                  background: "rgba(2, 16, 36, 0.82)",
-                  padding: "9px 10px",
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr",
-                  alignItems: "center",
-                  gap: "10px",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "0.96rem",
-                    fontWeight: 900,
-                    letterSpacing: "0.14em",
-                    color: "rgba(125, 211, 252, 1)",
-                  }}
-                >
-                  C / V
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.92rem",
-                    fontWeight: 700,
-                    color: "rgba(226, 232, 240, 0.96)",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  Adjust camera pitch offset. Hold C to raise the viewpoint,
-                  hold V to lower it. Pitch is clamped to keep visibility stable.
-                </span>
-              </div>
-              <div
-                style={{
-                  borderRadius: "11px",
-                  border: "1px solid rgba(56, 189, 248, 0.4)",
-                  background: "rgba(2, 16, 36, 0.82)",
-                  padding: "9px 10px",
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr",
-                  alignItems: "center",
-                  gap: "10px",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "0.96rem",
-                    fontWeight: 900,
-                    letterSpacing: "0.14em",
-                    color: "rgba(125, 211, 252, 1)",
-                  }}
-                >
-                  B / N
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.92rem",
-                    fontWeight: 700,
-                    color: "rgba(226, 232, 240, 0.96)",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  Change camera orbit distance. Hold B to zoom out farther, hold
-                  N to zoom in closer.
-                </span>
-              </div>
+                  <span
+                    style={{
+                      fontSize: "0.84rem",
+                      fontWeight: 900,
+                      letterSpacing: "0.12em",
+                      color: "rgba(190, 242, 100, 0.98)",
+                    }}
+                  >
+                    LEFT MOUSE
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "0.94rem",
+                      fontWeight: 700,
+                      color: "rgba(240, 253, 244, 0.96)",
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    Hold to charge a throw orb, then release to launch. Hit each
+                    wood node first, then walk into the dropped wood to collect it.
+                  </span>
+                </div>
+              ) : null}
             </>
           ) : (
             <>
-              <div
-                style={{
-                  borderRadius: "11px",
-                  border: "1px solid rgba(56, 189, 248, 0.4)",
-                  background: "rgba(2, 16, 36, 0.82)",
-                  padding: "9px 10px",
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr",
-                  alignItems: "center",
-                  gap: "10px",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "1rem",
-                    fontWeight: 900,
-                    letterSpacing: "0.15em",
-                    color: "rgba(125, 211, 252, 1)",
-                  }}
-                >
-                  WASD
-                </span>
-                <span
-                  style={{
-                    fontSize: "1rem",
-                    fontWeight: 700,
-                    color: "rgba(226, 232, 240, 0.96)",
-                  }}
-                >
-                  Move
-                </span>
-              </div>
-              <div
-                style={{
-                  borderRadius: "11px",
-                  border: "1px solid rgba(56, 189, 248, 0.4)",
-                  background: "rgba(2, 16, 36, 0.82)",
-                  padding: "9px 10px",
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr",
-                  alignItems: "center",
-                  gap: "10px",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "1rem",
-                    fontWeight: 900,
-                    letterSpacing: "0.12em",
-                    color: "rgba(125, 211, 252, 1)",
-                  }}
-                >
-                  SHIFT
-                </span>
-                <span
-                  style={{
-                    fontSize: "1rem",
-                    fontWeight: 700,
-                    color: "rgba(226, 232, 240, 0.96)",
-                  }}
-                >
-                  Sprint
-                </span>
-              </div>
-              <div
-                style={{
-                  borderRadius: "11px",
-                  border: "1px solid rgba(56, 189, 248, 0.4)",
-                  background: "rgba(2, 16, 36, 0.82)",
-                  padding: "9px 10px",
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr",
-                  alignItems: "center",
-                  gap: "10px",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "0.92rem",
-                    fontWeight: 900,
-                    letterSpacing: "0.1em",
-                    color: "rgba(125, 211, 252, 1)",
-                  }}
-                >
-                  WASD + F
-                </span>
-                <span
-                  style={{
-                    fontSize: "1rem",
-                    fontWeight: 700,
-                    color: "rgba(226, 232, 240, 0.96)",
-                  }}
-                >
-                  Quick Dash
-                </span>
-              </div>
+              {showMovementTutorial ? (
+                <>
+                  <div
+                    style={{
+                      borderRadius: "11px",
+                      border: "1px solid rgba(56, 189, 248, 0.4)",
+                      background: "rgba(2, 16, 36, 0.82)",
+                      padding: "9px 10px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: "6px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "1rem",
+                        fontWeight: 900,
+                        letterSpacing: "0.15em",
+                        color: "rgba(125, 211, 252, 1)",
+                      }}
+                    >
+                      WASD
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "1rem",
+                        fontWeight: 700,
+                        color: "rgba(226, 232, 240, 0.96)",
+                      }}
+                    >
+                      Move
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      borderRadius: "11px",
+                      border: "1px solid rgba(56, 189, 248, 0.4)",
+                      background: "rgba(2, 16, 36, 0.82)",
+                      padding: "9px 10px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: "6px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "1rem",
+                        fontWeight: 900,
+                        letterSpacing: "0.12em",
+                        color: "rgba(125, 211, 252, 1)",
+                      }}
+                    >
+                      SHIFT
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "1rem",
+                        fontWeight: 700,
+                        color: "rgba(226, 232, 240, 0.96)",
+                      }}
+                    >
+                      Sprint
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      borderRadius: "11px",
+                      border: "1px solid rgba(56, 189, 248, 0.4)",
+                      background: "rgba(2, 16, 36, 0.82)",
+                      padding: "9px 10px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: "6px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.92rem",
+                        fontWeight: 900,
+                        letterSpacing: "0.1em",
+                        color: "rgba(125, 211, 252, 1)",
+                      }}
+                    >
+                      WASD + F
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "1rem",
+                        fontWeight: 700,
+                        color: "rgba(226, 232, 240, 0.96)",
+                      }}
+                    >
+                      Quick Dash
+                    </span>
+                  </div>
+                </>
+              ) : null}
             </>
           )}
         </div>
@@ -1074,9 +1643,9 @@ function Chapter1RightPanel({ chapterUiState }: StoryChapterComponentProps) {
             fontWeight: 700,
           }}
         >
-          {flareTalked ? "Follow Flare." : "Find Flare and talk to him."}
+          {taskText}
         </p>
-        {flareNearby && !flareTalked ? (
+        {flareNearby && displayStage === "find" ? (
           <p
             style={{
               margin: "8px 0 0",
@@ -1121,7 +1690,7 @@ function Chapter1RightPanel({ chapterUiState }: StoryChapterComponentProps) {
               color: "rgba(254, 242, 242, 0.95)",
             }}
           >
-            {CHAPTER1_FLARE_DIALOGUE}
+            {dialogueText}
           </p>
         </div>
       ) : null}
@@ -1141,6 +1710,10 @@ const chapter1: StoryChapterDefinition = {
     chapter1ControlHintVisible: false,
     chapter1FlareNearby: false,
     chapter1FlareTalked: false,
+    chapter1FlareReachedDestination: false,
+    chapter1PrimaryAttackUnlocked: false,
+    chapter1WoodCollected: 0,
+    chapter1WoodTotal: CHAPTER1_WOOD_NODE_COUNT,
   },
 };
 

@@ -5,6 +5,10 @@ export type StoryChapterUiState = {
   chapter1ControlHintVisible?: boolean;
   chapter1FlareNearby?: boolean;
   chapter1FlareTalked?: boolean;
+  chapter1FlareReachedDestination?: boolean;
+  chapter1PrimaryAttackUnlocked?: boolean;
+  chapter1WoodCollected?: number;
+  chapter1WoodTotal?: number;
 };
 
 export type StoryChapterComponentProps = {

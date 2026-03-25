@@ -30,6 +30,21 @@ import type {
   SkillKey,
 } from "../types";
 
+type InputPermissionGate = boolean | (() => boolean);
+
+const resolveInputPermissionGate = (
+  gate: InputPermissionGate | undefined,
+  fallback = true
+) => {
+  if (typeof gate === "function") {
+    return Boolean(gate());
+  }
+  if (typeof gate === "boolean") {
+    return gate;
+  }
+  return fallback;
+};
+
 export const createPlayer = ({
   scene,
   mount,
@@ -50,9 +65,9 @@ export const createPlayer = ({
   characterPath?: string;
   world?: PlayerWorld;
   gameMode?: string;
-  allowPrimaryAttack?: boolean;
-  allowSkills?: boolean;
-  allowJump?: boolean;
+  allowPrimaryAttack?: InputPermissionGate;
+  allowSkills?: InputPermissionGate;
+  allowJump?: InputPermissionGate;
   hideLocalHead?: boolean;
   hideLocalBody?: boolean;
   showMiniMap?: boolean;
@@ -712,14 +727,14 @@ export const createPlayer = ({
     isMovementLocked: isRuntimeMovementLocked,
     isInputLocked: isWorldInputLocked,
     onJump: () => {
-      if (!allowJump) return;
+      if (!resolveInputPermissionGate(allowJump)) return;
       frameUpdater.jump(jumpVelocity);
     },
     onDash: () => {
       frameUpdater.requestDash();
     },
     onPrimaryDown: () => {
-      if (!allowPrimaryAttack) return;
+      if (!resolveInputPermissionGate(allowPrimaryAttack)) return;
       if (isRuntimeBasicAttackLocked()) return;
       if (characterRuntime?.handlePrimaryDown) {
         characterRuntime.handlePrimaryDown();
@@ -734,7 +749,7 @@ export const createPlayer = ({
       characterRuntime?.handlePrimaryCancel?.();
     },
     onSkill: (skillKey, now) => {
-      if (!allowSkills) return;
+      if (!resolveInputPermissionGate(allowSkills)) return;
       skillState.tryUseSkill(skillKey, now);
     },
   });

@@ -5,6 +5,11 @@ import * as THREE from "three";
 import { createPlayer, type PlayerUiState } from "../../entity/character/general/player";
 import type { SceneDefinition, SceneSetupResult, SceneUiState } from "./sceneTypes";
 
+type InputPermissionGate = boolean | (() => boolean);
+
+const resolveInputPermissionGate = (gate: InputPermissionGate) =>
+  typeof gate === "function" ? gate() : gate;
+
 export default function SceneLauncher({
   gameMode = "default",
   characterPath,
@@ -30,9 +35,9 @@ export default function SceneLauncher({
   characterPath?: string;
   decorations?: ReactNode;
   className?: string;
-  allowPrimaryAttack?: boolean;
-  allowSkills?: boolean;
-  allowJump?: boolean;
+  allowPrimaryAttack?: InputPermissionGate;
+  allowSkills?: InputPermissionGate;
+  allowJump?: InputPermissionGate;
   hideLocalHead?: boolean;
   hideLocalBody?: boolean;
   showMiniMap?: boolean;
@@ -47,6 +52,21 @@ export default function SceneLauncher({
   enableShadows?: boolean;
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const allowPrimaryAttackRef = useRef<InputPermissionGate>(allowPrimaryAttack);
+  const allowSkillsRef = useRef<InputPermissionGate>(allowSkills);
+  const allowJumpRef = useRef<InputPermissionGate>(allowJump);
+
+  useEffect(() => {
+    allowPrimaryAttackRef.current = allowPrimaryAttack;
+  }, [allowPrimaryAttack]);
+
+  useEffect(() => {
+    allowSkillsRef.current = allowSkills;
+  }, [allowSkills]);
+
+  useEffect(() => {
+    allowJumpRef.current = allowJump;
+  }, [allowJump]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -123,9 +143,11 @@ export default function SceneLauncher({
           characterPath,
           world: sceneSetup?.world,
           gameMode,
-          allowPrimaryAttack,
-          allowSkills,
-          allowJump,
+          allowPrimaryAttack: () =>
+            resolveInputPermissionGate(allowPrimaryAttackRef.current),
+          allowSkills: () =>
+            resolveInputPermissionGate(allowSkillsRef.current),
+          allowJump: () => resolveInputPermissionGate(allowJumpRef.current),
           hideLocalHead,
           hideLocalBody,
           showMiniMap,
@@ -179,9 +201,6 @@ export default function SceneLauncher({
   }, [
     characterPath,
     gameMode,
-    allowPrimaryAttack,
-    allowSkills,
-    allowJump,
     hideLocalHead,
     hideLocalBody,
     showMiniMap,
