@@ -838,8 +838,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const resolveBaseProjectileDamage = (speed: number) =>
     Math.max(8, Math.round(10 + speed * 0.6));
 
-  const resolveEmpoweredBasicAttackDamage = (speed: number) =>
-    resolveBaseProjectileDamage(speed) * 3;
+  const resolveEmpoweredBasicAttackDamage = (
+    normalizedCharge: number
+  ) =>
+    Math.round(
+      THREE.MathUtils.lerp(
+        100,
+        200,
+        THREE.MathUtils.clamp(normalizedCharge, 0, 1)
+      )
+    );
 
   const setSkillRStackCount = (count: number) => {
     skillRStackState.count = Math.max(0, Math.floor(count));
@@ -2068,8 +2076,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
       chargeConfig.maxLifetime,
       ratio
     );
-    const baseDamage = resolveBaseProjectileDamage(speed);
     if (skillE.active) {
+      const empoweredChargeRatio = THREE.MathUtils.clamp(
+        (elapsed - chargeConfig.minHoldMs) /
+          Math.max(1, chargeConfig.maxHoldMs - chargeConfig.minHoldMs),
+        0,
+        1
+      );
+      const empoweredDamage =
+        resolveEmpoweredBasicAttackDamage(empoweredChargeRatio);
       fireProjectile({
         projectileType: "abilityOrb",
         speed,
@@ -2078,13 +2093,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
         emissive: 0x22c55e,
         emissiveIntensity: 0.9,
         scale: 12.24,
-        damage: resolveEmpoweredBasicAttackDamage(speed),
+        damage: empoweredDamage,
         energyGainOnHit: 8,
         manaGainOnHit: 2,
         grantManaOnTargetHit: true,
         splitOnImpact: true,
         explosionRadius: 10.8,
-        explosionDamage: baseDamage,
+        explosionDamage: empoweredDamage,
       });
       deactivateSkillE(true);
     } else {

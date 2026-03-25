@@ -8,7 +8,7 @@ export const mochiSoldierProfile: MonsterProfile = {
     attack: 20,
     defense: 0,
     speed: 4.5,
-    aggroRange: 60,
+    aggroRange: 150,
     attackRange: 1.8,
   },
 };

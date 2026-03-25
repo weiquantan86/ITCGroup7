@@ -699,7 +699,7 @@ export default function SnackMixer({
         </div>
       ) : null}
 
-      <div className="relative z-10 flex items-center justify-start pl-10">
+      <div className="relative z-10 flex -translate-x-18 translate-y-8 items-center justify-start pl-4">
         <SnackSlot
           snack={SNACK_DEFINITIONS[0]}
           count={selected.energy_sugar}
@@ -732,7 +732,7 @@ export default function SnackMixer({
         </div>
       </div>
 
-      <div className="relative z-10 flex items-center justify-end pr-10">
+      <div className="relative z-10 flex translate-x-18 translate-y-8 items-center justify-end pr-4">
         <SnackSlot
           snack={SNACK_DEFINITIONS[1]}
           count={selected.dream_fruit_dust}
@@ -742,7 +742,7 @@ export default function SnackMixer({
         />
       </div>
 
-      <div className="relative z-10 flex -translate-y-8 items-center justify-start pl-10">
+      <div className="relative z-10 flex -translate-x-18 -translate-y-8 items-center justify-start pl-10">
         <div className="flex flex-col items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.03] px-7 py-5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500">
             Selected
@@ -808,7 +808,7 @@ export default function SnackMixer({
         ) : null}
       </div>
 
-      <div className="relative z-10 flex -translate-y-8 flex-col items-end justify-center gap-20 pr-10">
+      <div className="relative z-10 flex -translate-y-8 translate-x-8 flex-col items-end justify-center gap-20 pr-3">
         <button
           type="button"
           onClick={() => setSpecialEventsOpen(true)}
@@ -828,7 +828,7 @@ export default function SnackMixer({
         </button>
       </div>
 
-      <div className="relative z-20 flex items-start justify-start pl-10 -translate-y-0 pointer-events-auto">
+      <div className="relative z-20 flex -translate-x-18 -translate-y-12 items-start justify-start pl-4 pointer-events-auto">
         <SnackSlot
           snack={SNACK_DEFINITIONS[2]}
           count={selected.core_crunch_seed}
@@ -876,7 +876,7 @@ export default function SnackMixer({
         </div>
       </div>
 
-      <div className="relative z-20 flex items-start justify-end pr-10 -translate-y-0 pointer-events-auto">
+      <div className="relative z-20 flex translate-x-18 -translate-y-12 items-start justify-end pr-4 pointer-events-auto">
         <SnackSlot
           snack={SNACK_DEFINITIONS[3]}
           count={selected.star_gel_essence}

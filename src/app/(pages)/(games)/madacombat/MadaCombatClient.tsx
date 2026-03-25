@@ -744,7 +744,13 @@ export default function MadaCombatClient({
   );
 
   return (
-    <main className="relative min-h-screen w-full overflow-hidden bg-[#02070a] text-slate-100">
+    <main
+      className={`relative min-h-screen w-full bg-[#02070a] text-slate-100 ${
+        shouldRenderBattleSection
+          ? "overflow-hidden"
+          : "overflow-x-hidden overflow-y-auto"
+      }`}
+    >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(120,255,241,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(120,255,241,0.045)_1px,transparent_1px)] bg-[length:34px_34px]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(45,212,191,0.18),transparent_38%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_16%,rgba(16,185,129,0.16),transparent_34%)]" />
@@ -844,16 +850,16 @@ export default function MadaCombatClient({
           <>
             {shouldRenderBattleSection ? (
               <section
-                className={`relative mt-2 grid min-h-[calc(100dvh-150px)] w-full items-stretch gap-3 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
+                className={`relative mt-2 grid h-[calc(100dvh-150px)] min-h-[700px] w-full items-stretch gap-3 overflow-hidden transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
                   endTransitionPhase === "fadingScene"
                     ? "pointer-events-none opacity-0 blur-[8px] scale-[0.985]"
                     : "opacity-100 blur-0 scale-100"
                 }`}
                 style={{ transitionDuration: `${END_SCENE_FADE_OUT_MS}ms` }}
               >
-                <aside className="min-h-0">
+                <aside className="min-h-0 overflow-hidden">
                   {hasConfiguredDifficulty ? (
-                    <div className="flex h-full min-h-0 flex-col rounded-[24px] border border-cyan-200/20 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
+                    <div className="flex h-full min-h-0 flex-col overflow-y-auto rounded-[24px] border border-cyan-200/20 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
                       <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
                         Boss Modifiers
                       </h2>
@@ -959,7 +965,7 @@ export default function MadaCombatClient({
                   ) : null}
                 </div>
 
-                <aside className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
+                <aside className="flex min-h-0 flex-col overflow-y-auto rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
                   <div className="rounded-[22px] border border-cyan-300/14 bg-[linear-gradient(180deg,rgba(7,17,24,0.98)_0%,rgba(3,10,14,0.96)_100%)]">
                     <div className="p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
@@ -1042,9 +1048,9 @@ export default function MadaCombatClient({
                 </aside>
 
                 {unlockDifficultyOpen ? (
-              <div className="absolute inset-0 z-30 flex items-center justify-center rounded-[30px] border border-cyan-200/15 bg-[#04090de0] p-6 backdrop-blur-md md:p-8">
+              <div className="absolute inset-0 z-30 flex items-start justify-center overflow-y-auto rounded-[30px] border border-cyan-200/15 bg-[#04090de0] p-6 backdrop-blur-md md:p-8">
                 <div
-                  className="w-full max-w-[1120px] rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-6 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] md:p-8"
+                  className="my-2 w-full max-w-[1120px] max-h-[calc(100%-0.5rem)] overflow-y-auto rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-6 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] md:p-8"
                   style={difficultyShellStyle}
                 >
                   <p className="text-center text-sm font-semibold uppercase tracking-[0.24em] text-slate-200 md:text-base">

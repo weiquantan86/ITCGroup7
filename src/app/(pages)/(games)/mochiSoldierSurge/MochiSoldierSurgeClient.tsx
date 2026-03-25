@@ -763,14 +763,14 @@ export default function MochiSoldierSurgeClient({
           <>
             {shouldRenderBattleSection ? (
               <section
-                className={`mt-2 grid min-h-[calc(100dvh-150px)] w-full items-stretch gap-3 transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
+                className={`mt-2 grid h-[calc(100dvh-150px)] min-h-[700px] w-full items-stretch gap-3 overflow-hidden transition-[opacity,transform,filter] ease-out xl:grid-cols-[minmax(250px,15vw)_minmax(0,1fr)_minmax(250px,15vw)] ${
                   surgeState.gameEnded
                     ? "pointer-events-none opacity-0 blur-[8px] scale-[0.985]"
                     : "opacity-100 blur-0 scale-100"
                 }`}
                 style={{ transitionDuration: `${END_SCENE_FADE_OUT_MS}ms` }}
               >
-                <aside className="flex min-h-0 flex-col rounded-[24px] border border-cyan-200/20 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
+                <aside className="flex min-h-0 flex-col overflow-y-auto rounded-[24px] border border-cyan-200/20 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
                   <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
                     Challenge Modifiers
                   </h2>
@@ -857,7 +857,7 @@ export default function MochiSoldierSurgeClient({
                   />
                 </div>
 
-                <aside className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
+                <aside className="flex min-h-0 flex-col overflow-y-auto rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_25px_70px_-40px_rgba(2,6,23,0.9)] backdrop-blur-md">
                   <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Counter
                   </h2>

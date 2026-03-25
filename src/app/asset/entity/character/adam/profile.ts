@@ -20,7 +20,7 @@ export const profile: CharacterProfile = {
       id: "basic",
       label: "Basic",
       description:
-        "Hold to charge (0.26s-2.4s), then release an orb. Charge scales speed (8-20), lifetime (0.9s-1.8s), and damage. If E is active, this shot is consumed into an empowered split orb with larger direct and explosion damage.",
+        "Hold to charge (0.26s-2.4s), then release an orb. Charge scales speed (8-20), lifetime (0.9s-1.8s), and damage. If E is active, this shot is consumed into an empowered split orb whose direct hit damage and explosion damage each scale from 100 to 200 by charge.",
     },
     skills: {
       q: {
@@ -35,7 +35,7 @@ export const profile: CharacterProfile = {
         id: "e",
         label: "E",
         description:
-          "Arm the next charged Basic for up to 5s. The empowered shot consumes E and starts E cooldown.",
+          "Arm the next charged Basic for up to 5s. The empowered shot consumes E and starts E cooldown; its direct hit damage and explosion damage each scale from 100 to 200 by charge.",
         cost: 20,
         cooldownMs: 5000,
       },

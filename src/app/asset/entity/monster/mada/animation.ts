@@ -1677,6 +1677,7 @@ export const createMadaAnimationController = ({
     stopRage,
     triggerShoot,
     isShootPlaying: () => shootEnabled,
+    stopShoot,
     canPlaySkill1: () =>
       Boolean(skill1BeforeAction && skill1DuringAction && skill1AfterAction),
     triggerSkill1Before,

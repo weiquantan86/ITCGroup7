@@ -318,6 +318,23 @@ export const createMadaUnifiedRuntime = (
     crawlHasTraceSample = false;
   };
 
+  const cancelAllSkillCasts = (now: number) => {
+    resetCrawlState(now);
+    skill1Runtime.reset();
+    skill2Runtime.reset();
+    skill3Runtime.reset();
+    skill4Runtime.reset();
+    skill5Runtime.reset();
+    shootRuntime.reset();
+    madaAnimation.stopShoot();
+    madaAnimation.stopSkill1();
+    madaAnimation.stopSkill2();
+    madaAnimation.stopSkill3();
+    madaAnimation.stopSkill4();
+    madaAnimation.stopSkill5();
+    madaAnimation.applyHeadLook(null);
+  };
+
   const reset = (now: number) => {
     void now;
     health = resolvedMaxHealth;
@@ -482,6 +499,28 @@ export const createMadaUnifiedRuntime = (
       let skill5Active = skill5Runtime.isCasting();
       let shootActive = shootRuntime.isCasting();
       let ragePlaying = enableRage && rageManager.isRagePlaying();
+
+      if (
+        enableRage &&
+        rageManager.blocksSkillStart() &&
+        (crawlActive ||
+          skill1Active ||
+          skill2Active ||
+          skill3Active ||
+          skill4Active ||
+          skill5Active ||
+          shootActive)
+      ) {
+        cancelAllSkillCasts(combatNow);
+        crawlElapsedMs = -1;
+        crawlActive = false;
+        skill1Active = false;
+        skill2Active = false;
+        skill3Active = false;
+        skill4Active = false;
+        skill5Active = false;
+        shootActive = false;
+      }
 
       // Auto-end crawl when its clip finishes
       if (!crawlActive && crawlStartedAt >= 0) {
