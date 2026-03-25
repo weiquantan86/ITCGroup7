@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { characterProfiles } from "../../asset/entity/character/general/player/registry";
 
 type Message = {
   id: number;
@@ -16,24 +15,6 @@ type ChatbotWindowProps = {
 const WINDOW_W = 320;
 const WINDOW_H = 480;
 
-const GAME_MODES = [
-  {
-    name: "Mochi General Battle",
-    description: "A high-intensity boss battle where you face off against the Mochi General. Master your dodging and timing to defeat this powerful foe!",
-    keywords: ["general", "battle", "boss"],
-  },
-  {
-    name: "Mochi Soldier Surge",
-    description: "A survival mode where you must hold out against waves of Mochi Soldiers. How many can you defeat before they overwhelm you?",
-    keywords: ["soldier", "surge", "wave", "survival"],
-  },
-  {
-    name: "Mada Combat",
-    description: "Test your skills in a specialized combat arena against Mada. A great place to practice your character's combos and abilities.",
-    keywords: ["mada", "combat", "arena", "practice"],
-  },
-];
-
 export default function ChatbotWindow({ onClose }: ChatbotWindowProps) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [mounted, setMounted] = useState(false);
@@ -41,6 +22,7 @@ export default function ChatbotWindow({ onClose }: ChatbotWindowProps) {
     { id: 0, role: "bot", text: "Hi! I'm your game assistant. Ask me about game modes or character skills!" },
   ]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -78,64 +60,44 @@ export default function ChatbotWindow({ onClose }: ChatbotWindowProps) {
     dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
   };
 
-  const getBotResponse = (userInput: string): string => {
-    const lowerInput = userInput.toLowerCase();
-
-    // Check for character skills
-    const character = characterProfiles.find(p => 
-      lowerInput.includes(p.label.toLowerCase()) || lowerInput.includes(p.id.toLowerCase())
-    );
-
-    if (character) {
-      const skills = character.kit?.skills;
-      const basic = character.kit?.basicAttack;
-      let response = `**${character.label}'s Skills:**\n\n`;
-      if (basic) response += `• **Basic Attack**: ${basic.description}\n`;
-      if (skills) {
-        response += `• **Q (${skills.q.label})**: ${skills.q.description}\n`;
-        response += `• **E (${skills.e.label})**: ${skills.e.description}\n`;
-        response += `• **R (${skills.r.label})**: ${skills.r.description}`;
-      }
-      return response;
-    }
-
-    // Check for game modes
-    const mode = GAME_MODES.find(m => 
-      lowerInput.includes(m.name.toLowerCase()) || m.keywords.some(k => lowerInput.includes(k))
-    );
-
-    if (mode) {
-      return `**${mode.name}**\n\n${mode.description}`;
-    }
-
-    // Default responses
-    if (lowerInput.includes("game mode") || lowerInput.includes("modes")) {
-      const modesList = GAME_MODES.map(m => `• **${m.name}**`).join("\n");
-      return `We have the following game modes:\n${modesList}\n\nWhich one would you like to know more about?`;
-    }
-
-    if (lowerInput.includes("character") || lowerInput.includes("skill") || lowerInput.includes("list")) {
-      const names = characterProfiles.map(p => `• **${p.label}**`).join("\n");
-      return `I can tell you about the skills of these characters:\n${names}\n\nJust type a name to see their kit!`;
-    }
-
-    return "I'm not sure I understand. You can ask me about game modes (like 'Soldier Surge') or character skills (like 'Flare skills').";
-  };
-
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || isLoading) return;
     setInput("");
+    
     const userMsg: Message = { id: Date.now(), role: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setIsLoading(true);
 
-    setTimeout(() => {
-      const botResponse = getBotResponse(text);
+    try {
+      const response = await fetch("/api/chatbot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: newMessages.map((m) => ({
+            role: m.role === "bot" ? "assistant" : "user",
+            content: m.text,
+          })),
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch");
+
+      const data = await response.json();
       setMessages((prev) => [
         ...prev,
-        { id: Date.now() + 1, role: "bot", text: botResponse },
+        { id: Date.now() + 1, role: "bot", text: data.text },
       ]);
-    }, 600);
+    } catch (error) {
+      console.error(error);
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now() + 1, role: "bot", text: "Sorry, I'm having trouble connecting to my brain right now. Make sure the OpenAI API key is set up in .env.local!" },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!mounted) return null;
@@ -201,15 +163,17 @@ export default function ChatbotWindow({ onClose }: ChatbotWindowProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
-          placeholder="Type a message..."
-          className="min-w-0 flex-1 rounded-full bg-white/10 px-4 py-2 text-sm text-white placeholder-slate-500 outline-none focus:ring-1 focus:ring-pink-500"
+          placeholder={isLoading ? "Thinking..." : "Type a message..."}
+          disabled={isLoading}
+          className="min-w-0 flex-1 rounded-full bg-white/10 px-4 py-2 text-sm text-white placeholder-slate-500 outline-none focus:ring-1 focus:ring-pink-500 disabled:opacity-50"
         />
         <button
           type="button"
           onClick={handleSend}
-          className="rounded-full bg-pink-600 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-95"
+          disabled={isLoading || !input.trim()}
+          className="rounded-full bg-pink-600 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Send
+          {isLoading ? "..." : "Send"}
         </button>
       </div>
     </div>
