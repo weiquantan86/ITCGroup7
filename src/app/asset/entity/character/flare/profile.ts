@@ -47,7 +47,7 @@ export const profile: CharacterProfile = {
         cost: 0,
         cooldownMs: 15000,
         description:
-          "Toggle Burning Mode. While active: drains EN at 3.5/s, regenerates HP at 3/s, and enables enhanced E/R behavior. Press Q again to cancel.",
+          "Enter Burning Overdrive immediately (auto-enables enhanced weapon state). While active: drains EN at 3.5/s, regenerates HP at 3/s, and upgrades combat behavior. Press Q again to cancel.",
       },
       e: {
         id: "e",
@@ -55,7 +55,7 @@ export const profile: CharacterProfile = {
         cost: 0,
         cooldownMs: 5000,
         description:
-          "Toggle Secondary Burn. While active it drains Mana at 2/s and can be canceled by pressing E again. During Burning Mode, E triggers instant ignite (no long prelude) and enters the enhanced burn state.",
+          "Outside Overdrive: cast to ignite Secondary Burn. During Overdrive: consume 40 Mana + 40 Energy to auto-cast the empowered heavy slash (enhanced basic attack) with a wide frontal blast.",
       },
       r: {
         id: "r",

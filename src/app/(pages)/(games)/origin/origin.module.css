@@ -247,3 +247,36 @@
     185% 185%;
   animation: chapter2AmberBackdropDrift 16s ease-in-out infinite;
 }
+
+@keyframes chapter3CrimsonBackdropDrift {
+  0% {
+    background-position:
+      50% 50%,
+      0% 0%;
+    filter: saturate(1);
+  }
+
+  50% {
+    background-position:
+      47% 53%,
+      100% 100%;
+    filter: saturate(1.08);
+  }
+
+  100% {
+    background-position:
+      52% 48%,
+      0% 0%;
+    filter: saturate(1);
+  }
+}
+
+.chapter3IntroBackdropAnimated {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(127, 29, 29, 0.42), rgba(3, 2, 2, 0.98) 58%),
+    linear-gradient(132deg, rgba(7, 3, 3, 0.98), rgba(24, 6, 6, 0.94), rgba(2, 1, 1, 0.99));
+  background-size:
+    145% 145%,
+    180% 180%;
+  animation: chapter3CrimsonBackdropDrift 14s ease-in-out infinite;
+}

@@ -109,7 +109,7 @@ const CHAPTER2_POST_FESTIVAL_DIALOGUE_SEQUENCE = [
 ] as const;
 const CHAPTER2_POST_FESTIVAL_DIALOGUE_COUNT =
   CHAPTER2_POST_FESTIVAL_DIALOGUE_SEQUENCE.length;
-const CHAPTER2_TASK_POST_FESTIVAL_DONE = "Task complete: You talked with everyone.";
+const CHAPTER2_TASK_POST_FESTIVAL_DONE = "Completed";
 const CHAPTER2_TUTORIAL_POST_FESTIVAL =
   "Approach the current target in order and press F to talk.";
 const CHAPTER2_TASK_BONFIRE =
@@ -137,7 +137,7 @@ const CHAPTER2_INTRO_TRANSITION_MS = 920;
 const CHAPTER2_SCENE_CURTAIN_FADE_MS = 920;
 const CHAPTER2_FESTIVAL_TRIGGER_DELAY_MS = 5000;
 const CHAPTER2_FESTIVAL_REVEAL_FADE_MS = 2200;
-const CHAPTER2_FESTIVAL_CINEMATIC_DURATION_MS = 10_000;
+const CHAPTER2_FESTIVAL_CINEMATIC_DURATION_MS = 7_000;
 const CHAPTER2_POST_FESTIVAL_TALK_RANGE = 3.1;
 const CHAPTER2_ADAM_TAKEOVER_FADE_OUT_MS = 900;
 const CHAPTER2_ADAM_TAKEOVER_FADE_IN_MS = 900;
@@ -164,6 +164,8 @@ const CHAPTER2_WOODPILE_COLLIDER_RADIUS = 1.8;
 const CHAPTER2_ADAM_COLLIDER_RADIUS = 0.9;
 const CHAPTER2_COLLIDER_PLAYER_RADIUS = 0.5;
 const CHAPTER2_ADAM_GROUND_CLEARANCE = 0.015;
+const CHAPTER2_ADAM_NPC_SCALE = 0.92;
+const CHAPTER2_ADAM_PLAYER_SCALE = 0.92;
 
 type Chapter2SceneUiState = {
   chapter2WoodApproachCompleted?: boolean;
@@ -1204,6 +1206,9 @@ function Chapter2GameFrame({
               }
               const npcModel = gltf.scene;
               anchor.add(npcModel);
+              if (i === 0) {
+                npcModel.scale.setScalar(CHAPTER2_ADAM_NPC_SCALE);
+              }
               const modelBaseQuaternion = npcModel.quaternion.clone();
               if (isHarperNpc) {
                 const harperWeaponNodes: THREE.Object3D[] = [];
@@ -1415,6 +1420,16 @@ function Chapter2GameFrame({
         world.onTick = (args: PlayerWorldTickArgs) => {
           baseWorldTick?.(args);
           updateWoodPileFlameFx(args.now);
+          const desiredPlayerScale = postFestivalModeRef.current
+            ? CHAPTER2_ADAM_PLAYER_SCALE
+            : 1;
+          if (
+            Math.abs(args.player.scale.x - desiredPlayerScale) > 0.0001 ||
+            Math.abs(args.player.scale.y - desiredPlayerScale) > 0.0001 ||
+            Math.abs(args.player.scale.z - desiredPlayerScale) > 0.0001
+          ) {
+            args.player.scale.setScalar(desiredPlayerScale);
+          }
           postFestivalCurrentPlayerRef.current = args.player;
           if (!taskCompletedLocked) {
             const dx = args.player.position.x - woodPileCenter.x;
@@ -1484,6 +1499,7 @@ function Chapter2GameFrame({
                   adamAnchor.visible = false;
                   playerObject.position.copy(adamAnchor.position);
                   playerObject.position.y = world.groundY;
+                  playerObject.scale.setScalar(CHAPTER2_ADAM_PLAYER_SCALE);
                   const yaw = Math.atan2(
                     woodPileCenter.x - playerObject.position.x,
                     woodPileCenter.z - playerObject.position.z

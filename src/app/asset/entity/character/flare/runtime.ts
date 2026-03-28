@@ -27,8 +27,36 @@ const primaryHoldActivationMs = 180;
 const primaryHoldTickIntervalMs = 1000;
 const primaryHoldStaminaCostPerSecond = 20;
 const skillQEnergyDrainPerSecond = 3.5;
-const skillEManaDrainPerSecond = 2;
 const skillQHealthRegenPerSecond = 3;
+const enhancedESkillEnergyCost = 40;
+const enhancedESkillManaCost = 40;
+const enhancedESkillWideDamage = 40;
+const enhancedESkillWideRange = 5.4;
+const enhancedESkillWideHalfAngleDeg = 58;
+const enhancedESkillWideHalfAngleRad = THREE.MathUtils.degToRad(
+  enhancedESkillWideHalfAngleDeg
+);
+const enhancedESkillWideStrikeDownwardProgress = 0.56;
+const enhancedESkillWideStrikeDropThreshold = 0.1;
+const enhancedESkillWideStrikeDownwardDeltaThreshold = -0.001;
+const enhancedESkillWideStrikeFallbackProgress = 0.9;
+const enhancedESkillWideRayCount = 7;
+const enhancedESkillWideRayHitRadius = 0.92;
+const enhancedESkillWideRayMaxHits = 2;
+const enhancedESkillGroundPointDelayMs = 2000;
+const enhancedESkillGroundExplosionDurationMs = 3000;
+const enhancedESkillGroundExplosionTickMs = 300;
+const enhancedESkillGroundExplosionDamagePerTick = 110;
+const enhancedESkillGroundExplosionRadius = 10;
+const enhancedESkillGroundChargeBallRadius = 0.75;
+const enhancedESkillGroundChargeBallLift = 0.74;
+const enhancedESkillGroundExplosionSphereLift = 0.74;
+const enhancedESkillGroundExplosionShakeAmplitude = 0.18;
+const enhancedESkillGroundExplosionShakeSpeed = 18;
+const enhancedESkillGroundExplosionMaxHitsPerTick = 64;
+const enhancedESkillGroundVisualUpdateIntervalMs = 24;
+const enhancedESkillGroundMarkerLift = 0.03;
+const enhancedESkillGroundMarkerForwardOffset = 0.7;
 const basicAttackHitManaGain = 4.5;
 const burnDamageEnergyGain = 5;
 const primaryHoldBaseDamagePerTick = 20;
@@ -147,11 +175,14 @@ const superBurnThirdAttackPoolTickMs = 1000;
 const superBurnThirdAttackPoolTickDamage = 35;
 const superBurnThirdAttackPoolRadius = 2.8;
 const superBurnThirdAttackPoolForwardOffset = 2.5;
-const superBurnThirdAttackPoolGroundLift = 0.03;
+const superBurnThirdAttackPoolGroundLift = 0.22;
 const superBurnThirdAttackPoolMaxHitsPerTick = 8;
 const superBurnThirdAttackPoolMaxActive = 3;
 const superBurnThirdAttackPoolFlameCount = 8;
 const superBurnThirdAttackPoolSparkCount = 10;
+const superBurnThirdAttackPoolFlameEnableDelayMs = 16;
+const superBurnThirdAttackPoolLightEnableDelayMs = 24;
+const superBurnThirdAttackPoolSparkEnableDelayMs = 36;
 const superBurnThirdAttackPoolVisualUpdateIntervalMsNear = 24;
 const superBurnThirdAttackPoolVisualUpdateIntervalMsFar = 66;
 const superBurnThirdAttackPoolHighDetailDistance = 11;
@@ -201,6 +232,8 @@ const flareWeaponSweepMaxDistance = 0.72;
 const flareFirstPersonVisibleBonePattern = /(hand|weapon|arm)/i;
 const flareMainCameraLayerMask = 1 << 0;
 const flareMiniBodyCameraLayerMask = 1 << 2;
+const enhancedESkillGroundVisibleLayerMask =
+  flareMainCameraLayerMask | flareMiniBodyCameraLayerMask;
 const flareFxMidDetailDistance = 18;
 const flareFxMidDetailDistanceSq = flareFxMidDetailDistance * flareFxMidDetailDistance;
 const flareFxLowDetailDistance = 30;
@@ -368,6 +401,24 @@ type SecondaryBurnSpark = {
   orbitSpeed: number;
   lift: number;
   scale: number;
+};
+
+type SuperBurnFlamePoolFlameInstance = {
+  phase: number;
+  orbitRadius: number;
+  orbitSpeed: number;
+  baseScale: THREE.Vector3;
+  tilt: number;
+  color: THREE.Color;
+};
+
+type SuperBurnFlamePoolSparkInstance = {
+  phase: number;
+  orbitRadius: number;
+  orbitSpeed: number;
+  lift: number;
+  scale: number;
+  color: THREE.Color;
 };
 
 type SecondaryBurnHoldTopParticle = {
@@ -566,9 +617,34 @@ type SuperBurnFlamePoolEntry = {
   ringMaterial: THREE.MeshBasicMaterial;
   glow: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   glowMaterial: THREE.MeshBasicMaterial;
-  flames: SecondaryBurnTongue[];
-  sparks: SecondaryBurnSpark[];
+  flameInstanced: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  flameMaterial: THREE.MeshBasicMaterial;
+  flameInstances: SuperBurnFlamePoolFlameInstance[];
+  sparkInstanced: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  sparkMaterial: THREE.MeshBasicMaterial;
+  sparkInstances: SuperBurnFlamePoolSparkInstance[];
   light: THREE.PointLight;
+  activateFlamesAt: number;
+  activateLightAt: number;
+  activateSparksAt: number;
+};
+
+type EnhancedESkillGroundZoneState = "marking" | "exploding";
+
+type EnhancedESkillGroundZone = {
+  root: THREE.Group;
+  chargeBall: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  chargeBallMaterial: THREE.MeshBasicMaterial;
+  explosionSphere: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  explosionSphereMaterial: THREE.MeshBasicMaterial;
+  light: THREE.PointLight;
+  center: THREE.Vector3;
+  createdAt: number;
+  explodeAt: number;
+  endsAt: number;
+  nextTickAt: number;
+  lastVisualUpdateAt: number;
+  state: EnhancedESkillGroundZoneState;
 };
 
 type SuperBurnSkillRFanFlame = {
@@ -1134,6 +1210,7 @@ const playActionBinding = (binding: ActionBinding | null) => {
 
 export const createRuntime: CharacterRuntimeFactory = ({
   avatar,
+  noCooldown,
   fireProjectile,
   performMeleeAttack,
   applyHealth,
@@ -1246,6 +1323,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const superBurnSkillRFanOrigin = new THREE.Vector3();
   const superBurnSkillRFanDirection = new THREE.Vector3();
   const superBurnSkillRFanFlowDirection = new THREE.Vector3();
+  const enhancedESkillWideOrigin = new THREE.Vector3();
+  const enhancedESkillWideDirection = new THREE.Vector3();
+  const enhancedESkillWideRayDirection = new THREE.Vector3();
+  const enhancedESkillGroundCenter = new THREE.Vector3();
+  const enhancedESkillGroundAvatarPosition = new THREE.Vector3();
+  const enhancedESkillGroundDamageDirection = new THREE.Vector3();
   const secondaryBurnSwingTrailDirection = new THREE.Vector3();
   const attackSweepDirection = new THREE.Vector3();
   const primaryHoldAttackDirection = new THREE.Vector3();
@@ -1254,6 +1337,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const reflectedProjectileDirection = new THREE.Vector3();
   const reflectedProjectileHitPoint = new THREE.Vector3();
   const primaryHoldTickHitTargetIds = new Set<string>();
+  const enhancedESkillWideHitTargetIds = new Set<string>();
   const mergedProjectileBlockers: THREE.Object3D[] = [];
 
   const secondaryBurnFlameGeometry = new THREE.ConeGeometry(0.12, 0.42, 12, 1, true);
@@ -1310,6 +1394,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     true
   );
   superBurnSkillRFanFlameGeometry.translate(0, 0.29, 0);
+  const enhancedESkillGroundSphereGeometry = new THREE.SphereGeometry(1, 22, 22);
   const burningModeHeadAlphaMap = createFlameAlphaMap();
   const secondaryBurnHaloGeometry = new THREE.TorusGeometry(0.1, 0.026, 10, 22);
   const secondaryBurnCoronaGeometry = new THREE.TorusGeometry(0.14, 0.015, 10, 28);
@@ -1318,6 +1403,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const secondaryBurnSmokeGeometry = new THREE.SphereGeometry(0.06, 8, 8);
   const secondaryBurnSparkGeometry = new THREE.OctahedronGeometry(0.028, 0);
   const primaryHoldReflectBlockerGeometry = new THREE.SphereGeometry(1, 16, 14);
+  const superBurnFlamePoolFlameWarmColor = new THREE.Color(0xff8a28);
+  const superBurnFlamePoolFlameHotColor = new THREE.Color(0xffc96a);
+  const superBurnFlamePoolSparkWarmColor = new THREE.Color(0xfff2bf);
+  const superBurnFlamePoolSparkHotColor = new THREE.Color(0xffa13d);
   const secondaryBurnOuterMaterial = new THREE.MeshBasicMaterial({
     color: 0xff6b1a,
     transparent: true,
@@ -2989,6 +3078,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const activeSuperBurnFlamePools: SuperBurnFlamePoolEntry[] = [];
   const inactiveSuperBurnFlamePools: SuperBurnFlamePoolEntry[] = [];
+  const activeEnhancedESkillGroundZones: EnhancedESkillGroundZone[] = [];
+  const inactiveEnhancedESkillGroundZones: EnhancedESkillGroundZone[] = [];
 
   const resetSuperBurnFlamePoolEntry = (entry: SuperBurnFlamePoolEntry) => {
     entry.root.visible = false;
@@ -3004,6 +3095,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.nextTickAt = 0;
     entry.phase = 0;
     entry.lastVisualUpdateAt = 0;
+    entry.activateFlamesAt = 0;
+    entry.activateLightAt = 0;
+    entry.activateSparksAt = 0;
 
     entry.core.position.set(0, 0.01, 0);
     entry.core.rotation.set(-Math.PI * 0.5, 0, 0);
@@ -3023,23 +3117,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.light.position.set(0, 0.32, 0);
     entry.light.intensity = 0;
     entry.light.distance = 0;
-
-    for (let i = 0; i < entry.flames.length; i += 1) {
-      const flame = entry.flames[i];
-      flame.mesh.visible = true;
-      flame.mesh.position.set(0, 0, 0);
-      flame.mesh.rotation.set(0, 0, 0);
-      flame.mesh.scale.copy(flame.baseScale);
-      flame.material.opacity = 0;
-    }
-    for (let i = 0; i < entry.sparks.length; i += 1) {
-      const spark = entry.sparks[i];
-      spark.mesh.visible = false;
-      spark.mesh.position.set(0, 0, 0);
-      spark.mesh.rotation.set(0, 0, 0);
-      spark.mesh.scale.setScalar(1);
-      spark.material.opacity = 0;
-    }
+    entry.flameMaterial.opacity = 0;
+    entry.sparkMaterial.opacity = 0;
+    entry.flameInstanced.visible = true;
+    entry.sparkInstanced.visible = true;
+    entry.flameInstanced.count = 0;
+    entry.sparkInstanced.count = 0;
+    entry.flameInstanced.instanceMatrix.needsUpdate = true;
+    entry.sparkInstanced.instanceMatrix.needsUpdate = true;
   };
 
   const createSuperBurnFlamePoolEntry = (): SuperBurnFlamePoolEntry => {
@@ -3089,23 +3174,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     light.position.set(0, 0.32, 0);
     root.add(light);
 
-    const flames: SecondaryBurnTongue[] = Array.from(
+    const flameInstances: SuperBurnFlamePoolFlameInstance[] = Array.from(
       { length: superBurnThirdAttackPoolFlameCount },
       (_, index) => {
-        const material = new THREE.MeshBasicMaterial({
-          color: index % 2 === 0 ? 0xff8a28 : 0xffc96a,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-          side: THREE.DoubleSide,
-        });
-        const mesh = new THREE.Mesh(secondaryBurnFlameGeometry, material);
-        mesh.frustumCulled = false;
-        root.add(mesh);
         return {
-          mesh,
-          material,
           phase:
             (index / Math.max(1, superBurnThirdAttackPoolFlameCount)) * Math.PI * 2,
           orbitRadius: 0.24 + (index % 4) * 0.12,
@@ -3116,27 +3188,42 @@ export const createRuntime: CharacterRuntimeFactory = ({
             0.62 + (index % 3) * 0.14
           ),
           tilt: 0.24 + (index % 4) * 0.08,
+          color:
+            index % 2 === 0
+              ? superBurnFlamePoolFlameWarmColor
+              : superBurnFlamePoolFlameHotColor,
         };
       }
     );
+    const flameMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffa13d,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      vertexColors: true,
+    });
+    const flameInstanced = new THREE.InstancedMesh(
+      secondaryBurnFlameGeometry,
+      flameMaterial,
+      superBurnThirdAttackPoolFlameCount
+    );
+    flameInstanced.frustumCulled = false;
+    flameInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    flameInstanced.count = 0;
+    for (let index = 0; index < flameInstances.length; index += 1) {
+      flameInstanced.setColorAt(index, flameInstances[index].color);
+    }
+    if (flameInstanced.instanceColor) {
+      flameInstanced.instanceColor.needsUpdate = true;
+    }
+    root.add(flameInstanced);
 
-    const sparks: SecondaryBurnSpark[] = Array.from(
+    const sparkInstances: SuperBurnFlamePoolSparkInstance[] = Array.from(
       { length: superBurnThirdAttackPoolSparkCount },
       (_, index) => {
-        const material = new THREE.MeshBasicMaterial({
-          color: index % 2 === 0 ? 0xfff2bf : 0xffa13d,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        });
-        const mesh = new THREE.Mesh(superBurnFlamePoolSparkGeometry, material);
-        mesh.frustumCulled = false;
-        mesh.visible = false;
-        root.add(mesh);
         return {
-          mesh,
-          material,
           phase:
             (index / Math.max(1, superBurnThirdAttackPoolSparkCount)) *
             Math.PI *
@@ -3145,9 +3232,36 @@ export const createRuntime: CharacterRuntimeFactory = ({
           orbitSpeed: 1.8 + index * 0.11,
           lift: 0.22 + (index % 6) * 0.06,
           scale: 0.38 + (index % 5) * 0.08,
+          color:
+            index % 2 === 0
+              ? superBurnFlamePoolSparkWarmColor
+              : superBurnFlamePoolSparkHotColor,
         };
       }
     );
+    const sparkMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffd9a3,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexColors: true,
+    });
+    const sparkInstanced = new THREE.InstancedMesh(
+      superBurnFlamePoolSparkGeometry,
+      sparkMaterial,
+      superBurnThirdAttackPoolSparkCount
+    );
+    sparkInstanced.frustumCulled = false;
+    sparkInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    sparkInstanced.count = 0;
+    for (let index = 0; index < sparkInstances.length; index += 1) {
+      sparkInstanced.setColorAt(index, sparkInstances[index].color);
+    }
+    if (sparkInstanced.instanceColor) {
+      sparkInstanced.instanceColor.needsUpdate = true;
+    }
+    root.add(sparkInstanced);
 
     const entry: SuperBurnFlamePoolEntry = {
       root,
@@ -3165,9 +3279,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
       ringMaterial,
       glow,
       glowMaterial,
-      flames,
-      sparks,
+      flameInstanced,
+      flameMaterial,
+      flameInstances,
+      sparkInstanced,
+      sparkMaterial,
+      sparkInstances,
       light,
+      activateFlamesAt: 0,
+      activateLightAt: 0,
+      activateSparksAt: 0,
     };
     applyFxRenderDefaults(root);
     resetSuperBurnFlamePoolEntry(entry);
@@ -3181,6 +3302,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
       return idle;
     }
     return createSuperBurnFlamePoolEntry();
+  };
+
+  const prewarmSuperBurnFlamePoolEntries = (
+    count = superBurnThirdAttackPoolMaxActive
+  ) => {
+    const targetCount = Math.max(0, Math.floor(count));
+    while (
+      activeSuperBurnFlamePools.length + inactiveSuperBurnFlamePools.length <
+      targetCount
+    ) {
+      inactiveSuperBurnFlamePools.push(createSuperBurnFlamePoolEntry());
+    }
   };
 
   const releaseSuperBurnFlamePoolEntry = (index: number) => {
@@ -3202,12 +3335,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.coreMaterial.dispose();
     entry.ringMaterial.dispose();
     entry.glowMaterial.dispose();
-    for (let i = 0; i < entry.flames.length; i += 1) {
-      entry.flames[i].material.dispose();
-    }
-    for (let i = 0; i < entry.sparks.length; i += 1) {
-      entry.sparks[i].material.dispose();
-    }
+    entry.flameMaterial.dispose();
+    entry.sparkMaterial.dispose();
   };
 
   const disposeAllSuperBurnFlamePools = () => {
@@ -3247,6 +3376,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.nextTickAt = now + superBurnThirdAttackPoolTickMs;
     entry.phase = Math.random() * Math.PI * 2;
     entry.lastVisualUpdateAt = -Infinity;
+    entry.activateFlamesAt = now + superBurnThirdAttackPoolFlameEnableDelayMs;
+    entry.activateLightAt = now + superBurnThirdAttackPoolLightEnableDelayMs;
+    entry.activateSparksAt = now + superBurnThirdAttackPoolSparkEnableDelayMs;
 
     activeSuperBurnFlamePools.push(entry);
   };
@@ -3306,6 +3438,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
       if (fade <= 0.001) {
         entry.light.intensity = 0;
         entry.light.distance = 0;
+        entry.flameMaterial.opacity = 0;
+        entry.sparkMaterial.opacity = 0;
+        entry.flameInstanced.count = 0;
+        entry.sparkInstanced.count = 0;
+        entry.flameInstanced.instanceMatrix.needsUpdate = true;
+        entry.sparkInstanced.instanceMatrix.needsUpdate = true;
         continue;
       }
 
@@ -3342,57 +3480,326 @@ export const createRuntime: CharacterRuntimeFactory = ({
       entry.coreMaterial.opacity = Math.min(1, 0.52 * fade);
       entry.ringMaterial.opacity = Math.min(1, 0.62 * fade);
       entry.glowMaterial.opacity = Math.min(1, 0.34 * fade);
-      entry.light.intensity = fade * (1.4 + pulse * 0.9);
-      entry.light.distance = entry.radius * (2.4 + pulse * 0.8);
+      const canLight = now + 0.001 >= entry.activateLightAt;
+      entry.light.intensity = canLight ? fade * (1.4 + pulse * 0.9) : 0;
+      entry.light.distance = canLight ? entry.radius * (2.4 + pulse * 0.8) : 0;
 
-      for (let j = 0; j < entry.flames.length; j += 1) {
-        const flame = entry.flames[j];
-        const shouldUpdateFlame = j % flameUpdateStride === 0;
-        flame.mesh.visible = shouldUpdateFlame;
-        if (!shouldUpdateFlame) {
-          flame.material.opacity = 0;
-          continue;
+      const canFlame = now + 0.001 >= entry.activateFlamesAt;
+      let flameVisibleCount = 0;
+      if (canFlame) {
+        for (let j = 0; j < entry.flameInstances.length; j += 1) {
+          const flame = entry.flameInstances[j];
+          if (j % flameUpdateStride !== 0) continue;
+          const spin = t * flame.orbitSpeed + flame.phase;
+          const surge = 0.82 + Math.sin(t * (8.8 + j * 0.22) + flame.phase) * 0.22;
+          instancedParticleDummy.position.set(
+            Math.cos(spin) * flame.orbitRadius * entry.radius,
+            0.03 + surge * 0.16,
+            Math.sin(spin) * flame.orbitRadius * entry.radius
+          );
+          instancedParticleDummy.rotation.set(
+            Math.sin(spin) * flame.tilt,
+            spin + t * 0.8,
+            Math.cos(spin) * flame.tilt
+          );
+          instancedParticleDummy.scale
+            .copy(flame.baseScale)
+            .multiplyScalar((0.54 + surge * 0.34) * (entry.radius * 0.56));
+          instancedParticleDummy.updateMatrix();
+          entry.flameInstanced.setMatrixAt(flameVisibleCount, instancedParticleDummy.matrix);
+          entry.flameInstanced.setColorAt(flameVisibleCount, flame.color);
+          flameVisibleCount += 1;
         }
-        const spin = t * flame.orbitSpeed + flame.phase;
-        const surge = 0.82 + Math.sin(t * (8.8 + j * 0.22) + flame.phase) * 0.22;
-        flame.mesh.position.set(
-          Math.cos(spin) * flame.orbitRadius * entry.radius,
-          0.03 + surge * 0.16,
-          Math.sin(spin) * flame.orbitRadius * entry.radius
-        );
-        flame.mesh.rotation.set(
-          Math.sin(spin) * flame.tilt,
-          spin + t * 0.8,
-          Math.cos(spin) * flame.tilt
-        );
-        flame.mesh.scale
-          .copy(flame.baseScale)
-          .multiplyScalar((0.54 + surge * 0.34) * (entry.radius * 0.56));
-        flame.material.opacity = Math.min(1, fade * (0.44 + surge * 0.26));
+      }
+      entry.flameInstanced.count = flameVisibleCount;
+      entry.flameInstanced.instanceMatrix.needsUpdate = true;
+      if (entry.flameInstanced.instanceColor) {
+        entry.flameInstanced.instanceColor.needsUpdate = true;
+      }
+      entry.flameMaterial.opacity =
+        flameVisibleCount > 0 ? Math.min(1, fade * (0.44 + pulse * 0.2)) : 0;
+
+      const canSpark = now + 0.001 >= entry.activateSparksAt;
+      let sparkVisibleCount = 0;
+      if (canSpark) {
+        for (let j = 0; j < entry.sparkInstances.length; j += 1) {
+          const spark = entry.sparkInstances[j];
+          if (j % sparkUpdateStride !== 0) continue;
+          const spin = t * spark.orbitSpeed + spark.phase;
+          const risePhase = THREE.MathUtils.euclideanModulo(
+            t * (0.7 + j * 0.03) + spark.phase * 0.18,
+            1
+          );
+          instancedParticleDummy.position.set(
+            Math.cos(spin) * spark.orbitRadius * entry.radius * (0.44 + risePhase * 0.56),
+            0.08 + risePhase * spark.lift,
+            Math.sin(spin) * spark.orbitRadius * entry.radius * (0.44 + risePhase * 0.56)
+          );
+          instancedParticleDummy.rotation.set(spin * 1.2, spin, spin * 1.7);
+          instancedParticleDummy.scale.setScalar(spark.scale * (0.56 + risePhase * 0.58));
+          instancedParticleDummy.updateMatrix();
+          entry.sparkInstanced.setMatrixAt(sparkVisibleCount, instancedParticleDummy.matrix);
+          entry.sparkInstanced.setColorAt(sparkVisibleCount, spark.color);
+          sparkVisibleCount += 1;
+        }
+      }
+      entry.sparkInstanced.count = sparkVisibleCount;
+      entry.sparkInstanced.instanceMatrix.needsUpdate = true;
+      if (entry.sparkInstanced.instanceColor) {
+        entry.sparkInstanced.instanceColor.needsUpdate = true;
+      }
+      entry.sparkMaterial.opacity =
+        sparkVisibleCount > 0 ? Math.min(1, fade * (0.28 + pulse * 0.14)) : 0;
+    }
+  };
+
+  const resetEnhancedESkillGroundZone = (zone: EnhancedESkillGroundZone) => {
+    zone.root.visible = false;
+    zone.root.removeFromParent();
+    zone.root.position.set(0, 0, 0);
+    zone.center.set(0, 0, 0);
+    zone.createdAt = 0;
+    zone.explodeAt = 0;
+    zone.endsAt = 0;
+    zone.nextTickAt = 0;
+    zone.lastVisualUpdateAt = -Infinity;
+    zone.state = "marking";
+    zone.chargeBall.visible = true;
+    zone.chargeBall.position.set(0, enhancedESkillGroundChargeBallLift, 0);
+    zone.chargeBall.scale.setScalar(1);
+    zone.chargeBallMaterial.opacity = 0;
+    zone.explosionSphere.visible = false;
+    zone.explosionSphere.position.set(0, enhancedESkillGroundExplosionSphereLift, 0);
+    zone.explosionSphere.scale.setScalar(1);
+    zone.explosionSphereMaterial.opacity = 0;
+    zone.light.intensity = 0;
+    zone.light.distance = 0;
+  };
+
+  const createEnhancedESkillGroundZone = (): EnhancedESkillGroundZone => {
+    const root = new THREE.Group();
+
+    const chargeBallMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff9c2f,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const chargeBall = new THREE.Mesh(
+      enhancedESkillGroundSphereGeometry,
+      chargeBallMaterial
+    );
+    chargeBall.position.set(0, enhancedESkillGroundChargeBallLift, 0);
+    chargeBall.frustumCulled = false;
+    root.add(chargeBall);
+
+    const explosionSphereMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff9c2f,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const explosionSphere = new THREE.Mesh(
+      enhancedESkillGroundSphereGeometry,
+      explosionSphereMaterial
+    );
+    explosionSphere.position.set(0, enhancedESkillGroundExplosionSphereLift, 0);
+    explosionSphere.frustumCulled = false;
+    explosionSphere.visible = false;
+    root.add(explosionSphere);
+
+    const light = new THREE.PointLight(0xff8a2a, 0, 0, 2);
+    light.position.set(0, enhancedESkillGroundExplosionSphereLift, 0);
+    root.add(light);
+
+    const zone: EnhancedESkillGroundZone = {
+      root,
+      chargeBall,
+      chargeBallMaterial,
+      explosionSphere,
+      explosionSphereMaterial,
+      light,
+      center: new THREE.Vector3(),
+      createdAt: 0,
+      explodeAt: 0,
+      endsAt: 0,
+      nextTickAt: 0,
+      lastVisualUpdateAt: -Infinity,
+      state: "marking",
+    };
+    applyFxRenderDefaults(root);
+    root.traverse((child) => {
+      child.layers.mask = enhancedESkillGroundVisibleLayerMask;
+    });
+    resetEnhancedESkillGroundZone(zone);
+    return zone;
+  };
+
+  const acquireEnhancedESkillGroundZone = () => {
+    const idle = inactiveEnhancedESkillGroundZones.pop();
+    if (idle) {
+      resetEnhancedESkillGroundZone(idle);
+      return idle;
+    }
+    return createEnhancedESkillGroundZone();
+  };
+
+  const releaseEnhancedESkillGroundZone = (index: number) => {
+    const zone = activeEnhancedESkillGroundZones[index];
+    if (!zone) return;
+    activeEnhancedESkillGroundZones.splice(index, 1);
+    resetEnhancedESkillGroundZone(zone);
+    inactiveEnhancedESkillGroundZones.push(zone);
+  };
+
+  const clearAllEnhancedESkillGroundZones = () => {
+    for (let i = activeEnhancedESkillGroundZones.length - 1; i >= 0; i -= 1) {
+      releaseEnhancedESkillGroundZone(i);
+    }
+  };
+
+  const disposeEnhancedESkillGroundZone = (zone: EnhancedESkillGroundZone) => {
+    zone.root.removeFromParent();
+    zone.chargeBallMaterial.dispose();
+    zone.explosionSphereMaterial.dispose();
+  };
+
+  const disposeAllEnhancedESkillGroundZones = () => {
+    clearAllEnhancedESkillGroundZones();
+    for (let i = inactiveEnhancedESkillGroundZones.length - 1; i >= 0; i -= 1) {
+      disposeEnhancedESkillGroundZone(inactiveEnhancedESkillGroundZones[i]);
+    }
+    inactiveEnhancedESkillGroundZones.length = 0;
+  };
+
+  const spawnEnhancedESkillGroundZone = (
+    now: number,
+    strikePoint?: THREE.Vector3
+  ) => {
+    const worldRoot = avatar.parent ?? avatar;
+    const zone = acquireEnhancedESkillGroundZone();
+
+    if (strikePoint) {
+      enhancedESkillGroundCenter.copy(strikePoint);
+    } else if (!getWeaponSweepSamplePosition(currentWeaponWorldPosition)) {
+      resolveSuperBurnSkillRFanOrigin(enhancedESkillGroundCenter);
+      ensureAvatarMatrixWorld();
+      avatar.getWorldPosition(enhancedESkillGroundAvatarPosition);
+      getAttackDirection(enhancedESkillWideDirection);
+      enhancedESkillGroundCenter.addScaledVector(
+        enhancedESkillWideDirection,
+        enhancedESkillGroundMarkerForwardOffset
+      );
+      enhancedESkillGroundCenter.y =
+        enhancedESkillGroundAvatarPosition.y + enhancedESkillGroundMarkerLift;
+    } else {
+      enhancedESkillGroundCenter.copy(currentWeaponWorldPosition);
+      ensureAvatarMatrixWorld();
+      avatar.getWorldPosition(enhancedESkillGroundAvatarPosition);
+      enhancedESkillGroundCenter.y =
+        enhancedESkillGroundAvatarPosition.y + enhancedESkillGroundMarkerLift;
+    }
+
+    zone.root.position.copy(enhancedESkillGroundCenter);
+    zone.root.visible = true;
+    worldRoot.add(zone.root);
+    zone.center.copy(enhancedESkillGroundCenter);
+    zone.createdAt = now;
+    zone.explodeAt = now + enhancedESkillGroundPointDelayMs;
+    zone.endsAt = zone.explodeAt + enhancedESkillGroundExplosionDurationMs;
+    zone.nextTickAt = zone.explodeAt;
+    zone.lastVisualUpdateAt = -Infinity;
+    zone.state = "marking";
+
+    activeEnhancedESkillGroundZones.push(zone);
+  };
+
+  const updateEnhancedESkillGroundZones = (now: number) => {
+    if (!activeEnhancedESkillGroundZones.length) return;
+
+    for (let i = activeEnhancedESkillGroundZones.length - 1; i >= 0; i -= 1) {
+      const zone = activeEnhancedESkillGroundZones[i];
+      if (!zone.root.parent || now >= zone.endsAt) {
+        releaseEnhancedESkillGroundZone(i);
+        continue;
       }
 
-      for (let j = 0; j < entry.sparks.length; j += 1) {
-        const spark = entry.sparks[j];
-        const shouldUpdateSpark = j % sparkUpdateStride === 0;
-        spark.mesh.visible = shouldUpdateSpark;
-        if (!shouldUpdateSpark) {
-          spark.material.opacity = 0;
-          continue;
+      if (now + 0.001 < zone.explodeAt) {
+        if (zone.state !== "marking") {
+          zone.state = "marking";
         }
-        const spin = t * spark.orbitSpeed + spark.phase;
-        const risePhase = THREE.MathUtils.euclideanModulo(
-          t * (0.7 + j * 0.03) + spark.phase * 0.18,
-          1
+        const t = (now - zone.createdAt) * 0.001;
+        const pulse = 1 + Math.sin(t * 9.8) * 0.16 + Math.cos(t * 6.2) * 0.08;
+        zone.root.position.copy(zone.center);
+        zone.chargeBall.visible = true;
+        zone.explosionSphere.visible = false;
+        zone.chargeBall.scale.setScalar(
+          enhancedESkillGroundChargeBallRadius * pulse
         );
-        spark.mesh.position.set(
-          Math.cos(spin) * spark.orbitRadius * entry.radius * (0.44 + risePhase * 0.56),
-          0.08 + risePhase * spark.lift,
-          Math.sin(spin) * spark.orbitRadius * entry.radius * (0.44 + risePhase * 0.56)
-        );
-        spark.mesh.rotation.set(spin * 1.2, spin, spin * 1.7);
-        spark.mesh.scale.setScalar(spark.scale * (0.56 + risePhase * 0.58));
-        spark.material.opacity = Math.min(1, fade * (1 - risePhase * 0.72) * 0.52);
+        zone.chargeBallMaterial.opacity = 0.97;
+        zone.light.intensity = 1.2 + Math.sin(t * 8.6) * 0.4;
+        zone.light.distance = 4.8 + Math.sin(t * 7.1) * 0.5;
+        continue;
       }
+
+      if (zone.state !== "exploding") {
+        zone.state = "exploding";
+        zone.chargeBall.visible = false;
+        zone.explosionSphere.visible = true;
+      }
+
+      while (zone.nextTickAt <= zone.endsAt && now + 0.001 >= zone.nextTickAt) {
+        if (performMeleeAttack) {
+          getAttackDirection(enhancedESkillGroundDamageDirection);
+          performMeleeAttack({
+            damage: enhancedESkillGroundExplosionDamagePerTick,
+            maxDistance: 0.001,
+            maxHits: enhancedESkillGroundExplosionMaxHitsPerTick,
+            direction: enhancedESkillGroundDamageDirection,
+            contactCenter: zone.center,
+            contactRadius: enhancedESkillGroundExplosionRadius,
+          });
+        }
+        zone.nextTickAt += enhancedESkillGroundExplosionTickMs;
+      }
+
+      if (
+        Number.isFinite(zone.lastVisualUpdateAt) &&
+        now - zone.lastVisualUpdateAt < enhancedESkillGroundVisualUpdateIntervalMs
+      ) {
+        continue;
+      }
+      zone.lastVisualUpdateAt = now;
+
+      const progress = THREE.MathUtils.clamp(
+        (now - zone.explodeAt) / enhancedESkillGroundExplosionDurationMs,
+        0,
+        1
+      );
+      const fadeOut = 1 - THREE.MathUtils.smoothstep(progress, 0.72, 1);
+      const pulse =
+        1 +
+        Math.sin((now - zone.explodeAt) * 0.008) * 0.1 +
+        Math.cos((now - zone.explodeAt) * 0.004) * 0.06;
+      const shakeFade = 1 - THREE.MathUtils.smoothstep(progress, 0.5, 1);
+      const shakeTime = (now - zone.explodeAt) * 0.001;
+      const shake = enhancedESkillGroundExplosionShakeAmplitude * shakeFade;
+      zone.root.position.set(
+        zone.center.x +
+          Math.sin(shakeTime * enhancedESkillGroundExplosionShakeSpeed) * shake,
+        zone.center.y +
+          Math.sin(shakeTime * enhancedESkillGroundExplosionShakeSpeed * 1.73) * shake * 0.2,
+        zone.center.z +
+          Math.cos(shakeTime * enhancedESkillGroundExplosionShakeSpeed * 1.21) * shake
+      );
+
+      zone.explosionSphere.scale.setScalar(enhancedESkillGroundExplosionRadius);
+      zone.explosionSphereMaterial.opacity = 0.97;
+      zone.light.intensity = fadeOut * (3 + pulse * 1.8);
+      zone.light.distance = enhancedESkillGroundExplosionRadius * (2.8 + pulse * 0.28);
     }
   };
 
@@ -3682,6 +4089,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     superThirdPoolHasWeaponSample: false,
     superThirdPoolPeakWeaponY: 0,
     superThirdPoolPreviousWeaponY: 0,
+    triggeredByEnhancedESkill: false,
+    enhancedEWideStrikeTriggered: false,
     nextHitAt: 0,
   };
 
@@ -3747,6 +4156,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     activatedAt: 0,
     endsAt: 0,
   };
+  const bypassRuntimeResourceSpend = Boolean(noCooldown);
 
   const getCurrentEnergy = () => getCurrentStats?.().energy ?? 0;
   const getCurrentMana = () => getCurrentStats?.().mana ?? 0;
@@ -3803,10 +4213,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const getAttackBindingsByVariant = (variant: "normal" | "super") =>
     variant === "super" ? superBurnAttackBindings : normalAttackBindings;
 
-  const resolveAttackVariantForNewCombo = (): "normal" | "super" =>
-    superBurnState.active && superBurnAttackBindings.length >= 3
-      ? "super"
-      : "normal";
+  const resolveAttackVariantForNewCombo = (): "normal" | "super" => "normal";
 
   const resolveAttackBinding = (
     index: number,
@@ -4668,6 +5075,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     attackState.superThirdPoolHasWeaponSample = false;
     attackState.superThirdPoolPeakWeaponY = 0;
     attackState.superThirdPoolPreviousWeaponY = 0;
+    attackState.triggeredByEnhancedESkill = false;
+    attackState.enhancedEWideStrikeTriggered = false;
     attackState.nextHitAt = 0;
   };
 
@@ -4888,6 +5297,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     pendingSkillRBurnExplosionSpawnQueue.length = 0;
     skillRBurnHitVisualDebounceByTarget.clear();
     clearAllSuperBurnFlamePools();
+    clearAllEnhancedESkillGroundZones();
     for (let i = 0; i < skillRProjectileVisuals.length; i += 1) {
       resetSkillRProjectileVisual(skillRProjectileVisuals[i]);
     }
@@ -4925,6 +5335,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (boundWeapon) {
       attachSecondaryBurnFx();
     }
+    prewarmSuperBurnFlamePoolEntries();
 
     const resolvedWalkClip = makeLoopSeamlessClip(
       resolveInPlaceClip(model, walkClipName)
@@ -5253,7 +5664,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const startAttack = (
     index: number,
     now: number,
-    preferredVariant: "normal" | "super" = resolveAttackVariantForNewCombo()
+    preferredVariant: "normal" | "super" = resolveAttackVariantForNewCombo(),
+    {
+      enhancedEStrike = false,
+    }: {
+      enhancedEStrike?: boolean;
+    } = {}
   ) => {
     const { binding, variant } = resolveAttackBinding(index, preferredVariant);
     if (!binding) return false;
@@ -5271,6 +5687,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     attackState.superThirdPoolHasWeaponSample = false;
     attackState.superThirdPoolPeakWeaponY = 0;
     attackState.superThirdPoolPreviousWeaponY = 0;
+    attackState.triggeredByEnhancedESkill = enhancedEStrike;
+    attackState.enhancedEWideStrikeTriggered = false;
     attackState.nextHitAt = 0;
 
     return playActionBinding(binding);
@@ -5483,22 +5901,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
     getAttackDirection(skillQDirection);
     avatar.rotation.y = Math.atan2(skillQDirection.x, skillQDirection.z);
     activateBurningMode(now);
+    activateSecondaryBurn(now, { linkToBurningMode: true });
+    activateSuperBurn(now);
     return playActionBinding(skillQBinding);
   };
 
   const finishSkillQ = () => {
     stopActionBinding(skillQBinding);
     resetSkillQState();
-  };
-
-  const triggerSkillQEInstantIgnite = (now: number) => {
-    skillQEPreludeFadeOutEndsAt = Math.max(
-      skillQEPreludeFadeOutEndsAt,
-      now + skillQEInstantIgniteFlashMs
-    );
-    activateSecondaryBurn(now, { linkToBurningMode: true });
-    activateSuperBurn(now);
-    return true;
   };
 
   const startSkillE = (now: number) => {
@@ -6617,6 +7027,65 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
   };
 
+  const applyEnhancedESkillWideStrike = (
+    now: number,
+    strikePoint?: THREE.Vector3
+  ) => {
+    if (!performMeleeAttack) return;
+    resolveSuperBurnSkillRFanOrigin(enhancedESkillWideOrigin);
+    getAttackDirection(enhancedESkillWideDirection);
+    enhancedESkillWideHitTargetIds.clear();
+
+    const onHitTargetResolved = ({
+      targetId,
+      targetObject,
+      isTargetActive,
+      dealDamageToTarget,
+      now: hitNow,
+    }: MeleeHitTargetResolvedArgs) => {
+      applySecondaryBurnSkillRBurn({
+        targetId,
+        targetObject,
+        isTargetActive,
+        dealDamageToTarget,
+        now: hitNow,
+        applicationMode: "direct",
+        stackCount: superBurnBasicAttackBurnStacks,
+      });
+    };
+
+    for (let i = 0; i < enhancedESkillWideRayCount; i += 1) {
+      const t =
+        enhancedESkillWideRayCount <= 1
+          ? 0.5
+          : i / (enhancedESkillWideRayCount - 1);
+      const yawOffset = THREE.MathUtils.lerp(
+        -enhancedESkillWideHalfAngleRad,
+        enhancedESkillWideHalfAngleRad,
+        t
+      );
+      enhancedESkillWideRayDirection
+        .copy(enhancedESkillWideDirection)
+        .applyAxisAngle(avatarUp, yawOffset)
+        .normalize();
+      performMeleeAttack({
+        damage: enhancedESkillWideDamage,
+        maxDistance: enhancedESkillWideRange,
+        hitRadius: enhancedESkillWideRayHitRadius,
+        maxHits: enhancedESkillWideRayMaxHits,
+        origin: enhancedESkillWideOrigin.clone(),
+        direction: enhancedESkillWideRayDirection.clone(),
+        excludeTargetIds: enhancedESkillWideHitTargetIds,
+        onHitTarget: (targetId) => {
+          enhancedESkillWideHitTargetIds.add(targetId);
+        },
+        onHitTargetResolved,
+      });
+    }
+
+    spawnEnhancedESkillGroundZone(now, strikePoint);
+  };
+
   const startSkillR = (now: number) => {
     const useSuperFanMode = superBurnState.active;
     const binding = useSuperFanMode
@@ -6707,9 +7176,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       if (!attackState.hasWeaponSample) {
         sampleWeaponPosition(attackState);
       }
+      const shouldThrottleHitWindow =
+        attackState.comboVariant === "super" || superBurnState.active;
       const shouldApplyHit =
-        attackState.comboVariant !== "super" ||
-        now + 0.001 >= attackState.nextHitAt;
+        !shouldThrottleHitWindow || now + 0.001 >= attackState.nextHitAt;
       if (shouldApplyHit) {
         applyWeaponSweepHit(
           binding.config,
@@ -6718,7 +7188,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
           now,
           true
         );
-        if (attackState.comboVariant === "super") {
+        if (shouldThrottleHitWindow) {
           attackState.nextHitAt = now + superBurnBasicAttackHitIntervalMs;
         }
       } else {
@@ -6729,7 +7199,57 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     if (
-      attackState.comboVariant === "super" &&
+      attackState.triggeredByEnhancedESkill &&
+      attackState.currentIndex === 2 &&
+      !attackState.enhancedEWideStrikeTriggered
+    ) {
+      const hasTipSample = getWeaponFxTipSamplePosition(currentWeaponFxWorldPosition);
+      const hasSweepSample = hasTipSample
+        ? true
+        : getWeaponSweepSamplePosition(currentWeaponWorldPosition);
+      const hasStrikeSample = hasTipSample || hasSweepSample;
+      const strikePoint = hasTipSample
+        ? currentWeaponFxWorldPosition
+        : currentWeaponWorldPosition;
+      if (hasStrikeSample) {
+        if (!attackState.superThirdPoolHasWeaponSample) {
+          attackState.superThirdPoolHasWeaponSample = true;
+          attackState.superThirdPoolPeakWeaponY = strikePoint.y;
+          attackState.superThirdPoolPreviousWeaponY = strikePoint.y;
+        } else {
+          const weaponY = strikePoint.y;
+          const deltaY = weaponY - attackState.superThirdPoolPreviousWeaponY;
+          attackState.superThirdPoolPeakWeaponY = Math.max(
+            attackState.superThirdPoolPeakWeaponY,
+            weaponY
+          );
+          const dropFromPeak = attackState.superThirdPoolPeakWeaponY - weaponY;
+          const downwardStrikeMoment =
+            progress >= enhancedESkillWideStrikeDownwardProgress &&
+            dropFromPeak >= enhancedESkillWideStrikeDropThreshold &&
+            deltaY <= enhancedESkillWideStrikeDownwardDeltaThreshold;
+          if (downwardStrikeMoment) {
+            applyEnhancedESkillWideStrike(now, strikePoint.clone());
+            attackState.enhancedEWideStrikeTriggered = true;
+          }
+          attackState.superThirdPoolPreviousWeaponY = weaponY;
+        }
+      }
+      if (
+        !attackState.enhancedEWideStrikeTriggered &&
+        progress >= enhancedESkillWideStrikeFallbackProgress
+      ) {
+        applyEnhancedESkillWideStrike(
+          now,
+          hasStrikeSample ? strikePoint.clone() : undefined
+        );
+        attackState.enhancedEWideStrikeTriggered = true;
+      }
+    }
+
+    if (
+      superBurnState.active &&
+      !attackState.triggeredByEnhancedESkill &&
       attackState.currentIndex === 2 &&
       !attackState.superThirdPoolSpawned
     ) {
@@ -8342,7 +8862,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     if (walkLegsAction) {
-      const shouldWalkLegs = isMoving && (attackState.active || primaryHoldState.active);
+      const shouldWalkLegs =
+        isMoving &&
+        (attackState.active || primaryHoldState.active || skillEState.active);
       const currentWeight = walkLegsAction.getEffectiveWeight();
       const nextWeight = THREE.MathUtils.lerp(
         currentWeight,
@@ -8449,6 +8971,52 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const handleSkillE = () => {
     const now = performance.now();
+    if (superBurnState.active) {
+      if (
+        attackState.active ||
+        primaryHoldState.active ||
+        skillQState.active ||
+        skillEState.active ||
+        skillRState.active
+      ) {
+        return false;
+      }
+      if (!spendMana || !spendEnergy) {
+        return false;
+      }
+      let spentMana = 0;
+      let spentEnergy = 0;
+      if (!bypassRuntimeResourceSpend) {
+        if (
+          getCurrentMana() + 0.0001 < enhancedESkillManaCost ||
+          getCurrentEnergy() + 0.0001 < enhancedESkillEnergyCost
+        ) {
+          return false;
+        }
+        spentMana = spendMana(enhancedESkillManaCost);
+        if (spentMana + 0.0001 < enhancedESkillManaCost) {
+          return false;
+        }
+        spentEnergy = spendEnergy(enhancedESkillEnergyCost);
+        if (spentEnergy + 0.0001 < enhancedESkillEnergyCost) {
+          applyMana?.(spentMana);
+          return false;
+        }
+      }
+      skillQEPreludeFadeOutEndsAt = Math.max(
+        skillQEPreludeFadeOutEndsAt,
+        now + skillQEInstantIgniteFlashMs
+      );
+      const started = startAttack(2, now, "super", { enhancedEStrike: true });
+      if (!started) {
+        if (!bypassRuntimeResourceSpend) {
+          applyMana?.(spentMana);
+          applyEnergy?.(spentEnergy);
+        }
+        return false;
+      }
+      return true;
+    }
     if (secondaryBurnState.active || secondaryBurnState.fadingOut) {
       deactivateSecondaryBurn({ immediate: true, now });
       finishSkillE();
@@ -8464,12 +9032,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (getCurrentMana() <= 0.0001) {
       return false;
     }
-    if (burningModeState.active || skillQState.active) {
-      return triggerSkillQEInstantIgnite(now);
-    }
-    if (
-      skillEState.active
-    ) {
+    if (skillEState.active) {
       return false;
     }
     return startSkillE(now);
@@ -8508,16 +9071,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     spendEnergy(energyDrain);
     if (getCurrentEnergy() <= 0.0001) {
       deactivateBurningMode();
-    }
-  };
-
-  const updateSkillEManaDrain = (delta: number) => {
-    if (!secondaryBurnState.active || !spendMana || delta <= 0) return;
-    const manaDrain = skillEManaDrainPerSecond * delta;
-    if (manaDrain <= 0) return;
-    spendMana(manaDrain);
-    if (getCurrentMana() <= 0.0001) {
-      deactivateSecondaryBurn();
     }
   };
 
@@ -8627,6 +9180,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     pendingSkillRBurnExplosionSpawnQueue.length = 0;
     skillRBurnHitVisualDebounceByTarget.clear();
     clearAllSuperBurnFlamePools();
+    clearAllEnhancedESkillGroundZones();
     for (let i = 0; i < skillRProjectileVisuals.length; i += 1) {
       resetSkillRProjectileVisual(skillRProjectileVisuals[i]);
     }
@@ -8656,6 +9210,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       activeSkillRBurns.size * 1.2 +
       activeSkillRBurnExplosions.length * 1.7 +
       activeSuperBurnFlamePools.length * 1.6 +
+      activeEnhancedESkillGroundZones.length * 1.4 +
       (secondaryBurnState.active ? 1.4 : 0) +
       (burningModeState.active ? 1.2 : 0) +
       (skillRState.active ? 1 : 0);
@@ -8711,6 +9266,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     updateSecondaryBurnFx(args.now);
     updateSecondaryBurnSwingTrailFx(args.now);
     updateSuperBurnFlamePools(args.now);
+    updateEnhancedESkillGroundZones(args.now);
     updateSecondaryBurnSkillRBurns(args.now);
     updateSecondaryBurnSkillRBurnExplosionFx(args.now);
     processSkillRBurnFxQueues();
@@ -8747,7 +9303,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     isMovementLocked: () =>
       Boolean(baseRuntime.isMovementLocked?.()) ||
       skillQState.active ||
-      skillEState.active ||
       skillRState.active,
     getSkillCooldownRemainingMs: baseRuntime.getSkillCooldownRemainingMs,
     getSkillCooldownDurationMs: baseRuntime.getSkillCooldownDurationMs,
@@ -8759,8 +9314,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
           ? baseModifierResult
           : {};
       if (
-        (key === "q" && (burningModeState.active || skillQState.active)) ||
-        (key === "e" && (secondaryBurnState.active || secondaryBurnState.fadingOut))
+        key === "q" &&
+        (burningModeState.active || skillQState.active)
+      ) {
+        return {
+          ...baseModifier,
+          ignoreCostAndCooldown: true,
+        };
+      }
+      if (
+        key === "e" &&
+        !superBurnState.active &&
+        (secondaryBurnState.active || secondaryBurnState.fadingOut)
       ) {
         return {
           ...baseModifier,
@@ -8781,7 +9346,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     onTick: (args) => {
       updatePrimaryHoldStaminaDrain(args.delta);
       updateSkillQEnergyDrain(args.delta);
-      updateSkillEManaDrain(args.delta);
       updateSkillQHealthRegen(args.delta);
       baseRuntime.onTick?.(args);
     },
@@ -8791,6 +9355,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       clearAnimationBinding();
       clearAllSkillRBurns({ immediate: true });
       clearAllSkillRBurnExplosionFx({ immediate: true });
+      disposeAllEnhancedESkillGroundZones();
       disposeAllSuperBurnFlamePools();
       primaryHoldReflectBlocker.removeFromParent();
       superBurnSkillRFanFxRoot.removeFromParent();
@@ -8815,6 +9380,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       superBurnSkillRFanFillGeometry.dispose();
       superBurnSkillRFanEdgeGeometry.dispose();
       superBurnSkillRFanFlameGeometry.dispose();
+      enhancedESkillGroundSphereGeometry.dispose();
       secondaryBurnHaloGeometry.dispose();
       secondaryBurnCoronaGeometry.dispose();
       secondaryBurnGlowGeometry.dispose();
