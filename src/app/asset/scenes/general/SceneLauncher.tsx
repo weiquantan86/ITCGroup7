@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import * as THREE from "three";
-import { createPlayer, type PlayerUiState } from "../../entity/character/general/player";
+import {
+  createPlayer,
+  type PlayerController,
+  type PlayerUiState,
+} from "../../entity/character/general/player";
 import type { SceneDefinition, SceneSetupResult, SceneUiState } from "./sceneTypes";
 
 type InputPermissionGate = boolean | (() => boolean);
@@ -24,6 +28,7 @@ export default function SceneLauncher({
   infiniteFire = false,
   onSceneStateChange,
   onPlayerStateChange,
+  onPlayerControllerReady,
   sceneLoader,
   deltaStartAtMs,
   maxPixelRatio = 2,
@@ -44,6 +49,7 @@ export default function SceneLauncher({
   infiniteFire?: boolean;
   onSceneStateChange?: (state: SceneUiState) => void;
   onPlayerStateChange?: (state: PlayerUiState) => void;
+  onPlayerControllerReady?: (controller: PlayerController | null) => void;
   sceneLoader: () => Promise<SceneDefinition> | SceneDefinition;
   deltaStartAtMs?: number;
   maxPixelRatio?: number;
@@ -55,6 +61,9 @@ export default function SceneLauncher({
   const allowPrimaryAttackRef = useRef<InputPermissionGate>(allowPrimaryAttack);
   const allowSkillsRef = useRef<InputPermissionGate>(allowSkills);
   const allowJumpRef = useRef<InputPermissionGate>(allowJump);
+  const onPlayerControllerReadyRef = useRef<typeof onPlayerControllerReady>(
+    onPlayerControllerReady
+  );
 
   useEffect(() => {
     allowPrimaryAttackRef.current = allowPrimaryAttack;
@@ -67,6 +76,10 @@ export default function SceneLauncher({
   useEffect(() => {
     allowJumpRef.current = allowJump;
   }, [allowJump]);
+
+  useEffect(() => {
+    onPlayerControllerReadyRef.current = onPlayerControllerReady;
+  }, [onPlayerControllerReady]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -154,6 +167,7 @@ export default function SceneLauncher({
           infiniteFire,
           onUiStateChange: onPlayerStateChange,
         });
+        onPlayerControllerReadyRef.current?.(player);
 
         const animate = () => {
           if (isDisposed || !player || !renderer) return;
@@ -193,6 +207,7 @@ export default function SceneLauncher({
       window.removeEventListener("resize", handleResize);
       sceneSetup?.dispose?.();
       player?.dispose();
+      onPlayerControllerReadyRef.current?.(null);
       renderer?.dispose();
       if (renderer?.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);

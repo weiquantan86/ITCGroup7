@@ -4,6 +4,9 @@
   width: 100%;
   padding: 16px;
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
   background:
     radial-gradient(circle at 10% 10%, rgba(219, 39, 119, 0.18), transparent 45%),
     radial-gradient(circle at 90% 5%, rgba(37, 99, 235, 0.2), transparent 48%),
@@ -210,4 +213,37 @@
     145% 145%,
     180% 180%;
   animation: chapter1BlueBackdropDrift 18s ease-in-out infinite;
+}
+
+@keyframes chapter2AmberBackdropDrift {
+  0% {
+    background-position:
+      52% 48%,
+      0% 0%;
+    filter: saturate(1);
+  }
+
+  50% {
+    background-position:
+      48% 52%,
+      100% 100%;
+    filter: saturate(1.12);
+  }
+
+  100% {
+    background-position:
+      54% 47%,
+      0% 0%;
+    filter: saturate(1);
+  }
+}
+
+.chapter2IntroBackdropAnimated {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(249, 115, 22, 0.3), rgba(10, 6, 5, 0.96) 58%),
+    linear-gradient(132deg, rgba(12, 6, 4, 0.95), rgba(40, 20, 8, 0.88), rgba(6, 3, 2, 0.96));
+  background-size:
+    150% 150%,
+    185% 185%;
+  animation: chapter2AmberBackdropDrift 16s ease-in-out infinite;
 }

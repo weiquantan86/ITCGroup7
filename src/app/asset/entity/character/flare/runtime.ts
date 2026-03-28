@@ -107,13 +107,7 @@ const secondaryBurnSkillRBurnExplosionRadius = 3.6;
 const secondaryBurnSkillRBurnExplosionDamage = 120;
 const secondaryBurnSkillRBurnExplosionMinDamage = 50;
 const secondaryBurnSkillRBurnExplosionFxDurationMs = 760;
-const secondaryBurnSkillRBurnExplosionBurstProjectileCount = 96;
-const secondaryBurnSkillRBurnExplosionBurstSpeed = 24;
-const secondaryBurnSkillRBurnExplosionBurstRadius = 0.12;
-const secondaryBurnSkillRBurnExplosionBurstVisualScale = 0.18;
-const secondaryBurnSkillRBurnExplosionBurstLifetimeSec =
-  secondaryBurnSkillRBurnExplosionRadius / secondaryBurnSkillRBurnExplosionBurstSpeed +
-  0.08;
+const secondaryBurnSkillRBurnExplosionAreaMaxHits = 24;
 const skillRBurnCollisionNamePattern = /hitbox|hurtbox|collider|collision|trigger/i;
 const skillRBurnFxRootFlagKey = "__flareSkillRBurnFxRoot";
 const secondaryBurnSwingTrailPoolSize = 28;
@@ -157,7 +151,7 @@ const superBurnThirdAttackPoolGroundLift = 0.03;
 const superBurnThirdAttackPoolMaxHitsPerTick = 8;
 const superBurnThirdAttackPoolMaxActive = 3;
 const superBurnThirdAttackPoolFlameCount = 8;
-const superBurnThirdAttackPoolSparkCount = 14;
+const superBurnThirdAttackPoolSparkCount = 10;
 const superBurnThirdAttackPoolVisualUpdateIntervalMsNear = 24;
 const superBurnThirdAttackPoolVisualUpdateIntervalMsFar = 66;
 const superBurnThirdAttackPoolHighDetailDistance = 11;
@@ -179,8 +173,8 @@ const superBurnSkillRFlameIntensityMultiplier = 1.3;
 const superBurnSkillRLightIntensityMultiplier = 1.36;
 const superBurnSkillRSparkSpreadMultiplier = 1.28;
 const superBurnSkillRFanFxLift = 0.04;
-const superBurnSkillRFanFxFlameCount = 24;
-const superBurnSkillRFanFxSparkCount = 48;
+const superBurnSkillRFanFxFlameCount = 14;
+const superBurnSkillRFanFxSparkCount = 26;
 const secondaryBurnWeaponFlameSizeMultiplier = 1.2;
 const secondaryBurnWeaponFlameOpacityMultiplier = 1.24;
 const secondaryBurnWeaponLightDistanceMultiplier = 1.22;
@@ -197,39 +191,41 @@ const skillQEPreludeVisibility = 0.96;
 const skillQEPreludeGatherStartProgress = 0.52;
 const skillQEPreludeGatherEndProgress = 0.74;
 const skillQEPreludeOpacityBoost = 1.9;
-const secondaryBurnPreludeAuraEmberCount = 36;
-const secondaryBurnPreludeAuraSparkCount = 36;
-const burningModePreludeAuraEmberCount = 96;
-const burningModePreludeAuraSparkCount = 64;
+const secondaryBurnPreludeAuraEmberCount = 24;
+const secondaryBurnPreludeAuraSparkCount = 24;
+const burningModePreludeAuraEmberCount = 52;
+const burningModePreludeAuraSparkCount = 36;
 const flareWeaponSweepRadiusScale = 0.22;
 const flareWeaponContactRadiusScale = 0.16;
 const flareWeaponSweepMaxDistance = 0.72;
 const flareFirstPersonVisibleBonePattern = /(hand|weapon|arm)/i;
 const flareMainCameraLayerMask = 1 << 0;
 const flareMiniBodyCameraLayerMask = 1 << 2;
+const flareFxMidDetailDistance = 18;
+const flareFxMidDetailDistanceSq = flareFxMidDetailDistance * flareFxMidDetailDistance;
+const flareFxLowDetailDistance = 30;
+const flareFxLowDetailDistanceSq = flareFxLowDetailDistance * flareFxLowDetailDistance;
+const flareFxBoundsUpdateIntervalMsHigh = 34;
+const flareFxBoundsUpdateIntervalMsMedium = 84;
+const flareFxBoundsUpdateIntervalMsLow = 180;
+const flareFxVisualUpdateIntervalMsHigh = 16;
+const flareFxVisualUpdateIntervalMsMedium = 34;
+const flareFxVisualUpdateIntervalMsLow = 70;
+const flareFxHitVisualDebounceMs = 90;
+const skillRBurnEntryPrewarmCount = 16;
+const skillRBurnExplosionPrewarmCount = 10;
+const flareFxSpawnProcessPerFrameHigh = 3;
+const flareFxSpawnProcessPerFrameMedium = 2;
+const flareFxSpawnProcessPerFrameLow = 1;
+const flareFxReleaseProcessPerFrameHigh = 5;
+const flareFxReleaseProcessPerFrameMedium = 3;
+const flareFxReleaseProcessPerFrameLow = 2;
+const flareFxDynamicQualityDeltaMediumMs = 24;
+const flareFxDynamicQualityDeltaLowMs = 34;
+const flareFxDynamicQualityLoadMedium = 8;
+const flareFxDynamicQualityLoadLow = 13;
 
-const createBurstDirections = (count: number) => {
-  const directions: THREE.Vector3[] = [];
-  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < count; i += 1) {
-    const t = count <= 1 ? 0.5 : i / (count - 1);
-    const y = 1 - t * 2;
-    const radius = Math.sqrt(Math.max(0, 1 - y * y));
-    const theta = goldenAngle * i;
-    directions.push(
-      new THREE.Vector3(
-        Math.cos(theta) * radius,
-        y,
-        Math.sin(theta) * radius
-      ).normalize()
-    );
-  }
-  return directions;
-};
-
-const secondaryBurnSkillRBurnExplosionBurstDirections = createBurstDirections(
-  secondaryBurnSkillRBurnExplosionBurstProjectileCount
-);
+type FlareFxQualityTier = "high" | "medium" | "low";
 
 type AttackStepConfig = {
   clipName: string;
@@ -529,6 +525,13 @@ type ActiveSkillRBurn = {
   embers: SecondaryBurnEmber[];
   sparks: SecondaryBurnSpark[];
   headSparks: SecondaryBurnSpark[];
+  cachedHasRenderableBounds: boolean;
+  cachedTargetSize: THREE.Vector3;
+  cachedTargetLocalCenter: THREE.Vector3;
+  cachedDistanceSq: number;
+  lastBoundsResolvedAt: number;
+  lastVisualUpdateAt: number;
+  visualFrameOffset: number;
 };
 
 type ActiveSkillRBurnExplosionFx = {
@@ -543,6 +546,8 @@ type ActiveSkillRBurnExplosionFx = {
   embers: SecondaryBurnEmber[];
   sparks: SecondaryBurnSpark[];
   light: THREE.PointLight;
+  lastVisualUpdateAt: number;
+  visualFrameOffset: number;
 };
 
 type SuperBurnFlamePoolEntry = {
@@ -721,6 +726,23 @@ const resolveSkillRBurnBounds = ({
     }
   });
   return hasRenderableMesh;
+};
+
+const applyFxRenderDefaults = (root: THREE.Object3D) => {
+  root.traverse((child) => {
+    if (isMeshObject(child)) {
+      child.castShadow = false;
+      child.receiveShadow = false;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (let i = 0; i < materials.length; i += 1) {
+        materials[i].depthWrite = false;
+      }
+    }
+    if ((child as THREE.PointLight).isPointLight) {
+      const light = child as THREE.PointLight;
+      light.castShadow = false;
+    }
+  });
 };
 
 const getAnimationClips = (model: THREE.Object3D) => {
@@ -2189,6 +2211,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
   if (burningModePreludeAuraSparkInstances.instanceColor) {
     burningModePreludeAuraSparkInstances.instanceColor.needsUpdate = true;
   }
+  applyFxRenderDefaults(secondaryBurnPreludeAuraFxRoot);
+  applyFxRenderDefaults(secondaryBurnPreludeFxRoot);
+  applyFxRenderDefaults(secondaryBurnFxRoot);
+  applyFxRenderDefaults(secondaryBurnHoldTopFxRoot);
+  applyFxRenderDefaults(secondaryBurnSwingTrailFxRoot);
+  applyFxRenderDefaults(burningModePreludeAuraFxRoot);
+  applyFxRenderDefaults(burningModeHeadFxAnchor);
+
   const superBurnSkillRFanFxRoot = new THREE.Group();
   superBurnSkillRFanFxRoot.visible = false;
   const superBurnSkillRFanFillMaterial = new THREE.MeshBasicMaterial({
@@ -2333,6 +2363,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       };
     }
   );
+  applyFxRenderDefaults(superBurnSkillRFanFxRoot);
+
   const createSkillRProjectileVisual = (): SkillRProjectileVisual => {
     const material = new THREE.MeshStandardMaterial({
       color: 0xff8f2f,
@@ -2416,7 +2448,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       };
     });
 
-    return {
+    const visual: SkillRProjectileVisual = {
       root,
       material,
       core,
@@ -2426,6 +2458,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
       inUse: false,
       launchedAt: 0,
     };
+    applyFxRenderDefaults(root);
+    return visual;
   };
 
   const resetSkillRProjectileVisual = (entry: SkillRProjectileVisual) => {
@@ -2664,7 +2698,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       };
     });
 
-    return {
+    const entry: ActiveSkillRBurn = {
       targetId,
       targetObject,
       isTargetActive,
@@ -2690,7 +2724,79 @@ export const createRuntime: CharacterRuntimeFactory = ({
       embers,
       sparks,
       headSparks,
+      cachedHasRenderableBounds: false,
+      cachedTargetSize: new THREE.Vector3(1, 1.8, 1),
+      cachedTargetLocalCenter: new THREE.Vector3(0, 1.2, 0),
+      cachedDistanceSq: 0,
+      lastBoundsResolvedAt: -Infinity,
+      lastVisualUpdateAt: -Infinity,
+      visualFrameOffset: Math.floor(Math.random() * 3),
     };
+    applyFxRenderDefaults(entry.fxRoot);
+    return entry;
+  };
+
+  const resetSkillRBurnEntry = (entry: ActiveSkillRBurn) => {
+    entry.targetId = "";
+    entry.targetObject = avatar;
+    entry.isTargetActive = () => false;
+    entry.dealDamageToTarget = () => {};
+    entry.stage = 1;
+    entry.appliedAt = 0;
+    entry.endsAt = 0;
+    entry.nextTickAt = 0;
+    entry.cachedHasRenderableBounds = false;
+    entry.cachedTargetSize.set(1, 1.8, 1);
+    entry.cachedTargetLocalCenter.set(0, 1.2, 0);
+    entry.cachedDistanceSq = 0;
+    entry.lastBoundsResolvedAt = -Infinity;
+    entry.lastVisualUpdateAt = -Infinity;
+    entry.visualFrameOffset = Math.floor(Math.random() * 3);
+
+    entry.fxRoot.visible = false;
+    entry.fxRoot.removeFromParent();
+    entry.fxRoot.position.set(0, 0, 0);
+    entry.fxRoot.rotation.set(0, 0, 0);
+    entry.fxRoot.scale.setScalar(1);
+
+    entry.glowMaterial.opacity = 0;
+    entry.outerMaterial.opacity = 0;
+    entry.innerMaterial.opacity = 0;
+    entry.headGlowMaterial.opacity = 0;
+    entry.headOuterMaterial.opacity = 0;
+    entry.headInnerMaterial.opacity = 0;
+
+    for (let i = 0; i < entry.tongues.length; i += 1) {
+      const tongue = entry.tongues[i];
+      tongue.mesh.visible = true;
+      tongue.mesh.position.set(0, 0, 0);
+      tongue.mesh.rotation.set(0, 0, 0);
+      tongue.mesh.scale.copy(tongue.baseScale);
+      tongue.material.opacity = 0;
+    }
+    for (let i = 0; i < entry.embers.length; i += 1) {
+      const ember = entry.embers[i];
+      ember.mesh.visible = false;
+      ember.mesh.position.set(0, 0, 0);
+      ember.mesh.scale.setScalar(1);
+      ember.material.opacity = 0;
+    }
+    for (let i = 0; i < entry.sparks.length; i += 1) {
+      const spark = entry.sparks[i];
+      spark.mesh.visible = false;
+      spark.mesh.position.set(0, 0, 0);
+      spark.mesh.rotation.set(0, 0, 0);
+      spark.mesh.scale.setScalar(1);
+      spark.material.opacity = 0;
+    }
+    for (let i = 0; i < entry.headSparks.length; i += 1) {
+      const spark = entry.headSparks[i];
+      spark.mesh.visible = false;
+      spark.mesh.position.set(0, 0, 0);
+      spark.mesh.rotation.set(0, 0, 0);
+      spark.mesh.scale.setScalar(1);
+      spark.material.opacity = 0;
+    }
   };
 
   const disposeSkillRBurnEntry = (entry: ActiveSkillRBurn) => {
@@ -2716,28 +2822,157 @@ export const createRuntime: CharacterRuntimeFactory = ({
   };
 
   const activeSkillRBurns = new Map<string, ActiveSkillRBurn>();
+  const inactiveSkillRBurns: ActiveSkillRBurn[] = [];
+  const pendingSkillRBurnReleaseQueue: ActiveSkillRBurn[] = [];
+  const skillRBurnHitVisualDebounceByTarget = new Map<string, number>();
+
   const activeSkillRBurnExplosions: ActiveSkillRBurnExplosionFx[] = [];
-  let skillRBurnExplosionBurstSerial = 0;
+  const inactiveSkillRBurnExplosions: ActiveSkillRBurnExplosionFx[] = [];
+  const pendingSkillRBurnExplosionReleaseQueue: ActiveSkillRBurnExplosionFx[] = [];
+  const pendingSkillRBurnExplosionSpawnQueue: Array<{
+    center: THREE.Vector3;
+    now: number;
+  }> = [];
+
   let secondaryBurnSwingTrailCursor = 0;
   let secondaryBurnSwingTrailLastSpawnAt = -Infinity;
 
-  const clearSkillRBurn = (targetId: string) => {
+  const acquireSkillRBurnEntry = ({
+    targetId,
+    targetObject,
+    isTargetActive,
+    dealDamageToTarget,
+    now,
+  }: {
+    targetId: string;
+    targetObject: THREE.Object3D;
+    isTargetActive: () => boolean;
+    dealDamageToTarget: (damage: number, now?: number) => void;
+    now: number;
+  }) => {
+    const entry = inactiveSkillRBurns.pop() ??
+      createSkillRBurnEntry({
+        targetId,
+        targetObject,
+        isTargetActive,
+        dealDamageToTarget,
+        now,
+      });
+    entry.targetId = targetId;
+    entry.targetObject = targetObject;
+    entry.isTargetActive = isTargetActive;
+    entry.dealDamageToTarget = dealDamageToTarget;
+    entry.stage = 1;
+    entry.appliedAt = now;
+    entry.endsAt = now + secondaryBurnSkillRBurnLayer1DurationMs;
+    entry.nextTickAt = now + secondaryBurnSkillRBurnTickIntervalMs;
+    entry.cachedHasRenderableBounds = false;
+    entry.cachedTargetSize.set(1, 1.8, 1);
+    entry.cachedTargetLocalCenter.set(0, 1.2, 0);
+    entry.cachedDistanceSq = 0;
+    entry.lastBoundsResolvedAt = -Infinity;
+    entry.lastVisualUpdateAt = -Infinity;
+    entry.visualFrameOffset = Math.floor(Math.random() * 3);
+    entry.fxRoot.visible = false;
+    return entry;
+  };
+
+  const releaseSkillRBurnEntry = (
+    entry: ActiveSkillRBurn,
+    { immediate = false }: { immediate?: boolean } = {}
+  ) => {
+    if (immediate) {
+      resetSkillRBurnEntry(entry);
+      inactiveSkillRBurns.push(entry);
+      return;
+    }
+    pendingSkillRBurnReleaseQueue.push(entry);
+  };
+
+  const clearSkillRBurn = (
+    targetId: string,
+    { immediate = false }: { immediate?: boolean } = {}
+  ) => {
     const entry = activeSkillRBurns.get(targetId);
     if (!entry) return;
     activeSkillRBurns.delete(targetId);
-    disposeSkillRBurnEntry(entry);
+    skillRBurnHitVisualDebounceByTarget.delete(targetId);
+    releaseSkillRBurnEntry(entry, { immediate });
   };
 
-  const clearAllSkillRBurns = () => {
+  const clearAllSkillRBurns = (
+    { immediate = false }: { immediate?: boolean } = {}
+  ) => {
     const targetIds = Array.from(activeSkillRBurns.keys());
     for (let i = 0; i < targetIds.length; i += 1) {
-      clearSkillRBurn(targetIds[i]);
+      clearSkillRBurn(targetIds[i], { immediate });
     }
   };
 
-  const clearSkillRBurnExplosionFx = (index: number) => {
+  const releaseSkillRBurnExplosionFx = (
+    entry: ActiveSkillRBurnExplosionFx,
+    { immediate = false }: { immediate?: boolean } = {}
+  ) => {
+    if (immediate) {
+      entry.root.removeFromParent();
+      entry.root.visible = false;
+      entry.root.position.set(0, 0, 0);
+      entry.startedAt = 0;
+      entry.endsAt = 0;
+      entry.lastVisualUpdateAt = -Infinity;
+      entry.visualFrameOffset = Math.floor(Math.random() * 3);
+      entry.glowMaterial.opacity = 0;
+      entry.coreMaterial.opacity = 0;
+      entry.light.intensity = 0;
+      entry.light.distance = 0;
+      for (let i = 0; i < entry.flames.length; i += 1) {
+        const flame = entry.flames[i];
+        flame.mesh.visible = true;
+        flame.mesh.position.set(0, 0, 0);
+        flame.mesh.rotation.set(0, 0, 0);
+        flame.mesh.scale.copy(flame.baseScale);
+        flame.material.opacity = 0;
+      }
+      for (let i = 0; i < entry.embers.length; i += 1) {
+        const ember = entry.embers[i];
+        ember.mesh.visible = false;
+        ember.mesh.position.set(0, 0, 0);
+        ember.mesh.scale.setScalar(1);
+        ember.material.opacity = 0;
+      }
+      for (let i = 0; i < entry.sparks.length; i += 1) {
+        const spark = entry.sparks[i];
+        spark.mesh.visible = false;
+        spark.mesh.position.set(0, 0, 0);
+        spark.mesh.rotation.set(0, 0, 0);
+        spark.mesh.scale.setScalar(1);
+        spark.material.opacity = 0;
+      }
+      inactiveSkillRBurnExplosions.push(entry);
+      return;
+    }
+    pendingSkillRBurnExplosionReleaseQueue.push(entry);
+  };
+
+  const clearSkillRBurnExplosionFx = (
+    index: number,
+    { immediate = false }: { immediate?: boolean } = {}
+  ) => {
     const entry = activeSkillRBurnExplosions[index];
     if (!entry) return;
+    activeSkillRBurnExplosions.splice(index, 1);
+    releaseSkillRBurnExplosionFx(entry, { immediate });
+  };
+
+  const clearAllSkillRBurnExplosionFx = (
+    { immediate = false }: { immediate?: boolean } = {}
+  ) => {
+    for (let i = activeSkillRBurnExplosions.length - 1; i >= 0; i -= 1) {
+      clearSkillRBurnExplosionFx(i, { immediate });
+    }
+  };
+
+  const disposeSkillRBurnExplosionEntry = (entry: ActiveSkillRBurnExplosionFx) => {
     entry.root.removeFromParent();
     entry.glowMaterial.dispose();
     entry.coreMaterial.dispose();
@@ -2749,13 +2984,6 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
     for (let i = 0; i < entry.sparks.length; i += 1) {
       entry.sparks[i].material.dispose();
-    }
-    activeSkillRBurnExplosions.splice(index, 1);
-  };
-
-  const clearAllSkillRBurnExplosionFx = () => {
-    for (let i = activeSkillRBurnExplosions.length - 1; i >= 0; i -= 1) {
-      clearSkillRBurnExplosionFx(i);
     }
   };
 
@@ -2941,6 +3169,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       sparks,
       light,
     };
+    applyFxRenderDefaults(root);
     resetSuperBurnFlamePoolEntry(entry);
     return entry;
   };
@@ -2992,7 +3221,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const spawnSuperBurnThirdAttackFlamePool = (now: number) => {
     if (!superBurnState.active) return;
     const worldRoot = avatar.parent ?? avatar;
-    avatar.updateMatrixWorld(true);
+    ensureAvatarMatrixWorld();
     avatar.getWorldPosition(superBurnFlamePoolSpawnCenter);
     getAttackDirection(superBurnFlamePoolSpawnDirection);
     superBurnFlamePoolSpawnCenter.addScaledVector(
@@ -3170,10 +3399,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const setSkillRBurnStage = (
     entry: ActiveSkillRBurn,
     stage: SkillRBurnStage,
-    now: number
+    now: number,
+    { refreshVisual = true }: { refreshVisual?: boolean } = {}
   ) => {
     entry.stage = stage;
-    entry.appliedAt = now;
+    if (refreshVisual) {
+      entry.appliedAt = now;
+      entry.lastVisualUpdateAt = -Infinity;
+    }
     entry.endsAt =
       now +
       (stage === 2
@@ -3182,14 +3415,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     entry.nextTickAt = now + secondaryBurnSkillRBurnTickIntervalMs;
   };
 
-  const spawnSecondaryBurnSkillRBurnExplosionFx = (
-    center: THREE.Vector3,
-    now: number
-  ) => {
-    const worldRoot = avatar.parent ?? avatar;
+  const createSkillRBurnExplosionEntry = (): ActiveSkillRBurnExplosionFx => {
     const root = new THREE.Group();
-    root.position.copy(center);
-    worldRoot.add(root);
 
     const glowMaterial = new THREE.MeshBasicMaterial({
       color: 0xffb347,
@@ -3294,12 +3521,13 @@ export const createRuntime: CharacterRuntimeFactory = ({
     });
 
     const light = new THREE.PointLight(0xff8c33, 0, 0, 2);
+    light.castShadow = false;
     root.add(light);
 
-    activeSkillRBurnExplosions.push({
+    const entry: ActiveSkillRBurnExplosionFx = {
       root,
-      startedAt: now,
-      endsAt: now + secondaryBurnSkillRBurnExplosionFxDurationMs,
+      startedAt: 0,
+      endsAt: 0,
       glow,
       glowMaterial,
       core,
@@ -3308,8 +3536,88 @@ export const createRuntime: CharacterRuntimeFactory = ({
       embers,
       sparks,
       light,
+      lastVisualUpdateAt: -Infinity,
+      visualFrameOffset: Math.floor(Math.random() * 3),
+    };
+    applyFxRenderDefaults(root);
+    releaseSkillRBurnExplosionFx(entry, { immediate: true });
+    return entry;
+  };
+
+  const acquireSkillRBurnExplosionEntry = () => {
+    const entry = inactiveSkillRBurnExplosions.pop() ?? createSkillRBurnExplosionEntry();
+    entry.startedAt = 0;
+    entry.endsAt = 0;
+    entry.lastVisualUpdateAt = -Infinity;
+    entry.visualFrameOffset = Math.floor(Math.random() * 3);
+    return entry;
+  };
+
+  const spawnSecondaryBurnSkillRBurnExplosionFx = (
+    center: THREE.Vector3,
+    now: number
+  ) => {
+    pendingSkillRBurnExplosionSpawnQueue.push({
+      center: center.clone(),
+      now,
     });
   };
+
+  const processSkillRBurnFxQueues = () => {
+    const spawnBudget = getFxSpawnProcessPerFrame(flareFxCombatQuality);
+    for (
+      let i = 0;
+      i < spawnBudget && pendingSkillRBurnExplosionSpawnQueue.length > 0;
+      i += 1
+    ) {
+      const pending = pendingSkillRBurnExplosionSpawnQueue.shift();
+      if (!pending) break;
+      const worldRoot = avatar.parent ?? avatar;
+      const entry = acquireSkillRBurnExplosionEntry();
+      entry.root.position.copy(pending.center);
+      entry.root.visible = true;
+      entry.startedAt = pending.now;
+      entry.endsAt = pending.now + secondaryBurnSkillRBurnExplosionFxDurationMs;
+      worldRoot.add(entry.root);
+      activeSkillRBurnExplosions.push(entry);
+    }
+
+    const releaseBudget = getFxReleaseProcessPerFrame(flareFxCombatQuality);
+    for (
+      let i = 0;
+      i < releaseBudget && pendingSkillRBurnReleaseQueue.length > 0;
+      i += 1
+    ) {
+      const entry = pendingSkillRBurnReleaseQueue.shift();
+      if (!entry) break;
+      resetSkillRBurnEntry(entry);
+      inactiveSkillRBurns.push(entry);
+    }
+    for (
+      let i = 0;
+      i < releaseBudget && pendingSkillRBurnExplosionReleaseQueue.length > 0;
+      i += 1
+    ) {
+      const entry = pendingSkillRBurnExplosionReleaseQueue.shift();
+      if (!entry) break;
+      releaseSkillRBurnExplosionFx(entry, { immediate: true });
+    }
+  };
+
+  for (let i = 0; i < skillRBurnEntryPrewarmCount; i += 1) {
+    const entry = createSkillRBurnEntry({
+      targetId: "",
+      targetObject: avatar,
+      isTargetActive: () => false,
+      dealDamageToTarget: () => {},
+      now: 0,
+    });
+    resetSkillRBurnEntry(entry);
+    inactiveSkillRBurns.push(entry);
+  }
+  for (let i = 0; i < skillRBurnExplosionPrewarmCount; i += 1) {
+    createSkillRBurnExplosionEntry();
+  }
 
   let boundModel: THREE.Object3D | null = null;
   let boundBurningModeSurface: THREE.Object3D | null = null;
@@ -3335,10 +3643,31 @@ export const createRuntime: CharacterRuntimeFactory = ({
   let lastCompletedAttackIndex = -1;
   let lastCompletedAttackAt = -Infinity;
   let runtimeFrameStamp = 0;
+  let lastRuntimeUpdateAt = 0;
+  let lastRuntimeDeltaMs = 16;
+  let flareFxCombatQuality: FlareFxQualityTier = "high";
   let lastBurningPreludeAuraUpdateAt = -Infinity;
   let lastSecondaryPreludeAuraUpdateAt = -Infinity;
+  let avatarMatrixFrameStamp = -1;
   let boundWeaponMatrixFrameStamp = -1;
   let secondaryBurnAnchorLastResolvedAt = -Infinity;
+
+  const ensureAvatarMatrixWorld = () => {
+    if (avatarMatrixFrameStamp !== runtimeFrameStamp) {
+      avatar.updateMatrixWorld(true);
+      avatarMatrixFrameStamp = runtimeFrameStamp;
+    }
+  };
+
+  const ensureBoundWeaponMatrixWorld = () => {
+    if (!boundWeapon) return false;
+    if (boundWeaponMatrixFrameStamp !== runtimeFrameStamp) {
+      ensureAvatarMatrixWorld();
+      boundWeapon.updateMatrixWorld(true);
+      boundWeaponMatrixFrameStamp = runtimeFrameStamp;
+    }
+    return true;
+  };
 
   const attackState = {
     active: false,
@@ -3421,6 +3750,49 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const getCurrentEnergy = () => getCurrentStats?.().energy ?? 0;
   const getCurrentMana = () => getCurrentStats?.().mana ?? 0;
+
+  const resolveFxQualityByDistance = (distanceSq: number): FlareFxQualityTier => {
+    if (!Number.isFinite(distanceSq) || distanceSq <= flareFxHighDetailDistanceSq) {
+      return "high";
+    }
+    if (distanceSq <= flareFxMidDetailDistanceSq) {
+      return "medium";
+    }
+    return "low";
+  };
+
+  const combineFxQuality = (
+    localQuality: FlareFxQualityTier,
+    globalQuality: FlareFxQualityTier
+  ): FlareFxQualityTier => {
+    if (localQuality === "low" || globalQuality === "low") return "low";
+    if (localQuality === "medium" || globalQuality === "medium") return "medium";
+    return "high";
+  };
+
+  const getFxVisualUpdateIntervalMs = (quality: FlareFxQualityTier) => {
+    if (quality === "high") return flareFxVisualUpdateIntervalMsHigh;
+    if (quality === "medium") return flareFxVisualUpdateIntervalMsMedium;
+    return flareFxVisualUpdateIntervalMsLow;
+  };
+
+  const getFxBoundsUpdateIntervalMs = (quality: FlareFxQualityTier) => {
+    if (quality === "high") return flareFxBoundsUpdateIntervalMsHigh;
+    if (quality === "medium") return flareFxBoundsUpdateIntervalMsMedium;
+    return flareFxBoundsUpdateIntervalMsLow;
+  };
+
+  const getFxSpawnProcessPerFrame = (quality: FlareFxQualityTier) => {
+    if (quality === "high") return flareFxSpawnProcessPerFrameHigh;
+    if (quality === "medium") return flareFxSpawnProcessPerFrameMedium;
+    return flareFxSpawnProcessPerFrameLow;
+  };
+
+  const getFxReleaseProcessPerFrame = (quality: FlareFxQualityTier) => {
+    if (quality === "high") return flareFxReleaseProcessPerFrameHigh;
+    if (quality === "medium") return flareFxReleaseProcessPerFrameMedium;
+    return flareFxReleaseProcessPerFrameLow;
+  };
 
   const canCastSkillQByEnergy = () => getCurrentEnergy() > 0.0001;
 
@@ -3702,7 +4074,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     secondaryBurnHoldTopSpread.set(0.16, 0.26, 0.16);
     if (!boundWeapon || boundWeaponMeshes.length === 0) return;
 
-    boundWeapon.updateMatrixWorld(true);
+    ensureBoundWeaponMatrixWorld();
 
     secondaryBurnTipRangeMin.set(Infinity, Infinity, Infinity);
     secondaryBurnTipRangeMax.set(-Infinity, -Infinity, -Infinity);
@@ -4494,6 +4866,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     boundBurningModeAnchor = null;
     boundBurningModeFallbackHead = null;
     boundWeapon = null;
+    avatarMatrixFrameStamp = -1;
     boundWeaponMatrixFrameStamp = -1;
     secondaryBurnAnchorLastResolvedAt = -Infinity;
     boundWeaponMeshes = [];
@@ -4508,14 +4881,21 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetSkillRState();
     deactivateSecondaryBurn({ immediate: true });
     deactivateBurningMode();
-    clearAllSkillRBurns();
-    clearAllSkillRBurnExplosionFx();
+    clearAllSkillRBurns({ immediate: true });
+    clearAllSkillRBurnExplosionFx({ immediate: true });
+    pendingSkillRBurnReleaseQueue.length = 0;
+    pendingSkillRBurnExplosionReleaseQueue.length = 0;
+    pendingSkillRBurnExplosionSpawnQueue.length = 0;
+    skillRBurnHitVisualDebounceByTarget.clear();
     clearAllSuperBurnFlamePools();
     for (let i = 0; i < skillRProjectileVisuals.length; i += 1) {
       resetSkillRProjectileVisual(skillRProjectileVisuals[i]);
     }
     lastCompletedAttackIndex = -1;
     lastCompletedAttackAt = -Infinity;
+    lastRuntimeUpdateAt = 0;
+    lastRuntimeDeltaMs = 16;
+    flareFxCombatQuality = "high";
   };
 
   const bindModel = (model: THREE.Object3D | null) => {
@@ -4531,6 +4911,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     boundBurningModeFallbackHead =
       !boundBurningModeSurface ? findHeadNode(model) : null;
     boundWeapon = findWeaponNode(model);
+    avatarMatrixFrameStamp = -1;
     boundWeaponMatrixFrameStamp = -1;
     secondaryBurnAnchorLastResolvedAt = -Infinity;
     boundWeaponMeshes = findWeaponMeshes(model);
@@ -4679,10 +5060,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     target: THREE.Vector3
   ) => {
     if (!boundWeapon) return false;
-    if (boundWeaponMatrixFrameStamp !== runtimeFrameStamp) {
-      boundWeapon.updateMatrixWorld(true);
-      boundWeaponMatrixFrameStamp = runtimeFrameStamp;
-    }
+    if (!ensureBoundWeaponMatrixWorld()) return false;
     target.copy(localPoint);
     boundWeapon.localToWorld(target);
     if (!Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.z)) {
@@ -4727,7 +5105,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
     primaryHoldReflectCenterWorld.y += primaryHoldReflectCenterLift;
 
-    avatar.updateMatrixWorld(true);
+    ensureAvatarMatrixWorld();
     primaryHoldReflectLocalPosition.copy(primaryHoldReflectCenterWorld);
     avatar.worldToLocal(primaryHoldReflectLocalPosition);
     primaryHoldReflectBlocker.position.copy(primaryHoldReflectLocalPosition);
@@ -5223,81 +5601,55 @@ export const createRuntime: CharacterRuntimeFactory = ({
     );
   };
 
-  const launchSecondaryBurnSkillRBurnExplosionBurst = ({
+  const applySecondaryBurnSkillRBurnExplosionContact = ({
     center,
-    sharedHitGroupId,
     primaryTargetId,
+    now,
   }: {
     center: THREE.Vector3;
-    sharedHitGroupId: string;
     primaryTargetId: string;
+    now: number;
   }) => {
-    if (!fireProjectile) return;
+    if (!performMeleeAttack) return;
     const explosionCenter = center.clone();
+    const contactDirection = getAttackDirection(new THREE.Vector3());
+    const targetCenter = new THREE.Vector3();
 
-    for (
-      let i = 0;
-      i < secondaryBurnSkillRBurnExplosionBurstDirections.length;
-      i += 1
-    ) {
-      const burstDirection =
-        secondaryBurnSkillRBurnExplosionBurstDirections[i].clone();
-
-      fireProjectile({
-        projectileType: "abilityOrb",
-        origin: explosionCenter.clone(),
-        direction: burstDirection,
-        speed: secondaryBurnSkillRBurnExplosionBurstSpeed,
-        lifetime: secondaryBurnSkillRBurnExplosionBurstLifetimeSec,
-        gravity: 0,
-        radius: secondaryBurnSkillRBurnExplosionBurstRadius,
-        targetHitRadius: 0,
-        damage: 1,
-        scale: secondaryBurnSkillRBurnExplosionBurstVisualScale,
-        color: i % 3 === 0 ? 0xfff2be : i % 2 === 0 ? 0xffb347 : 0xff7b24,
-        emissive: 0xffa13c,
-        emissiveIntensity: 1.4,
-        splitOnImpact: false,
-        explodeOnTargetHit: false,
-        explodeOnWorldHit: false,
-        explodeOnExpire: false,
-        removeOnTargetHit: true,
-        removeOnWorldHit: true,
-        singleHitPerTarget: true,
-        sharedHitGroupId,
-        lifecycle: {
-          onTargetHit: ({
-            now: hitNow,
-            targetId,
-            targetObject,
-            isTargetActive,
-            dealDamageToTarget,
-          }) => {
-            const targetCenter = new THREE.Vector3();
-            targetObject.updateMatrixWorld(true);
-            targetObject.getWorldPosition(targetCenter);
-            const splashDamage =
-              targetId === primaryTargetId
-                ? secondaryBurnSkillRBurnExplosionDamage
-                : getSecondaryBurnSkillRBurnExplosionDamage(
-                    targetCenter.distanceTo(explosionCenter)
-                  );
-            const extraDamage = Math.max(0, splashDamage - 1);
-            if (extraDamage > 0) {
-              dealDamageToTarget(extraDamage, hitNow);
-            }
-            applySecondaryBurnSkillRBurn({
-              targetId,
-              targetObject,
-              isTargetActive,
-              dealDamageToTarget,
-              now: hitNow,
-              applicationMode: "explosion",
-            });
-          },
-        },
-      });
-    }
+    performMeleeAttack({
+      damage: 1,
+      maxDistance: 0.01,
+      maxHits: secondaryBurnSkillRBurnExplosionAreaMaxHits,
+      direction: contactDirection,
+      contactCenter: explosionCenter,
+      contactRadius: secondaryBurnSkillRBurnExplosionRadius,
+      onHitTargetResolved: ({
+        targetId,
+        targetObject,
+        isTargetActive,
+        dealDamageToTarget,
+      }) => {
+        targetObject.updateMatrixWorld(true);
+        targetObject.getWorldPosition(targetCenter);
+        const splashDamage =
+          targetId === primaryTargetId
+            ? secondaryBurnSkillRBurnExplosionDamage
+            : getSecondaryBurnSkillRBurnExplosionDamage(
+                targetCenter.distanceTo(explosionCenter)
+              );
+        const extraDamage = Math.max(0, splashDamage - 1);
+        if (extraDamage > 0) {
+          dealDamageToTarget(extraDamage, now);
+        }
+        applySecondaryBurnSkillRBurn({
+          targetId,
+          targetObject,
+          isTargetActive,
+          dealDamageToTarget,
+          now,
+          applicationMode: "explosion",
+        });
+      },
+    });
   };
 
   const triggerSecondaryBurnSkillRBurnExplosion = (
@@ -5335,10 +5687,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
       now,
       applicationMode: "explosion",
     });
-    launchSecondaryBurnSkillRBurnExplosionBurst({
+    applySecondaryBurnSkillRBurnExplosionContact({
       center: explosionCenter,
-      sharedHitGroupId: `flare-skillr-burn-explosion-${skillRBurnExplosionBurstSerial++}`,
       primaryTargetId: entry.targetId,
+      now,
     });
   };
 
@@ -5361,6 +5713,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
   }) => {
     const targetAnchorObject = resolveSkillRBurnAnchorObject(targetObject);
     const resolvedStackCount = Math.max(1, Math.floor(stackCount));
+    const lastVisualHitAt =
+      skillRBurnHitVisualDebounceByTarget.get(targetId) ?? -Infinity;
+    const shouldRefreshVisualHit =
+      applicationMode === "explosion" ||
+      now - lastVisualHitAt >= flareFxHitVisualDebounceMs;
+    if (shouldRefreshVisualHit) {
+      skillRBurnHitVisualDebounceByTarget.set(targetId, now);
+    }
     let entry = activeSkillRBurns.get(targetId) ?? null;
     let createdEntry = false;
     if (entry) {
@@ -5373,15 +5733,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
       if (applicationMode === "explosion") {
         if (entry.stage === 1) {
-          setSkillRBurnStage(entry, 1, now);
+          setSkillRBurnStage(entry, 1, now, { refreshVisual: shouldRefreshVisualHit });
         } else {
-          entry.appliedAt = now;
+          if (shouldRefreshVisualHit) {
+            entry.appliedAt = now;
+            entry.lastVisualUpdateAt = -Infinity;
+          }
           entry.endsAt = Math.max(entry.endsAt, now + 1200);
         }
         return;
       }
     } else {
-      entry = createSkillRBurnEntry({
+      entry = acquireSkillRBurnEntry({
         targetId,
         targetObject,
         isTargetActive,
@@ -5389,7 +5752,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         now,
       });
       targetAnchorObject.add(entry.fxRoot);
-      setSkillRBurnStage(entry, 1, now);
+      setSkillRBurnStage(entry, 1, now, { refreshVisual: true });
       activeSkillRBurns.set(targetId, entry);
       createdEntry = true;
       if (applicationMode === "explosion") {
@@ -5402,12 +5765,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     while (remainingStacks > 0) {
       if (entry.stage === 1) {
-        setSkillRBurnStage(entry, 2, now);
+        setSkillRBurnStage(entry, 2, now, { refreshVisual: shouldRefreshVisualHit });
         remainingStacks -= 1;
         continue;
       }
       if (applicationMode === "directSafe") {
-        setSkillRBurnStage(entry, 2, now);
+        setSkillRBurnStage(entry, 2, now, { refreshVisual: shouldRefreshVisualHit });
         break;
       }
       triggerSecondaryBurnSkillRBurnExplosion(entry, now);
@@ -5429,11 +5792,11 @@ export const createRuntime: CharacterRuntimeFactory = ({
     if (boundWeapon) {
       syncSecondaryBurnAnchors(now, { force: true });
       if (!getWeaponFxTipSamplePosition(skillRProjectileOrigin)) {
-        boundWeapon.updateMatrixWorld(true);
+        ensureBoundWeaponMatrixWorld();
         boundWeapon.getWorldPosition(skillRProjectileOrigin);
       }
     } else {
-      avatar.updateMatrixWorld(true);
+      ensureAvatarMatrixWorld();
       avatar.getWorldPosition(skillRProjectileOrigin);
       skillRProjectileOrigin.y += 1.4;
     }
@@ -5526,17 +5889,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
     return true;
   };
 
-  const updateSecondaryBurnSkillRBurns = (now: number) => {
-    if (!activeSkillRBurns.size) return;
-
-    const expiredTargetIds: string[] = [];
-
+  const updateSecondaryBurnSkillRBurnDamage = (
+    now: number,
+    expiredTargetIds: Set<string>
+  ) => {
     activeSkillRBurns.forEach((entry, targetId) => {
       if (!entry.isTargetActive() || !entry.targetObject.parent) {
-        expiredTargetIds.push(targetId);
+        expiredTargetIds.add(targetId);
         return;
       }
-
       while (
         entry.nextTickAt <= entry.endsAt + 0.001 &&
         now + 0.001 >= entry.nextTickAt
@@ -5550,9 +5911,20 @@ export const createRuntime: CharacterRuntimeFactory = ({
         grantEnergyFromBurnDamage();
         entry.nextTickAt += secondaryBurnSkillRBurnTickIntervalMs;
       }
-
       if (now >= entry.endsAt) {
-        expiredTargetIds.push(targetId);
+        expiredTargetIds.add(targetId);
+      }
+    });
+  };
+
+  const updateSecondaryBurnSkillRBurnVisuals = (
+    now: number,
+    expiredTargetIds: Set<string>
+  ) => {
+    activeSkillRBurns.forEach((entry, targetId) => {
+      if (expiredTargetIds.has(targetId)) return;
+      if (!entry.targetObject.parent) {
+        expiredTargetIds.add(targetId);
         return;
       }
 
@@ -5561,37 +5933,71 @@ export const createRuntime: CharacterRuntimeFactory = ({
         entry.fxRoot.removeFromParent();
         targetAnchorObject.add(entry.fxRoot);
       }
-      const hasRenderableBounds = resolveSkillRBurnBounds({
-        targetObject: entry.targetObject,
-        bounds: skillRBurnBounds,
-        meshBounds: skillRBurnMeshBounds,
-      });
-      if (!hasRenderableBounds || skillRBurnBounds.isEmpty()) {
-        skillRBurnTargetSize.set(1, 1.8, 1);
-        const anchorLift = THREE.MathUtils.clamp(
-          skillRBurnTargetSize.y * secondaryBurnSkillRBurnAnchorLiftRatio,
-          secondaryBurnSkillRBurnAnchorLiftMin,
-          secondaryBurnSkillRBurnAnchorLiftMax
-        );
-        skillRBurnTargetLocalCenter.set(
-          0,
-          skillRBurnTargetSize.y + anchorLift,
-          0
-        );
+
+      if (hasAimOriginWorld) {
+        targetAnchorObject.getWorldPosition(skillRBurnTargetWorldCenter);
+        entry.cachedDistanceSq =
+          latestAimOriginWorld.distanceToSquared(skillRBurnTargetWorldCenter);
       } else {
-        skillRBurnBounds.getCenter(skillRBurnTargetWorldCenter);
-        skillRBurnBounds.getSize(skillRBurnTargetSize);
-        const anchorLift = THREE.MathUtils.clamp(
-          skillRBurnTargetSize.y * secondaryBurnSkillRBurnAnchorLiftRatio,
-          secondaryBurnSkillRBurnAnchorLiftMin,
-          secondaryBurnSkillRBurnAnchorLiftMax
-        );
-        skillRBurnTargetWorldCenter.y =
-          skillRBurnBounds.max.y + anchorLift;
-        skillRBurnTargetLocalCenter.copy(skillRBurnTargetWorldCenter);
-        targetAnchorObject.worldToLocal(skillRBurnTargetLocalCenter);
+        entry.cachedDistanceSq = 0;
+      }
+      const distanceQuality = resolveFxQualityByDistance(entry.cachedDistanceSq);
+      const visualQuality = combineFxQuality(distanceQuality, flareFxCombatQuality);
+      const boundsUpdateIntervalMs = getFxBoundsUpdateIntervalMs(visualQuality);
+      const visualUpdateIntervalMs = getFxVisualUpdateIntervalMs(visualQuality);
+      const visualStride = visualQuality === "high" ? 1 : visualQuality === "medium" ? 2 : 3;
+      const particleStride = visualQuality === "high" ? 1 : visualQuality === "medium" ? 2 : 3;
+
+      if (
+        visualStride > 1 &&
+        runtimeFrameStamp % visualStride !== entry.visualFrameOffset % visualStride
+      ) {
+        return;
+      }
+      if (
+        Number.isFinite(entry.lastVisualUpdateAt) &&
+        now - entry.lastVisualUpdateAt < visualUpdateIntervalMs
+      ) {
+        return;
+      }
+      entry.lastVisualUpdateAt = now;
+
+      if (
+        !entry.cachedHasRenderableBounds ||
+        now - entry.lastBoundsResolvedAt >= boundsUpdateIntervalMs
+      ) {
+        const hasRenderableBounds = resolveSkillRBurnBounds({
+          targetObject: entry.targetObject,
+          bounds: skillRBurnBounds,
+          meshBounds: skillRBurnMeshBounds,
+        });
+        entry.lastBoundsResolvedAt = now;
+        if (!hasRenderableBounds || skillRBurnBounds.isEmpty()) {
+          entry.cachedHasRenderableBounds = false;
+          entry.cachedTargetSize.set(1, 1.8, 1);
+          const anchorLift = THREE.MathUtils.clamp(
+            entry.cachedTargetSize.y * secondaryBurnSkillRBurnAnchorLiftRatio,
+            secondaryBurnSkillRBurnAnchorLiftMin,
+            secondaryBurnSkillRBurnAnchorLiftMax
+          );
+          entry.cachedTargetLocalCenter.set(0, entry.cachedTargetSize.y + anchorLift, 0);
+        } else {
+          entry.cachedHasRenderableBounds = true;
+          skillRBurnBounds.getCenter(skillRBurnTargetWorldCenter);
+          skillRBurnBounds.getSize(entry.cachedTargetSize);
+          const anchorLift = THREE.MathUtils.clamp(
+            entry.cachedTargetSize.y * secondaryBurnSkillRBurnAnchorLiftRatio,
+            secondaryBurnSkillRBurnAnchorLiftMin,
+            secondaryBurnSkillRBurnAnchorLiftMax
+          );
+          skillRBurnTargetWorldCenter.y = skillRBurnBounds.max.y + anchorLift;
+          entry.cachedTargetLocalCenter.copy(skillRBurnTargetWorldCenter);
+          targetAnchorObject.worldToLocal(entry.cachedTargetLocalCenter);
+        }
       }
 
+      skillRBurnTargetSize.copy(entry.cachedTargetSize);
+      skillRBurnTargetLocalCenter.copy(entry.cachedTargetLocalCenter);
       const bodyHeight = Math.max(0.9, Math.min(3.2, skillRBurnTargetSize.y));
       const bodyRadius = Math.max(
         0.22,
@@ -5642,7 +6048,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         1 +
         Math.sin(t * 17.6 * stagePulseSpeed) * (0.12 + stageBoost * 0.1) +
         Math.cos(t * 12.3 * stagePulseSpeed) * (0.04 + stageBoost * 0.06);
-      const headVisibility = 0;
+      const headVisibility = visualQuality === "high" ? 0.12 * visibility : 0;
       const bodyScaleBoost = 1 + stageBoost * 0.42;
       const headHeight = bodyHeight * 0.84;
 
@@ -5715,8 +6121,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
       entry.headInnerFlame.rotation.z = Math.sin(t * 9.4) * 0.16;
       entry.headInnerMaterial.opacity = headVisibility * (0.66 + blaze * 0.24);
 
+      const tongueStride = visualQuality === "high" ? 1 : 2;
       for (let i = 0; i < entry.tongues.length; i += 1) {
         const tongue = entry.tongues[i];
+        const shouldUpdate = i % tongueStride === 0;
+        tongue.mesh.visible = shouldUpdate;
+        if (!shouldUpdate) {
+          tongue.material.opacity = 0;
+          continue;
+        }
         const spin = t * tongue.orbitSpeed * stagePulseSpeed + tongue.phase;
         tongue.mesh.position.set(
           Math.cos(spin) * bodyRadius * tongue.orbitRadius,
@@ -5739,9 +6152,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
       for (let i = 0; i < entry.embers.length; i += 1) {
         const ember = entry.embers[i];
+        const shouldUpdate = i % particleStride === 0;
+        ember.mesh.visible = shouldUpdate;
+        if (!shouldUpdate) {
+          ember.material.opacity = 0;
+          continue;
+        }
         const spin = t * ember.speed * stagePulseSpeed + ember.phase;
         const risePhase = THREE.MathUtils.euclideanModulo(spin * 0.32, 1);
-        ember.mesh.visible = true;
         skillRBurnParticlePosition.set(
           Math.cos(spin) * bodyRadius * ember.radius,
           risePhase * bodyHeight * ember.lift * (1 + stageBoost * 0.24),
@@ -5762,9 +6180,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
       for (let i = 0; i < entry.sparks.length; i += 1) {
         const spark = entry.sparks[i];
+        const shouldUpdate = i % particleStride === 0;
+        spark.mesh.visible = shouldUpdate;
+        if (!shouldUpdate) {
+          spark.material.opacity = 0;
+          continue;
+        }
         const spin = t * spark.orbitSpeed * stagePulseSpeed + spark.phase;
         const risePhase = THREE.MathUtils.euclideanModulo(spin * 0.42, 1);
-        spark.mesh.visible = true;
         spark.mesh.position.set(
           Math.cos(spin) * bodyRadius * spark.orbitRadius,
           bodyHeight * (0.08 + risePhase * spark.lift * (1 + stageBoost * 0.22)),
@@ -5785,9 +6208,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
       for (let i = 0; i < entry.headSparks.length; i += 1) {
         const spark = entry.headSparks[i];
+        spark.mesh.visible = false;
+        spark.material.opacity = 0;
+        if (visualQuality !== "high") {
+          continue;
+        }
+        const shouldUpdate = i % 2 === 0;
+        spark.mesh.visible = shouldUpdate;
+        if (!shouldUpdate) {
+          continue;
+        }
         const spin = t * spark.orbitSpeed + spark.phase;
         const risePhase = THREE.MathUtils.euclideanModulo(spin * 0.34, 1);
-        spark.mesh.visible = headVisibility > 0.001;
         spark.mesh.position.set(
           Math.cos(spin) * bodyRadius * spark.orbitRadius * (0.8 + stageBoost * 0.24),
           headHeight + risePhase * (0.24 + spark.lift * 0.2),
@@ -5799,10 +6231,16 @@ export const createRuntime: CharacterRuntimeFactory = ({
           headVisibility * (1 - risePhase * 0.58) * (0.34 + blaze * 0.28);
       }
     });
+  };
 
-    for (let i = 0; i < expiredTargetIds.length; i += 1) {
-      clearSkillRBurn(expiredTargetIds[i]);
-    }
+  const updateSecondaryBurnSkillRBurns = (now: number) => {
+    if (!activeSkillRBurns.size) return;
+    const expiredTargetIds = new Set<string>();
+    updateSecondaryBurnSkillRBurnDamage(now, expiredTargetIds);
+    updateSecondaryBurnSkillRBurnVisuals(now, expiredTargetIds);
+    expiredTargetIds.forEach((targetId) => {
+      clearSkillRBurn(targetId);
+    });
   };
 
   const updateSecondaryBurnSkillRBurnExplosionFx = (now: number) => {
@@ -5819,9 +6257,36 @@ export const createRuntime: CharacterRuntimeFactory = ({
         continue;
       }
 
+      if (hasAimOriginWorld) {
+        entry.root.getWorldPosition(skillRBurnExplosionCenter);
+      } else {
+        skillRBurnExplosionCenter.copy(entry.root.position);
+      }
+      const distanceSq = hasAimOriginWorld
+        ? latestAimOriginWorld.distanceToSquared(skillRBurnExplosionCenter)
+        : 0;
+      const distanceQuality = resolveFxQualityByDistance(distanceSq);
+      const visualQuality = combineFxQuality(distanceQuality, flareFxCombatQuality);
+      const visualStride = visualQuality === "high" ? 1 : visualQuality === "medium" ? 2 : 3;
+      if (
+        visualStride > 1 &&
+        runtimeFrameStamp % visualStride !== entry.visualFrameOffset % visualStride
+      ) {
+        continue;
+      }
+      const visualIntervalMs = getFxVisualUpdateIntervalMs(visualQuality);
+      if (
+        Number.isFinite(entry.lastVisualUpdateAt) &&
+        now - entry.lastVisualUpdateAt < visualIntervalMs
+      ) {
+        continue;
+      }
+      entry.lastVisualUpdateAt = now;
+
       const t = now * 0.001;
       const burst = Math.sin(progress * Math.PI);
       const fade = 1 - progress;
+      const particleStride = visualQuality === "high" ? 1 : visualQuality === "medium" ? 2 : 3;
 
       entry.glow.scale.setScalar(1.6 + burst * 4.4);
       entry.glow.scale.y = 0.9 + burst * 2.6;
@@ -5835,6 +6300,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
       for (let j = 0; j < entry.flames.length; j += 1) {
         const flame = entry.flames[j];
+        const shouldUpdate = j % particleStride === 0;
+        flame.mesh.visible = shouldUpdate;
+        if (!shouldUpdate) {
+          flame.material.opacity = 0;
+          continue;
+        }
         const spin = t * flame.orbitSpeed + flame.phase;
         flame.mesh.position.set(
           Math.cos(spin) * flame.orbitRadius * burst,
@@ -5852,9 +6323,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
       for (let j = 0; j < entry.embers.length; j += 1) {
         const ember = entry.embers[j];
+        const shouldUpdate = j % particleStride === 0;
+        ember.mesh.visible = shouldUpdate;
+        if (!shouldUpdate) {
+          ember.material.opacity = 0;
+          continue;
+        }
         const spin = t * ember.speed + ember.phase;
         const risePhase = THREE.MathUtils.euclideanModulo(progress * 1.6 + j * 0.018, 1);
-        ember.mesh.visible = true;
         ember.mesh.position.set(
           Math.cos(spin) * ember.radius * burst * (1.1 + risePhase * 0.6),
           risePhase * ember.lift * (1.2 + burst * 0.8),
@@ -5866,9 +6342,14 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
       for (let j = 0; j < entry.sparks.length; j += 1) {
         const spark = entry.sparks[j];
+        const shouldUpdate = j % particleStride === 0;
+        spark.mesh.visible = shouldUpdate;
+        if (!shouldUpdate) {
+          spark.material.opacity = 0;
+          continue;
+        }
         const spin = t * spark.orbitSpeed + spark.phase;
         const risePhase = THREE.MathUtils.euclideanModulo(progress * 1.9 + j * 0.024, 1);
-        spark.mesh.visible = true;
         spark.mesh.position.set(
           Math.cos(spin) * spark.orbitRadius * burst * (1 + risePhase * 0.8),
           0.08 + risePhase * spark.lift * (1.4 + burst),
@@ -5888,7 +6369,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         target
       )
     ) {
-      avatar.updateMatrixWorld(true);
+      ensureAvatarMatrixWorld();
       avatar.getWorldPosition(target);
       target.y += 1.3;
     }
@@ -6317,7 +6798,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     );
 
     if (boundWeapon) {
-      boundWeapon.updateMatrixWorld(true);
+      ensureBoundWeaponMatrixWorld();
       boundWeapon.getWorldPosition(currentWeaponWorldPosition);
 
       if (!skillEState.hasWeaponSample) {
@@ -6511,7 +6992,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       : 1;
     burningModeHeadFxRoot.visible = headVisibility > 0.001;
     burningModeHeadLight.visible = headVisibility > 0.001;
-    avatar.updateMatrixWorld(true);
+    ensureAvatarMatrixWorld();
     burningModeHeadFxAnchor.updateMatrixWorld(true);
     burningModePreludeWorldTarget.set(0, 0, 0);
     burningModeHeadFxAnchor.localToWorld(burningModePreludeWorldTarget);
@@ -6559,6 +7040,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
     const preludeAuraVisible =
       effectivePreludeVisibility > 0.001 && !suppressCameraFrontParticles;
+    const particleFrameSlice = runtimeFrameStamp & 1;
     burningModePreludeAuraSparkInstances.visible = preludeAuraVisible;
     burningModePreludeAuraEmberInstances.visible = preludeAuraVisible;
     burningModePreludeAuraSparkMaterial.opacity = preludeAuraVisible
@@ -6570,6 +7052,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     if (preludeAuraVisible && shouldUpdatePreludeAuraParticles) {
       for (let i = 0; i < burningModePreludeAuraSparks.length; i += 1) {
+        if ((i & 1) !== particleFrameSlice) continue;
         const spark = burningModePreludeAuraSparks[i];
         const spin = t * (spark.speed * 0.84) + spark.phase;
         const risePhase = (t * (0.58 + i * 0.016) + spark.phase * 0.42) % 1;
@@ -6621,6 +7104,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       burningModePreludeAuraSparkInstances.instanceMatrix.needsUpdate = true;
 
       for (let i = 0; i < burningModePreludeAuraEmbers.length; i += 1) {
+        if ((i & 1) !== particleFrameSlice) continue;
         const ember = burningModePreludeAuraEmbers[i];
         const orbitPhase = t * (ember.speed * 0.7) + ember.phase;
         const risePhase = (t * (0.34 + i * 0.01) + ember.phase * 0.28) % 1;
@@ -6979,6 +7463,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         spark.material.opacity = 0;
         continue;
       }
+      if ((i & 1) !== particleFrameSlice) continue;
       const orbitPhase = t * (spark.speed * 1.18) + spark.phase;
       const risePhase = (t * (0.54 + i * 0.05) + spark.phase * 0.5) % 1;
       const shimmer = 0.58 + 0.42 * Math.sin(t * (8.1 + i) + spark.phase * 2);
@@ -7009,6 +7494,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         ember.material.opacity = 0;
         continue;
       }
+      if ((i & 1) !== particleFrameSlice) continue;
       const orbitPhase = t * (ember.speed * 1.12) + ember.phase;
       const risePhase = (t * (0.62 + i * 0.024) + ember.phase * 0.35) % 1;
       const crackle = 0.62 + 0.38 * Math.sin(t * (11.4 + i * 0.22) + ember.phase * 2.4);
@@ -7030,6 +7516,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         smoke.material.opacity = 0;
         continue;
       }
+      if ((i & 1) !== particleFrameSlice) continue;
       const driftPhase = t * (smoke.speed * 1.12) + smoke.phase;
       const risePhase = (t * (0.18 + i * 0.035) + smoke.phase * 0.3) % 1;
       smoke.mesh.visible = headVisibility > 0.001;
@@ -7094,6 +7581,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     const elapsed = Math.max(0, now - secondaryBurnState.activatedAt);
     const impactFade = 1 - THREE.MathUtils.clamp(elapsed / secondaryBurnImpactPulseMs, 0, 1);
     const t = now * 0.001;
+    const particleFrameSlice = runtimeFrameStamp & 1;
     const superBurnActive = superBurnState.active;
     const superSkillRActive = skillRState.active && skillRState.superFanMode;
     const sparkCountDivisor = superBurnActive ? 1 : superBurnSparkCountMultiplier;
@@ -7259,6 +7747,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
           particle.material.opacity = 0;
           continue;
         }
+        if ((i & 1) !== particleFrameSlice) continue;
         const driftPhase = t * particle.speed + particle.phase;
         const risePhase = (t * (0.9 + i * 0.08) + particle.phase * 0.3) % 1;
         const radiusScale = 0.54 + risePhase * 1.06;
@@ -7303,6 +7792,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
           spark.material.opacity = 0;
           continue;
         }
+        if ((i & 1) !== particleFrameSlice) continue;
         const spin = t * spark.speed + spark.phase;
         const risePhase = (t * (1.25 + i * 0.07) + spark.phase * 0.4) % 1;
         const burst = 0.72 + 0.28 * Math.sin(t * (13 + i) + spark.phase);
@@ -7381,6 +7871,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     for (let i = 0; i < secondaryBurnEmbers.length; i += 1) {
+      if ((i & 1) !== particleFrameSlice) continue;
       const ember = secondaryBurnEmbers[i];
       const orbitPhase = t * ember.speed + ember.phase;
       const risePhase = (t * (0.82 + i * 0.12) + ember.phase) % 1;
@@ -7407,6 +7898,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
         spark.material.opacity = 0;
         continue;
       }
+      if ((i & 1) !== particleFrameSlice) continue;
       const spin = t * spark.orbitSpeed + spark.phase;
       const pulse = (t * (1.9 + i * 0.08) + spark.phase * 0.5) % 1;
       const burst = 0.72 + 0.28 * Math.sin(t * (14 + i) + spark.phase);
@@ -7423,6 +7915,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     for (let i = 0; i < secondaryBurnSmokeWisps.length; i += 1) {
+      if ((i & 1) !== particleFrameSlice) continue;
       const smoke = secondaryBurnSmokeWisps[i];
       const orbitPhase = t * smoke.speed + smoke.phase;
       const risePhase = (t * (0.24 + i * 0.05) + smoke.phase * 0.3) % 1;
@@ -7602,15 +8095,17 @@ export const createRuntime: CharacterRuntimeFactory = ({
       Math.cos(t * 8.1) * 0.12 +
       landingBoost * 0.18 +
       (usingSkillQEPrelude ? 0.16 : 0);
+    const particleFrameSlice = runtimeFrameStamp & 1;
 
-    boundWeapon.updateMatrixWorld(true);
-    avatar.updateMatrixWorld(true);
+    ensureBoundWeaponMatrixWorld();
+    ensureAvatarMatrixWorld();
     secondaryBurnPreludeWorldTarget.copy(secondaryBurnFxAnchorLocal);
     boundWeapon.localToWorld(secondaryBurnPreludeWorldTarget);
     secondaryBurnPreludeAuraTargetLocal.copy(secondaryBurnPreludeWorldTarget);
     avatar.worldToLocal(secondaryBurnPreludeAuraTargetLocal);
 
     for (let i = 0; i < secondaryBurnPreludeEmbers.length; i += 1) {
+      if ((i & 1) !== particleFrameSlice) continue;
       const ember = secondaryBurnPreludeEmbers[i];
       const orbitPhase = t * ember.speed + ember.phase;
       const risePhase = (t * (0.92 + i * 0.08) + ember.phase * 0.35) % 1;
@@ -7646,6 +8141,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     }
 
     for (let i = 0; i < secondaryBurnPreludeSparks.length; i += 1) {
+      if ((i & 1) !== particleFrameSlice) continue;
       const spark = secondaryBurnPreludeSparks[i];
       const spin = t * spark.orbitSpeed + spark.phase;
       const risePhase = (t * (1.18 + i * 0.1) + spark.phase * 0.42) % 1;
@@ -7710,6 +8206,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     if (preludeAuraVisible && shouldUpdatePreludeAuraParticles) {
       for (let i = 0; i < secondaryBurnPreludeAuraEmbers.length; i += 1) {
+        if ((i & 1) !== particleFrameSlice) continue;
         const ember = secondaryBurnPreludeAuraEmbers[i];
         const orbitPhase = t * (ember.speed * 0.72) + ember.phase;
         const risePhase = (t * (0.32 + i * 0.012) + ember.phase * 0.24) % 1;
@@ -7756,6 +8253,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       secondaryBurnPreludeAuraEmberInstances.instanceMatrix.needsUpdate = true;
 
       for (let i = 0; i < secondaryBurnPreludeAuraSparks.length; i += 1) {
+        if ((i & 1) !== particleFrameSlice) continue;
         const spark = secondaryBurnPreludeAuraSparks[i];
         const spin = t * (spark.speed * 0.82) + spark.phase;
         const risePhase = (t * (0.54 + i * 0.02) + spark.phase * 0.34) % 1;
@@ -8122,8 +8620,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
     resetSkillRState();
     deactivateSecondaryBurn({ immediate: true });
     deactivateBurningMode();
-    clearAllSkillRBurns();
-    clearAllSkillRBurnExplosionFx();
+    clearAllSkillRBurns({ immediate: true });
+    clearAllSkillRBurnExplosionFx({ immediate: true });
+    pendingSkillRBurnReleaseQueue.length = 0;
+    pendingSkillRBurnExplosionReleaseQueue.length = 0;
+    pendingSkillRBurnExplosionSpawnQueue.length = 0;
+    skillRBurnHitVisualDebounceByTarget.clear();
     clearAllSuperBurnFlamePools();
     for (let i = 0; i < skillRProjectileVisuals.length; i += 1) {
       resetSkillRProjectileVisual(skillRProjectileVisuals[i]);
@@ -8133,11 +8635,45 @@ export const createRuntime: CharacterRuntimeFactory = ({
     lastAnimationUpdateAt = 0;
     lastBurningPreludeAuraUpdateAt = -Infinity;
     lastSecondaryPreludeAuraUpdateAt = -Infinity;
+    avatarMatrixFrameStamp = -1;
+    boundWeaponMatrixFrameStamp = -1;
+    lastRuntimeUpdateAt = 0;
+    lastRuntimeDeltaMs = 16;
+    flareFxCombatQuality = "high";
     baseRuntime.resetState?.();
   };
 
   const update = (args: CharacterRuntimeUpdate) => {
     runtimeFrameStamp += 1;
+    if (lastRuntimeUpdateAt > 0) {
+      lastRuntimeDeltaMs = Math.max(0, args.now - lastRuntimeUpdateAt);
+    } else {
+      lastRuntimeDeltaMs = 16;
+    }
+    lastRuntimeUpdateAt = args.now;
+
+    const fxLoadScore =
+      activeSkillRBurns.size * 1.2 +
+      activeSkillRBurnExplosions.length * 1.7 +
+      activeSuperBurnFlamePools.length * 1.6 +
+      (secondaryBurnState.active ? 1.4 : 0) +
+      (burningModeState.active ? 1.2 : 0) +
+      (skillRState.active ? 1 : 0);
+    if (
+      lastRuntimeDeltaMs >= flareFxDynamicQualityDeltaLowMs ||
+      fxLoadScore >= flareFxDynamicQualityLoadLow
+    ) {
+      flareFxCombatQuality = "low";
+    } else if (
+      lastRuntimeDeltaMs >= flareFxDynamicQualityDeltaMediumMs ||
+      fxLoadScore >= flareFxDynamicQualityLoadMedium
+    ) {
+      flareFxCombatQuality = "medium";
+    } else {
+      flareFxCombatQuality = "high";
+    }
+
+    processSkillRBurnFxQueues();
     bindModel(args.avatarModel);
     if (args.aimOriginWorld) {
       latestAimOriginWorld.copy(args.aimOriginWorld);
@@ -8177,6 +8713,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     updateSuperBurnFlamePools(args.now);
     updateSecondaryBurnSkillRBurns(args.now);
     updateSecondaryBurnSkillRBurnExplosionFx(args.now);
+    processSkillRBurnFxQueues();
   };
 
   const getSkillHudIndicators = () =>
@@ -8252,8 +8789,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     update,
     dispose: () => {
       clearAnimationBinding();
-      clearAllSkillRBurns();
-      clearAllSkillRBurnExplosionFx();
+      clearAllSkillRBurns({ immediate: true });
+      clearAllSkillRBurnExplosionFx({ immediate: true });
       disposeAllSuperBurnFlamePools();
       primaryHoldReflectBlocker.removeFromParent();
       superBurnSkillRFanFxRoot.removeFromParent();
@@ -8371,6 +8908,27 @@ export const createRuntime: CharacterRuntimeFactory = ({
       for (let i = 0; i < burningModeHeadSmokeWisps.length; i += 1) {
         burningModeHeadSmokeWisps[i].material.dispose();
       }
+      for (let i = 0; i < pendingSkillRBurnReleaseQueue.length; i += 1) {
+        const entry = pendingSkillRBurnReleaseQueue[i];
+        resetSkillRBurnEntry(entry);
+        inactiveSkillRBurns.push(entry);
+      }
+      pendingSkillRBurnReleaseQueue.length = 0;
+      for (let i = 0; i < pendingSkillRBurnExplosionReleaseQueue.length; i += 1) {
+        const entry = pendingSkillRBurnExplosionReleaseQueue[i];
+        releaseSkillRBurnExplosionFx(entry, { immediate: true });
+      }
+      pendingSkillRBurnExplosionReleaseQueue.length = 0;
+      pendingSkillRBurnExplosionSpawnQueue.length = 0;
+      for (let i = 0; i < inactiveSkillRBurns.length; i += 1) {
+        disposeSkillRBurnEntry(inactiveSkillRBurns[i]);
+      }
+      inactiveSkillRBurns.length = 0;
+      for (let i = 0; i < inactiveSkillRBurnExplosions.length; i += 1) {
+        disposeSkillRBurnExplosionEntry(inactiveSkillRBurnExplosions[i]);
+      }
+      inactiveSkillRBurnExplosions.length = 0;
+      skillRBurnHitVisualDebounceByTarget.clear();
       baseRuntime.dispose();
     },
     isFacingLocked: () =>

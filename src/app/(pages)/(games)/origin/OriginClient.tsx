@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getStoryChapterById, storyChapterList } from "./storyChapter";
-import type { StoryChapterUiState } from "./storyChapter/types";
+import { getStoryChapterById, storyChapterList } from "./storyChapter/general";
+import type { StoryChapterUiState } from "./storyChapter/general/types";
 import styles from "./origin.module.css";
 
 const FALLBACK_CHAPTER_ID = storyChapterList[0]?.id ?? "";

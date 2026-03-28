@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   StoryChapterComponentProps,
   StoryChapterDefinition,
-} from "../types";
+} from "../general/types";
 import originStyles from "../../origin.module.css";
 
 const chapter1Rules = {
@@ -1810,7 +1810,7 @@ function Chapter1RightPanel({ chapterUiState }: StoryChapterComponentProps) {
                         color: "rgba(125, 211, 252, 1)",
                       }}
                     >
-                      SHIFT
+                      WASD + SHIFT
                     </span>
                     <span
                       style={{
