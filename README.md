@@ -6,7 +6,7 @@ Internal project for ITC Frontendamentals
 
 | Role   | Name            |
 | ------ | --------------- |
-| Mentor | [Mentor Name]   |
+| Mentor | Reynaldi   |
 | Leader | Tan Wei Quan    |
 | Member | Agracia         |
 | Member | Janice          |
@@ -15,9 +15,7 @@ Internal project for ITC Frontendamentals
 
 ## 🎬 Presentation Materials
 
-The presentation slides outline (5-7 slides) can be found in the `/demo` folder:
 
-- [Presentation Slides Outline](./demo/PRESENTATION.md)
 
 ### Slides Content Breakdown:
 - **Slide 1:** Problem Statement & Project Overview
@@ -38,7 +36,3 @@ The presentation slides outline (5-7 slides) can be found in the `/demo` folder:
     ```
 3.  **Access Local Environment:**
     Open [http://localhost:3000](http://localhost:3000) in your browser.
-
----
-
-letsgo
