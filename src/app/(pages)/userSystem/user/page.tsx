@@ -12,7 +12,7 @@ type PanelProps = {
 function Panel({ children, className = "" }: PanelProps) {
   return (
     <div
-      className={`relative overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_0_28px_rgba(59,130,246,0.16)] backdrop-blur-md before:pointer-events-none before:absolute before:inset-[6px] before:rounded-[20px] before:border before:border-white/10 before:content-[''] ${className}`}
+      className={`relative overflow-hidden rounded-[clamp(20px,2vw,28px)] border border-white/10 bg-white/[0.04] p-[clamp(0.7rem,1.1vw,1.4rem)] shadow-[0_0_24px_rgba(59,130,246,0.14)] backdrop-blur-md before:pointer-events-none before:absolute before:inset-[clamp(4px,0.35vw,6px)] before:rounded-[clamp(14px,1.4vw,20px)] before:border before:border-white/10 before:content-[''] ${className}`}
     >
       {children}
     </div>
@@ -134,7 +134,7 @@ function MenuButton({ label, className = "", href, art }: MenuButtonProps) {
   const sharedClassName = `group relative isolate flex w-full items-start justify-start overflow-hidden rounded-[20px] border border-white/12 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.04),transparent_28%),linear-gradient(145deg,rgba(15,23,42,0.98)_0%,rgba(24,35,58,0.94)_54%,rgba(15,23,42,0.98)_100%)] px-4 py-4 text-slate-100 shadow-[0_10px_28px_rgba(15,23,42,0.3)] transition duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:shadow-[0_16px_34px_rgba(15,23,42,0.42)] ${className}`;
   const labelNode = (
     <span
-      className={`pointer-events-none absolute left-3 top-3 z-40 block origin-top-left text-left text-[clamp(1.45rem,1.95vw,2.35rem)] font-thin uppercase leading-[0.9] tracking-[0.2em] text-slate-50 drop-shadow-[0_1px_10px_rgba(2,6,23,0.9)] [text-wrap:balance] [transform:scaleX(0.84)] ${
+      className={`pointer-events-none absolute left-3 top-3 z-40 block origin-top-left text-left text-[clamp(1.1rem,1.65vw,2.1rem)] font-thin uppercase leading-[0.9] tracking-[0.2em] text-slate-50 drop-shadow-[0_1px_10px_rgba(2,6,23,0.9)] [text-wrap:balance] [transform:scaleX(0.84)] ${
         art ? "max-w-[50%]" : "max-w-[78%]"
       }`}
     >
@@ -277,7 +277,7 @@ export default async function UserPage() {
   }
 
   const stageWidth =
-    "min(calc(100vw - 1.5rem), calc((100dvh - 1.5rem) * 16 / 9), 1920px)";
+    "min(calc(100vw - 2rem), calc((100dvh - 4.5rem) * 16 / 9), 1760px)";
   const stageHeight = `calc(${stageWidth} * 9 / 16)`;
 
   return (
@@ -287,11 +287,11 @@ export default async function UserPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.4),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.62)_48%,rgba(2,6,23,0.86)_68%,rgba(2,6,23,0.95)_100%)]" />
 
-      <div className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center p-3">
+      <div className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center p-[clamp(0.6rem,1.2vw,1rem)]">
         <div style={{ width: stageWidth, height: stageHeight }} className="relative">
-          <div className="h-full w-full rounded-[36px] border border-white/10 bg-white/[0.03] px-[clamp(1rem,2.1vw,3.5rem)] py-[clamp(1rem,2.8dvh,3rem)] shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
-            <div className="grid h-full min-h-0 gap-[clamp(0.75rem,1.3vw,1.5rem)] grid-cols-[1fr_1.5fr_1fr] grid-rows-[clamp(280px,30%,320px)_minmax(0,1fr)]">
-            <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
+          <div className="h-full w-full rounded-[clamp(24px,2.4vw,36px)] border border-white/10 bg-white/[0.03] px-[clamp(0.8rem,1.8vw,3.2rem)] py-[clamp(0.8rem,2.2dvh,2.6rem)] shadow-[0_0_44px_rgba(59,130,246,0.16)] backdrop-blur-md">
+            <div className="grid h-full min-h-0 gap-[clamp(0.5rem,1vw,1.2rem)] grid-cols-[1fr_1.5fr_1fr] grid-rows-[minmax(180px,0.72fr)_minmax(0,1.28fr)]">
+            <Panel className="grid h-full min-h-0 grid-rows-3 gap-[clamp(0.5rem,0.9vw,1.1rem)]">
               <div className="relative flex h-full min-h-0 items-center justify-center">
                 <div className="absolute left-0 top-1/2 z-10 -translate-y-1/2">
                   <EmailLauncher
@@ -299,15 +299,15 @@ export default async function UserPage() {
                     initialHasUnreadEmail={hasUnreadEmail}
                   />
                 </div>
-                <span className="flex min-w-0 items-center justify-center gap-3 px-20 text-base text-slate-200/90">
+                <span className="flex min-w-0 items-center justify-center gap-3 px-[clamp(3rem,5vw,5rem)] text-base text-slate-200/90">
                   <span className="h-2.5 w-2.5 rounded-full bg-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.7)]" />
-                  <span className="inline-flex items-center text-center text-2xl font-semibold tracking-wide md:text-3xl">
+                  <span className="inline-flex items-center text-center text-[clamp(1.25rem,2.15vw,1.9rem)] font-semibold tracking-wide">
                     {username}
                     {isAuthorised ? (
-                      <span className="ml-2.5 inline-flex h-8 w-8 items-center justify-center">
+                      <span className="ml-2.5 inline-flex h-[clamp(1.5rem,2vw,2rem)] w-[clamp(1.5rem,2vw,2rem)] items-center justify-center">
                         <svg
                           viewBox="0 0 24 24"
-                          className="h-8 w-8 drop-shadow-[0_0_10px_rgba(251,191,36,0.95)]"
+                          className="h-full w-full drop-shadow-[0_0_10px_rgba(251,191,36,0.95)]"
                           aria-label="Authorised"
                           role="img"
                         >
@@ -327,7 +327,7 @@ export default async function UserPage() {
 
               <a
                 href="/userSystem/userProfile"
-                className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-orange-500/85 to-pink-500/80 px-4 py-2 text-xl font-semibold tracking-[0.06em] text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition duration-200 hover:brightness-105 md:text-2xl"
+                className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-orange-500/85 to-pink-500/80 px-4 py-2 text-[clamp(1rem,1.7vw,1.45rem)] font-semibold tracking-[0.06em] text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition duration-200 hover:brightness-105"
               >
                 View my profile
                 <span className="pointer-events-none absolute inset-[5px] rounded-[14px] border border-white/20" />
@@ -336,7 +336,7 @@ export default async function UserPage() {
               <form action="/api/logout" method="post" className="h-full w-full">
                 <button
                   type="submit"
-                  className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-sky-500/85 to-cyan-400/85 px-4 py-2 text-xl font-semibold tracking-[0.06em] text-white shadow-[0_10px_30px_rgba(14,165,233,0.28)] transition duration-200 hover:brightness-105 md:text-2xl"
+                  className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-sky-500/85 to-cyan-400/85 px-4 py-2 text-[clamp(1rem,1.7vw,1.45rem)] font-semibold tracking-[0.06em] text-white shadow-[0_10px_30px_rgba(14,165,233,0.28)] transition duration-200 hover:brightness-105"
                 >
                   Log out
                   <span className="pointer-events-none absolute inset-[5px] rounded-[14px] border border-white/20" />
@@ -344,22 +344,22 @@ export default async function UserPage() {
               </form>
             </Panel>
 
-            <Panel className="flex h-full items-center justify-between gap-10 px-10 py-8">
-              <div className="h-14 w-14 rounded-full border border-white/20 bg-white/10 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
-              <div className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-center text-6xl font-semibold italic tracking-[0.16em] text-transparent md:text-7xl">
+            <Panel className="flex h-full items-center justify-between gap-[clamp(0.8rem,2vw,2.5rem)] px-[clamp(0.8rem,2vw,2.5rem)] py-[clamp(0.7rem,1.8dvh,1.9rem)]">
+              <div className="h-[clamp(2.2rem,3vw,3.5rem)] w-[clamp(2.2rem,3vw,3.5rem)] rounded-full border border-white/20 bg-white/10 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
+              <div className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-center text-[clamp(2.4rem,4.5vw,4.8rem)] font-semibold italic tracking-[0.16em] text-transparent">
                 Strike!
               </div>
-              <div className="h-14 w-14 rounded-full border border-white/20 bg-white/10 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
+              <div className="h-[clamp(2.2rem,3vw,3.5rem)] w-[clamp(2.2rem,3vw,3.5rem)] rounded-full border border-white/20 bg-white/10 shadow-[0_0_18px_rgba(120,180,255,0.24)]" />
             </Panel>
 
-            <Panel className="grid h-full min-h-0 grid-rows-4 gap-6 col-start-3 row-span-2 row-start-1">
+            <Panel className="grid h-full min-h-0 grid-rows-4 gap-[clamp(0.5rem,0.9vw,1.1rem)] col-start-3 row-span-2 row-start-1">
               <MenuButton label="Snack Gacha" art="snack" className="h-full" href="/gacha" />
               <MenuButton label="Character" art="character" className="h-full" href="/characterManagement" />
               <MenuButton label="Storage" art="storage" className="h-full" href="/storage" />
               <MenuButton label="Community" art="community" className="h-full" href="/community" />
             </Panel>
 
-            <Panel className="grid h-full min-h-0 grid-rows-3 gap-6">
+            <Panel className="grid h-full min-h-0 grid-rows-3 gap-[clamp(0.5rem,0.9vw,1.1rem)]">
               <MenuButton
                 label="Mochi Soldier Surge"
                 art="surge"
@@ -370,7 +370,7 @@ export default async function UserPage() {
               <MenuButton label="? ? ?" art="lab" className="h-full" href="/madacombat" />
             </Panel>
 
-            <Panel className="grid h-full min-h-0 grid-rows-2 gap-6">
+            <Panel className="grid h-full min-h-0 grid-rows-2 gap-[clamp(0.5rem,0.9vw,1.1rem)]">
               <MenuButton label="Origin" art="origin" className="h-full" href="/origin"/>
               <MenuButton label="Star Shop" art="starshop" className="h-full" href="/starshop" />
             </Panel>

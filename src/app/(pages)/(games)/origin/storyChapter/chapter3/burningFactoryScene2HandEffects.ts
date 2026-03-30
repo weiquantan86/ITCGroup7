@@ -14,12 +14,8 @@ type AgmaRingSeed = {
 type MadaOrbSeed = {
   mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
   phase: number;
-  cycleSpeed: number;
-  orbitSpeed: number;
-  startRadius: number;
-  heightOffset: number;
-  spiralTurns: number;
-  direction: number;
+  polarOffset: number;
+  radius: number;
   baseScale: number;
 };
 
@@ -38,11 +34,10 @@ const SCENE2_MADA_ORB_COUNT = 170;
 const SCENE2_AGMA_FORWARD_OFFSET = 0;
 const SCENE2_MADA_FORWARD_OFFSET = 0;
 const SCENE2_HAND_UP_OFFSET = 0;
-const MADA_SPIRAL_MIN_RADIUS = 0.02;
-const MADA_SPIRAL_TURNS = 3.2;
-const MADA_SPIRAL_FORWARD_START = -0.18;
-const MADA_SPIRAL_FORWARD_END = 0.16;
-const MADA_SPIRAL_HEIGHT_SWAY = 0.03;
+const MADA_SPHERE_SPIRAL_SPIN_SPEED = 1.95;
+const MADA_SPHERE_SPIRAL_PITCH = 1.42;
+const MADA_SPHERE_SPIRAL_CORE_FORWARD = 0.05;
+const MADA_SPHERE_SPIRAL_CORE_UP = 0.02;
 const SCENE2_EFFECT_FORWARD_AXIS = new THREE.Vector3(0, 0, 1);
 const SCENE2_EFFECT_UP_AXIS = new THREE.Vector3(0, 1, 0);
 const RESOLVE_BONE_INTERVAL_MS = 300;
@@ -203,13 +198,9 @@ export const createChapter3BurningFactoryScene2HandEffects = (scene: THREE.Scene
     madaOrbVfxGroup.add(mesh);
     madaOrbs.push({
       mesh,
-      phase: seededRandom(3200 + i),
-      cycleSpeed: 0.7 + seededRandom(3300 + i) * 1.45,
-      orbitSpeed: 2.5 + seededRandom(3400 + i) * 5.4,
-      startRadius: 1.05 + seededRandom(3500 + i) * 2.6,
-      heightOffset: (seededRandom(3600 + i) - 0.5) * 0.52,
-      spiralTurns: 1.2 + seededRandom(3700 + i) * 2.8,
-      direction: i % 2 === 0 ? 1 : -1,
+      phase: seededRandom(3200 + i) * Math.PI * 2,
+      polarOffset: (seededRandom(3300 + i) - 0.5) * Math.PI * 0.96,
+      radius: 1.05 + seededRandom(3500 + i) * 2.6,
       baseScale: 0.36 + seededRandom(3800 + i) * 0.54,
     });
   }
@@ -326,53 +317,28 @@ export const createChapter3BurningFactoryScene2HandEffects = (scene: THREE.Scene
           madaHandEffectForward
         );
         madaOrbVfxGroup.quaternion.copy(handEffectAlignQuaternion);
-        madaOrbDarkMaterial.opacity = THREE.MathUtils.clamp(
-          0.76 + Math.sin(t * 3.2) * 0.14,
-          0.56,
-          0.95
-        );
-        madaOrbRedMaterial.opacity = THREE.MathUtils.clamp(
-          0.86 + Math.sin(t * 6.8 + 0.8) * 0.16,
-          0.66,
-          0.99
-        );
-        madaOrbRedMaterial.emissiveIntensity = 1.9 + Math.sin(t * 5.9) * 0.53;
+        madaOrbDarkMaterial.opacity = 0.9;
+        madaOrbRedMaterial.opacity = 0.96;
+        madaOrbRedMaterial.emissiveIntensity = 2.1;
 
         for (let i = 0; i < madaOrbs.length; i += 1) {
           const orb = madaOrbs[i];
-          const cycle = ((t * orb.cycleSpeed + orb.phase) % 1 + 1) % 1;
-          const gatherProgress = Math.pow(
-            THREE.MathUtils.smoothstep(cycle, 0, 1),
-            0.64
-          );
-          const inward = Math.pow(gatherProgress, 1.22);
-          const angle =
-            orb.phase * Math.PI * 2 +
-            t * orb.orbitSpeed * orb.direction +
-            inward *
-              (orb.spiralTurns + MADA_SPIRAL_TURNS) *
-              Math.PI *
-              2 *
-              orb.direction;
-          const radius = THREE.MathUtils.lerp(
-            orb.startRadius,
-            MADA_SPIRAL_MIN_RADIUS,
-            inward
-          );
-          const height = THREE.MathUtils.lerp(orb.heightOffset, 0.01, inward);
-          const forward = THREE.MathUtils.lerp(
-            MADA_SPIRAL_FORWARD_START,
-            MADA_SPIRAL_FORWARD_END,
-            inward
-          );
+          const theta = orb.phase + t * MADA_SPHERE_SPIRAL_SPIN_SPEED;
+          const phi = orb.polarOffset + theta * MADA_SPHERE_SPIRAL_PITCH;
+          const sinPhi = Math.sin(phi);
+          const cosPhi = Math.cos(phi);
+          const cosTheta = Math.cos(theta);
+          const sinTheta = Math.sin(theta);
+          const side = orb.radius * sinPhi * cosTheta;
+          const up = orb.radius * cosPhi + MADA_SPHERE_SPIRAL_CORE_UP;
+          const forward =
+            orb.radius * sinPhi * sinTheta + MADA_SPHERE_SPIRAL_CORE_FORWARD;
           orb.mesh.position.set(
-            Math.cos(angle) * radius,
-            height + Math.sin(t * 5.1 + orb.phase * 10) * MADA_SPIRAL_HEIGHT_SWAY,
-            forward + Math.sin(angle * 1.35) * radius * 0.2
+            side,
+            up,
+            forward
           );
-          orb.mesh.scale.setScalar(
-            THREE.MathUtils.lerp(orb.baseScale, 0.08, inward)
-          );
+          orb.mesh.scale.setScalar(orb.baseScale);
         }
       } else {
         madaOrbVfxGroup.visible = false;
