@@ -25,6 +25,7 @@ export default function SceneLauncher({
   hideLocalHead = true,
   hideLocalBody = false,
   showMiniMap = true,
+  showHud = true,
   infiniteFire = false,
   onSceneStateChange,
   onPlayerStateChange,
@@ -46,6 +47,7 @@ export default function SceneLauncher({
   hideLocalHead?: boolean;
   hideLocalBody?: boolean;
   showMiniMap?: boolean;
+  showHud?: boolean;
   infiniteFire?: boolean;
   onSceneStateChange?: (state: SceneUiState) => void;
   onPlayerStateChange?: (state: PlayerUiState) => void;
@@ -164,6 +166,7 @@ export default function SceneLauncher({
           hideLocalHead,
           hideLocalBody,
           showMiniMap,
+          showHud,
           infiniteFire,
           onUiStateChange: onPlayerStateChange,
         });
@@ -219,6 +222,7 @@ export default function SceneLauncher({
     hideLocalHead,
     hideLocalBody,
     showMiniMap,
+    showHud,
     infiniteFire,
     onSceneStateChange,
     onPlayerStateChange,

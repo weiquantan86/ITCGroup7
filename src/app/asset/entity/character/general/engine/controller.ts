@@ -57,6 +57,7 @@ export const createPlayer = ({
   hideLocalHead = true,
   hideLocalBody = false,
   showMiniMap = true,
+  showHud = true,
   infiniteFire = false,
   onUiStateChange,
 }: {
@@ -71,6 +72,7 @@ export const createPlayer = ({
   hideLocalHead?: boolean;
   hideLocalBody?: boolean;
   showMiniMap?: boolean;
+  showHud?: boolean;
   infiniteFire?: boolean;
   onUiStateChange?: (state: PlayerUiState) => void;
 }): PlayerController => {
@@ -342,7 +344,9 @@ export const createPlayer = ({
   let characterEntry = getCharacterEntry(characterPath || defaultCharacterPath);
   let characterRuntime: CharacterRuntime | null = null;
 
-  const statusHud = createStatusHud(mount, { showMiniMap });
+  const statusHud = createStatusHud(showHud ? mount : undefined, {
+    showMiniMap,
+  });
   const statsState = createPlayerStatsState({
     profile: characterEntry.profile,
     infiniteFire,
