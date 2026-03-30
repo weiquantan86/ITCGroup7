@@ -815,6 +815,7 @@ export default function MochiGeneralBattleClient({
     hasStarted && surgeState.gameEnded && endTransitionPhase === "showingResult";
   const shouldRenderBattleSection =
     hasStarted && (!surgeState.gameEnded || endTransitionPhase !== "showingResult");
+  const shouldLockViewport = !hasStarted || shouldRenderBattleSection;
 
   useEffect(() => {
     rewardAnimationTimersRef.current.forEach((timer) => {
@@ -964,13 +965,23 @@ export default function MochiGeneralBattleClient({
   });
 
   return (
-    <main className="relative h-[100dvh] w-full overflow-hidden bg-[#05070d] text-slate-100">
+    <main
+      className={`relative w-full bg-[#05070d] text-slate-100 ${
+        shouldLockViewport
+          ? "h-[100dvh] overflow-hidden"
+          : "min-h-screen overflow-x-hidden overflow-y-auto"
+      }`}
+    >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[length:38px_38px]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_25%,rgba(251,146,60,0.46),transparent_44%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.4),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.62)_48%,rgba(2,6,23,0.86)_68%,rgba(2,6,23,0.95)_100%)]" />
 
-      <div className="relative mx-auto flex h-full min-h-0 w-full max-w-none flex-col justify-start px-3 pb-2 pt-2 md:px-4">
+      <div
+        className={`relative mx-auto flex w-full max-w-none flex-col justify-start px-3 pb-2 pt-2 md:px-4 ${
+          shouldLockViewport ? "h-full min-h-0" : "min-h-screen"
+        }`}
+      >
         <section className="w-full rounded-[32px] border border-white/10 bg-white/[0.04] p-4 text-center shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
           <h1 className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-3xl font-bold text-transparent md:text-4xl">
             Mochi General Battle

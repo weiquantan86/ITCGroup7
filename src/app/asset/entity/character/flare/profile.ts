@@ -55,7 +55,7 @@ export const profile: CharacterProfile = {
         cost: 0,
         cooldownMs: 5000,
         description:
-          "Outside Overdrive: cast to ignite Secondary Burn. During Overdrive: consume 40 Mana + 40 Energy to auto-cast the empowered heavy slash (enhanced basic attack) with a wide frontal blast.",
+          "Outside Overdrive: cast to ignite Secondary Burn. While Secondary Burn is active, it drains 2 Mana per second. During Overdrive: consume 40 Mana + 40 Energy to auto-cast the empowered heavy slash (enhanced basic attack) with a wide frontal blast.",
       },
       r: {
         id: "r",
@@ -63,7 +63,7 @@ export const profile: CharacterProfile = {
         cost: 70,
         cooldownMs: 10000,
         description:
-          "Mode-based cast: normal R is a forward strike. With Secondary Burn, R fires a burn projectile that applies layered burn and explosion effects. In enhanced burn, R switches to fan-flame mode with repeated cone damage ticks.",
+          "Mode-based cast: normal R is a forward strike. With Secondary Burn, R fires a burn projectile that applies layered burn and explosion effects, and each cast costs an extra 5 Mana. In enhanced burn, R switches to fan-flame mode with repeated cone damage ticks.",
       },
     },
   },
