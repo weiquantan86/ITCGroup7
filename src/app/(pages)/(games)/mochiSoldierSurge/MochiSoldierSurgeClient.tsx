@@ -14,6 +14,7 @@ import {
 import SceneLauncher from "../../../asset/scenes/general/SceneLauncher";
 import type { SceneUiState } from "../../../asset/scenes/general/sceneTypes";
 import MochiSoldierPreview from "./MochiSoldierPreview";
+import { useViewportFitScale } from "../shared/useViewportFitScale";
 import {
   SURGE_SCENE_STATE_KEY,
   SURGE_SNACK_KEYS,
@@ -745,16 +746,20 @@ export default function MochiSoldierSurgeClient({
     winBonusMultiplierBonusRewards,
   ]);
 
+  const selectionFit = useViewportFitScale({
+    enabled: !hasStarted,
+  });
+
   return (
-    <main className="relative min-h-screen w-full overflow-hidden bg-[#05070d] text-slate-100">
+    <main className="relative h-[100dvh] w-full overflow-hidden bg-[#05070d] text-slate-100">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[length:38px_38px]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_25%,rgba(251,146,60,0.46),transparent_44%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.4),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.62)_48%,rgba(2,6,23,0.86)_68%,rgba(2,6,23,0.95)_100%)]" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-none flex-col justify-start px-3 pb-2 pt-2 md:px-4">
-        <section className="w-full rounded-[32px] border border-white/10 bg-white/[0.04] p-6 text-center shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
-          <h1 className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-4xl font-bold text-transparent md:text-5xl">
+      <div className="relative mx-auto flex h-full min-h-0 w-full max-w-none flex-col justify-start px-3 pb-2 pt-2 md:px-4">
+        <section className="w-full rounded-[32px] border border-white/10 bg-white/[0.04] p-4 text-center shadow-[0_0_52px_rgba(59,130,246,0.18)] backdrop-blur-md">
+          <h1 className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-3xl font-bold text-transparent md:text-4xl">
             Mochi Soldier Surge
           </h1>
         </section>
@@ -937,7 +942,7 @@ export default function MochiSoldierSurgeClient({
                       : "Player Eliminated"}
                   </h3>
 
-                  <div className="mt-8 rounded-[22px] border border-white/10 bg-slate-950/70 p-6 text-center md:p-8">
+                  <div className="mt-8 rounded-[22px] border border-white/10 bg-slate-950/70 p-4 text-center md:p-8">
                     <p className="text-2xl font-semibold text-slate-200 md:text-3xl">Numbers Killed:</p>
                     <p className="mt-2 text-4xl font-semibold tabular-nums text-slate-100 md:text-5xl">
                       {surgeState.defeatedMonsters}
@@ -1109,13 +1114,18 @@ export default function MochiSoldierSurgeClient({
             ) : null}
           </>
         ) : (
-          <section className="mt-4 flex w-full justify-center">
-            <div
-              className="w-full max-w-[1400px] rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-6 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] backdrop-blur-xl md:p-8"
-              style={!hasConfiguredDifficulty ? difficultyShellStyle : undefined}
-            >
+          <section
+            ref={selectionFit.viewportRef}
+            className="mt-3 flex min-h-0 flex-1 w-full items-start justify-center overflow-hidden"
+          >
+            <div className="w-full max-w-[1280px]" style={selectionFit.scaledStyle}>
+              <div
+                ref={selectionFit.contentRef}
+                className="w-full rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-4 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] backdrop-blur-xl md:p-5"
+                style={!hasConfiguredDifficulty ? difficultyShellStyle : undefined}
+              >
               {!hasConfiguredDifficulty ? (
-                <div className="mx-auto w-full max-w-[1120px]">
+                <div className="mx-auto w-full max-w-[1040px]">
                   <p
                     className="text-center text-sm font-semibold uppercase tracking-[0.24em] text-slate-300 md:text-base"
                     style={{
@@ -1124,9 +1134,9 @@ export default function MochiSoldierSurgeClient({
                   >
                     Battle Difficulty
                   </p>
-                  <div className="mt-6 space-y-4">
+                  <div className="mt-4 space-y-3">
                     <div
-                      className="rounded-2xl border border-white/10 bg-slate-900/60 p-4"
+                      className="rounded-2xl border border-white/10 bg-slate-900/60 p-3"
                       style={difficultySectionStyle}
                     >
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
@@ -1140,13 +1150,13 @@ export default function MochiSoldierSurgeClient({
                               key={option.value}
                               type="button"
                               onClick={() => setMonsterTotal(option.value)}
-                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                              className={`rounded-xl border px-3 py-2.5 text-left transition ${
                                 selected
                                   ? "border-amber-300/70 bg-amber-400/15 shadow-[0_0_20px_rgba(251,191,36,0.22)]"
                                   : "border-white/10 bg-slate-950/65 hover:border-white/30"
                               }`}
                             >
-                              <p className="text-base font-semibold text-slate-100">
+                              <p className="text-[15px] font-semibold text-slate-100">
                                 {option.label}
                               </p>
                               <p className="mt-1 text-xs text-slate-300">
@@ -1161,7 +1171,7 @@ export default function MochiSoldierSurgeClient({
                     </div>
 
                     <div
-                      className="rounded-2xl border border-white/10 bg-slate-900/60 p-4"
+                      className="rounded-2xl border border-white/10 bg-slate-900/60 p-3"
                       style={difficultySectionStyle}
                     >
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
@@ -1175,13 +1185,13 @@ export default function MochiSoldierSurgeClient({
                               key={option.value}
                               type="button"
                               onClick={() => setMonsterHealthMultiplier(option.value)}
-                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                              className={`rounded-xl border px-3 py-2.5 text-left transition ${
                                 selected
                                   ? "border-emerald-300/70 bg-emerald-400/15 shadow-[0_0_20px_rgba(52,211,153,0.22)]"
                                   : "border-white/10 bg-slate-950/65 hover:border-white/30"
                               }`}
                             >
-                              <p className="text-base font-semibold text-slate-100">
+                              <p className="text-[15px] font-semibold text-slate-100">
                                 {option.label}
                               </p>
                               <p className="mt-1 text-xs text-slate-300">
@@ -1196,7 +1206,7 @@ export default function MochiSoldierSurgeClient({
                     </div>
 
                     <div
-                      className="rounded-2xl border border-white/10 bg-slate-900/60 p-4"
+                      className="rounded-2xl border border-white/10 bg-slate-900/60 p-3"
                       style={difficultySectionStyle}
                     >
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
@@ -1210,13 +1220,13 @@ export default function MochiSoldierSurgeClient({
                               key={option.valueMs}
                               type="button"
                               onClick={() => setSpawnIntervalMs(option.valueMs)}
-                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                              className={`rounded-xl border px-3 py-2.5 text-left transition ${
                                 selected
                                   ? "border-sky-300/70 bg-sky-400/15 shadow-[0_0_20px_rgba(56,189,248,0.22)]"
                                   : "border-white/10 bg-slate-950/65 hover:border-white/30"
                               }`}
                             >
-                              <p className="text-base font-semibold text-slate-100">
+                              <p className="text-[15px] font-semibold text-slate-100">
                                 {option.label}
                               </p>
                               <p className="mt-1 text-xs text-slate-300">
@@ -1231,7 +1241,7 @@ export default function MochiSoldierSurgeClient({
                     </div>
 
                     <div
-                      className="rounded-2xl border border-white/10 bg-slate-900/60 p-4"
+                      className="rounded-2xl border border-white/10 bg-slate-900/60 p-3"
                       style={difficultySectionStyle}
                     >
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
@@ -1245,13 +1255,13 @@ export default function MochiSoldierSurgeClient({
                               key={option.value}
                               type="button"
                               onClick={() => setSpawnBatchSize(option.value)}
-                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                              className={`rounded-xl border px-3 py-2.5 text-left transition ${
                                 selected
                                   ? "border-violet-300/70 bg-violet-400/15 shadow-[0_0_20px_rgba(167,139,250,0.22)]"
                                   : "border-white/10 bg-slate-950/65 hover:border-white/30"
                               }`}
                             >
-                              <p className="text-base font-semibold text-slate-100">
+                              <p className="text-[15px] font-semibold text-slate-100">
                                 {option.label}
                               </p>
                               <p className="mt-1 text-xs text-slate-300">
@@ -1267,7 +1277,7 @@ export default function MochiSoldierSurgeClient({
                   </div>
 
                   <div
-                    className="mt-7 rounded-2xl border border-cyan-300/35 bg-cyan-950/30 px-4 py-5 text-center"
+                    className="mt-4 rounded-2xl border border-cyan-300/35 bg-cyan-950/30 px-3 py-3.5 text-center"
                     style={difficultyMultiplierCardStyle}
                   >
                     <p
@@ -1279,7 +1289,7 @@ export default function MochiSoldierSurgeClient({
                       Reward Multiplier
                     </p>
                     <p
-                      className="mt-2 text-4xl font-bold tabular-nums text-cyan-100 md:text-5xl"
+                      className="mt-2 text-3xl font-bold tabular-nums text-cyan-100 md:text-4xl"
                       style={{
                         color: `rgba(255,241,242,${(0.88 + difficultyHeatRatio * 0.12).toFixed(3)})`,
                       }}
@@ -1288,11 +1298,11 @@ export default function MochiSoldierSurgeClient({
                     </p>
                   </div>
 
-                  <div className="mt-6 flex justify-center">
+                  <div className="mt-4 flex justify-center">
                     <button
                       type="button"
                       onClick={() => setHasConfiguredDifficulty(true)}
-                      className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-8 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105"
+                      className="inline-flex h-10 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-7 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105"
                     >
                       Continue to Character Selection
                     </button>
@@ -1305,7 +1315,7 @@ export default function MochiSoldierSurgeClient({
               ) : (
                 <>
                   <div
-                    className="mb-5 flex items-center justify-between gap-3 rounded-2xl border px-4 py-3"
+                    className="mb-4 flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-2.5"
                     style={{
                       borderColor: "rgba(125,211,252,0.34)",
                       backgroundImage:
@@ -1329,14 +1339,14 @@ export default function MochiSoldierSurgeClient({
                   </div>
 
                   <div
-                    className="flex flex-col items-center gap-6 rounded-[26px] border px-4 py-5 md:px-6"
+                    className="flex flex-col items-center gap-4 rounded-[26px] border px-3 py-4 md:px-5"
                     style={characterSelectionShellStyle}
                   >
-                    <div className="w-full max-w-[1120px] space-y-4 text-center">
+                    <div className="w-full max-w-[1040px] space-y-3 text-center">
                       <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-100 md:text-base">
                         Choose Character
                       </p>
-                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {characterOptions.map((option, index) => {
                           const selected = option.id === selectedCharacter?.id;
                           return (
@@ -1347,7 +1357,7 @@ export default function MochiSoldierSurgeClient({
                                 setSelectedCharacterId(option.id);
                                 setActiveSkillKey("q");
                               }}
-                              className={`rounded-2xl border px-6 py-6 text-center transition duration-300 ${
+                              className={`rounded-2xl border px-4 py-4 text-center transition duration-300 ${
                                 selected ? "scale-[1.02]" : "hover:scale-[1.01]"
                               }`}
                               style={
@@ -1368,10 +1378,10 @@ export default function MochiSoldierSurgeClient({
                                     }
                               }
                             >
-                              <p className="text-xl font-semibold text-slate-50 md:text-2xl">
+                              <p className="text-lg font-semibold text-slate-50 md:text-xl">
                                 {option.label}
                               </p>
-                              <p className="mt-2 text-sm uppercase tracking-[0.22em] text-slate-200">
+                              <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-200">
                                 {option.id}
                               </p>
                             </button>
@@ -1381,7 +1391,7 @@ export default function MochiSoldierSurgeClient({
                     </div>
 
                     <aside
-                      className="w-full max-w-[760px] rounded-2xl border p-4"
+                      className="w-full max-w-[760px] rounded-2xl border p-3"
                       style={skillPanelStyle}
                     >
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100">
@@ -1428,18 +1438,19 @@ export default function MochiSoldierSurgeClient({
                     </aside>
                   </div>
 
-                  <div className="mt-6 flex justify-center">
+                  <div className="mt-4 flex justify-center">
                     <button
                       type="button"
                       disabled={!selectedCharacter || isStarting || !hasConfiguredDifficulty}
                       onClick={() => void startGame()}
-                      className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-8 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-10 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-7 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isStarting ? "Starting..." : "Start"}
                     </button>
                   </div>
                 </>
               )}
+              </div>
             </div>
           </section>
         )}

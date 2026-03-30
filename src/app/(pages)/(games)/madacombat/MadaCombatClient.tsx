@@ -12,6 +12,7 @@ import {
 import SceneLauncher from "../../../asset/scenes/general/SceneLauncher";
 import type { SceneUiState } from "../../../asset/scenes/general/sceneTypes";
 import MadaPreview from "./MadaPreview";
+import { useViewportFitScale } from "../shared/useViewportFitScale";
 import {
   SURGE_SNACK_KEYS,
   SURGE_SNACK_LABELS,
@@ -310,6 +311,7 @@ export default function MadaCombatClient({
     hasStarted && isBattleEnded && endTransitionPhase === "showingResult";
   const shouldRenderBattleSection =
     hasStarted && (!isBattleEnded || endTransitionPhase !== "showingResult");
+  const shouldLockViewport = !hasStarted || shouldRenderBattleSection;
   const rewardConvertedScoreTarget = useMemo(() => {
     return Math.max(0, Math.floor(settlementScore * runtimeRewardMultiplier));
   }, [runtimeRewardMultiplier, settlementScore]);
@@ -742,13 +744,19 @@ export default function MadaCombatClient({
   const terminalDisplayChars = Array.from({ length: 4 }, (_, index) =>
     terminalCode[index] ?? "\u53e3"
   );
+  const selectionFit = useViewportFitScale({
+    enabled: !hasStarted,
+  });
+  const unlockDifficultyFit = useViewportFitScale({
+    enabled: unlockDifficultyOpen,
+  });
 
   return (
     <main
-      className={`relative min-h-screen w-full bg-[#02070a] text-slate-100 ${
-        shouldRenderBattleSection
-          ? "overflow-hidden"
-          : "overflow-x-hidden overflow-y-auto"
+      className={`relative w-full bg-[#02070a] text-slate-100 ${
+        shouldLockViewport
+          ? "h-[100dvh] overflow-hidden"
+          : "min-h-screen overflow-x-hidden overflow-y-auto"
       }`}
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(120,255,241,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(120,255,241,0.045)_1px,transparent_1px)] bg-[length:34px_34px]" />
@@ -756,29 +764,40 @@ export default function MadaCombatClient({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_16%,rgba(16,185,129,0.16),transparent_34%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(1,9,13,0.18)_0%,rgba(1,9,13,0.72)_58%,rgba(1,9,13,0.95)_100%)]" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-none flex-col justify-start px-3 pb-2 pt-2 md:px-4">
-        <section className="w-full rounded-[32px] border border-cyan-200/12 bg-white/[0.03] px-8 py-6 text-center shadow-[0_0_60px_rgba(16,185,129,0.12)] backdrop-blur-md">
+      <div
+        className={`relative mx-auto flex w-full max-w-none flex-col justify-start px-3 pb-2 pt-2 md:px-4 ${
+          shouldLockViewport ? "h-full min-h-0" : "min-h-screen"
+        }`}
+      >
+        <section className="w-full rounded-[32px] border border-cyan-200/12 bg-white/[0.03] px-6 py-4 text-center shadow-[0_0_60px_rgba(16,185,129,0.12)] backdrop-blur-md">
           <div className="flex flex-col items-center text-center">
-            <h1 className="text-center text-5xl font-black leading-none tracking-[1.01em] text-cyan-100 md:text-6xl">
+            <h1 className="text-center text-4xl font-black leading-none tracking-[0.92em] text-cyan-100 md:text-5xl">
               ???
             </h1>
           </div>
         </section>
 
         {!hasStarted ? (
-          <section className="mt-4 flex w-full justify-center">
-            <div className="w-full max-w-[1400px] rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-6 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] backdrop-blur-xl md:p-8">
+          <section
+            ref={selectionFit.viewportRef}
+            className="mt-3 flex min-h-0 flex-1 w-full items-start justify-center overflow-hidden"
+          >
+            <div className="w-full max-w-[1280px]" style={selectionFit.scaledStyle}>
+              <div
+                ref={selectionFit.contentRef}
+                className="w-full rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-4 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] backdrop-blur-xl md:p-5"
+              >
               {characterOptions.length <= 0 ? (
                 <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-5 text-sm text-rose-200">
                   No available characters to start this game.
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-6">
+                <div className="flex flex-col items-center gap-4">
                   <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-100 md:text-base">
                     Choose Character
                   </p>
 
-                  <div className="grid w-full max-w-[1120px] gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid w-full max-w-[1040px] gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     {characterOptions.map((option) => {
                       const selected = option.id === selectedCharacter?.id;
                       return (
@@ -789,16 +808,16 @@ export default function MadaCombatClient({
                             setSelectedCharacterId(option.id);
                             setActiveSkillKey("q");
                           }}
-                          className={`rounded-2xl border px-6 py-6 text-center transition duration-300 ${
+                          className={`rounded-2xl border px-4 py-4 text-center transition duration-300 ${
                             selected
                               ? "scale-[1.02] border-cyan-300/70 bg-cyan-400/15 shadow-[0_0_24px_rgba(34,211,238,0.22)]"
                               : "border-white/16 bg-slate-950/65 hover:scale-[1.01] hover:border-white/35"
                           }`}
                         >
-                          <p className="text-xl font-semibold text-slate-50 md:text-2xl">
+                          <p className="text-lg font-semibold text-slate-50 md:text-xl">
                             {option.label}
                           </p>
-                          <p className="mt-2 inline-block rounded-full border border-white/14 bg-cyan-400/16 px-2.5 py-1 text-sm uppercase tracking-[0.2em] text-cyan-50">
+                          <p className="mt-1 inline-block rounded-full border border-white/14 bg-cyan-400/16 px-2.5 py-1 text-xs uppercase tracking-[0.18em] text-cyan-50">
                             {option.id}
                           </p>
                         </button>
@@ -806,7 +825,7 @@ export default function MadaCombatClient({
                     })}
                   </div>
 
-                  <aside className="w-full max-w-[760px] rounded-2xl border border-cyan-300/25 bg-[#0a1621]/85 p-4">
+                  <aside className="w-full max-w-[760px] rounded-2xl border border-cyan-300/25 bg-[#0a1621]/85 p-3">
                     <div className="flex flex-wrap gap-2">
                       {(selectedCharacter?.skills ?? []).map((skill) => {
                         const selected = skill.key === activeSkillKey;
@@ -838,12 +857,13 @@ export default function MadaCombatClient({
                     type="button"
                     disabled={!selectedCharacter || isStarting}
                     onClick={() => void startGame()}
-                    className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-8 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-7 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isStarting ? "Entering..." : "Enter Mada Lab"}
                   </button>
                 </div>
               )}
+              </div>
             </div>
           </section>
         ) : (
@@ -974,24 +994,24 @@ export default function MadaCombatClient({
                     </div>
                     <div className="h-[248px] overflow-hidden border-t border-cyan-300/10">
                       {terminalOpen && !terminalUnlocked ? (
-                        <div className="flex h-full flex-col justify-between px-4 py-4 font-mono text-[12px] leading-6 text-cyan-100">
-                          <div className="flex items-center justify-between border-b border-cyan-300/10 pb-3">
+                        <div className="flex h-full flex-col justify-between px-3 py-3 font-mono text-[11px] leading-5 text-cyan-100">
+                          <div className="flex items-center justify-between border-b border-cyan-300/10 pb-2">
                             <div>
-                              <p className="font-mono text-sm tracking-[0.22em] text-cyan-100">
+                              <p className="font-mono text-xs tracking-[0.2em] text-cyan-100">
                                 ACCESS GATE
                               </p>
-                              <p className="mt-1 text-xs uppercase tracking-[0.24em] text-cyan-200/55">
+                              <p className="mt-0.5 text-[10px] uppercase tracking-[0.2em] text-cyan-200/55">
                                 Enter authorization code
                               </p>
                             </div>
                             <div className="h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.9)]" />
                           </div>
                           <div className="flex flex-1 flex-col items-center justify-center">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                               {terminalDisplayChars.map((char, index) => (
                                 <div
                                   key={`${char}-${index}`}
-                                  className={`flex h-14 w-14 items-center justify-center rounded-[14px] border text-2xl tracking-[0.12em] ${
+                                  className={`flex h-12 w-12 items-center justify-center rounded-[12px] border text-xl tracking-[0.1em] ${
                                     terminalFeedback === "error"
                                       ? "border-red-400/70 text-red-200 shadow-[0_0_18px_rgba(248,113,113,0.18)]"
                                       : "border-cyan-300/24 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.08)]"
@@ -1001,11 +1021,11 @@ export default function MadaCombatClient({
                                 </div>
                               ))}
                             </div>
-                            <p className="mt-5 text-[11px] uppercase tracking-[0.26em] text-cyan-200/55">
+                            <p className="mt-3 text-[10px] uppercase tracking-[0.22em] text-cyan-200/55">
                               Input: 4 digits
                             </p>
                             <p
-                              className={`mt-2 text-[11px] uppercase tracking-[0.22em] ${
+                              className={`mt-1.5 text-[10px] uppercase tracking-[0.2em] ${
                                 terminalFeedback === "error"
                                   ? "text-red-300"
                                   : "text-cyan-300/68"
@@ -1016,7 +1036,7 @@ export default function MadaCombatClient({
                                 : "Awaiting authorization"}
                             </p>
                           </div>
-                          <p className="mt-4 text-[11px] uppercase tracking-[0.24em] text-cyan-200/55">
+                          <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-cyan-200/55">
                             Number keys to enter. Backspace to erase.
                           </p>
                         </div>
@@ -1048,11 +1068,20 @@ export default function MadaCombatClient({
                 </aside>
 
                 {unlockDifficultyOpen ? (
-              <div className="absolute inset-0 z-30 flex items-start justify-center overflow-y-auto rounded-[30px] border border-cyan-200/15 bg-[#04090de0] p-6 backdrop-blur-md md:p-8">
+              <div className="absolute inset-0 z-30 flex items-start justify-center overflow-hidden rounded-[30px] border border-cyan-200/15 bg-[#04090de0] p-4 backdrop-blur-md md:p-6">
                 <div
-                  className="my-2 w-full max-w-[1120px] max-h-[calc(100%-0.5rem)] overflow-y-auto rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-6 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] md:p-8"
-                  style={difficultyShellStyle}
+                  ref={unlockDifficultyFit.viewportRef}
+                  className="flex w-full min-h-0 max-h-[calc(100%-0.5rem)] items-start justify-center overflow-hidden"
                 >
+                  <div
+                    className="w-full max-w-[980px]"
+                    style={unlockDifficultyFit.scaledStyle}
+                  >
+                    <div
+                      ref={unlockDifficultyFit.contentRef}
+                      className="my-2 w-full rounded-[30px] border border-white/10 bg-[#0b1119]/95 p-4 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.85)] md:p-5"
+                      style={difficultyShellStyle}
+                    >
                   <p className="text-center text-sm font-semibold uppercase tracking-[0.24em] text-slate-200 md:text-base">
                     Battle Difficulty
                   </p>
@@ -1060,7 +1089,7 @@ export default function MadaCombatClient({
                     Mada Damage + Max Health + Completeness (password step)
                   </p>
 
-                  <div className="mt-6 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
                       1. Mada Damage Multiplier
                     </p>
@@ -1072,13 +1101,13 @@ export default function MadaCombatClient({
                             key={option.value}
                             type="button"
                             onClick={() => setMadaDamageMultiplier(option.value)}
-                            className={`rounded-xl border px-4 py-3 text-left transition ${
+                            className={`rounded-xl border px-3 py-2.5 text-left transition ${
                               selected
                                 ? "border-amber-300/70 bg-amber-400/15 shadow-[0_0_20px_rgba(251,191,36,0.22)]"
                                 : "border-white/10 bg-slate-950/65 hover:border-white/30"
                             }`}
                           >
-                            <p className="text-base font-semibold text-slate-100">
+                            <p className="text-[15px] font-semibold text-slate-100">
                               {option.label}
                             </p>
                             <p className="mt-1 text-xs text-slate-300">
@@ -1092,7 +1121,7 @@ export default function MadaCombatClient({
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-slate-900/60 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
                       2. Mada Max Health
                     </p>
@@ -1104,13 +1133,13 @@ export default function MadaCombatClient({
                             key={option.value}
                             type="button"
                             onClick={() => setMadaMaxHealth(option.value)}
-                            className={`rounded-xl border px-4 py-3 text-left transition ${
+                            className={`rounded-xl border px-3 py-2.5 text-left transition ${
                               selected
                                 ? "border-rose-300/70 bg-rose-400/15 shadow-[0_0_20px_rgba(251,113,133,0.22)]"
                                 : "border-white/10 bg-slate-950/65 hover:border-white/30"
                             }`}
                           >
-                            <p className="text-base font-semibold text-slate-100">
+                            <p className="text-[15px] font-semibold text-slate-100">
                               {option.label}
                             </p>
                             <p className="mt-1 text-xs text-slate-300">
@@ -1124,7 +1153,7 @@ export default function MadaCombatClient({
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-slate-900/60 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
                       3. Mada Completeness
                     </p>
@@ -1137,13 +1166,13 @@ export default function MadaCombatClient({
                             key={option.tier}
                             type="button"
                             onClick={() => setMadaCompletenessTier(option.tier)}
-                            className={`rounded-xl border px-4 py-3 text-left transition ${
+                            className={`rounded-xl border px-3 py-2.5 text-left transition ${
                               selected
                                 ? "border-red-300/70 bg-red-400/15 shadow-[0_0_20px_rgba(248,113,113,0.22)]"
                                 : "border-white/10 bg-slate-950/65 hover:border-white/30"
                             }`}
                           >
-                            <p className="text-base font-semibold text-slate-100">
+                            <p className="text-[15px] font-semibold text-slate-100">
                               {option.label}
                             </p>
                             <p className="mt-1 text-xs text-slate-300">
@@ -1158,7 +1187,7 @@ export default function MadaCombatClient({
                     </div>
                   </div>
 
-                  <div className="mt-6 rounded-2xl border border-cyan-300/35 bg-cyan-950/30 px-4 py-5 text-center">
+                  <div className="mt-4 rounded-2xl border border-cyan-300/35 bg-cyan-950/30 px-3 py-3.5 text-center">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
                       Selected
                     </p>
@@ -1167,7 +1196,7 @@ export default function MadaCombatClient({
                       {selectedHealthOption.label} |{" "}
                       {selectedCompletenessOption.label}
                     </p>
-                    <p className="mt-2 text-4xl font-bold tabular-nums text-cyan-100 md:text-5xl">
+                    <p className="mt-2 text-3xl font-bold tabular-nums text-cyan-100 md:text-4xl">
                       x{configuredRewardMultiplier.toFixed(2)}
                     </p>
                     <p className="mt-2 text-xs uppercase tracking-[0.16em] text-cyan-100/80">
@@ -1180,7 +1209,7 @@ export default function MadaCombatClient({
                     </p>
                   </div>
 
-                  <div className="mt-6 flex flex-wrap justify-center gap-3">
+                  <div className="mt-4 flex flex-wrap justify-center gap-3">
                     <button
                       type="button"
                       onClick={() => setUnlockDifficultyOpen(false)}
@@ -1195,6 +1224,8 @@ export default function MadaCombatClient({
                     >
                       Apply and Trigger Breach
                     </button>
+                  </div>
+                    </div>
                   </div>
                 </div>
               </div>
