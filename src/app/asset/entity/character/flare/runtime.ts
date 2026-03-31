@@ -28,6 +28,7 @@ const primaryHoldTickIntervalMs = 1000;
 const primaryHoldStaminaCostPerSecond = 20;
 const skillQEnergyDrainPerSecond = 3.5;
 const skillQHealthRegenPerSecond = 3;
+const skillQCancelLockMs = 5000;
 const skillEManaDrainPerSecond = 2;
 const secondaryBurnSkillRExtraManaCost = 5;
 const enhancedESkillEnergyCost = 40;
@@ -258,6 +259,7 @@ const flareFxDynamicQualityDeltaMediumMs = 18;
 const flareFxDynamicQualityDeltaLowMs = 26;
 const flareFxDynamicQualityLoadMedium = 6;
 const flareFxDynamicQualityLoadLow = 10;
+const flareOverdriveStateEventName = "flare:overdrive-state";
 
 type FlareFxQualityTier = "high" | "medium" | "low";
 type FlareFxRuntimeStrategy = {
@@ -4184,6 +4186,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     startedAt: 0,
     durationMs: 0,
   };
+  let skillQCancelUnlockAt = 0;
 
   let skillQEPreludeFadeOutEndsAt = 0;
 
@@ -4224,6 +4227,15 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
   const getCurrentEnergy = () => getCurrentStats?.().energy ?? 0;
   const getCurrentMana = () => getCurrentStats?.().mana ?? 0;
+
+  const emitOverdriveState = (active: boolean) => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent(flareOverdriveStateEventName, {
+        detail: { active },
+      })
+    );
+  };
 
   const resolveFxQualityByDistance = (distanceSq: number): FlareFxQualityTier => {
     if (!Number.isFinite(distanceSq) || distanceSq <= flareFxHighDetailDistanceSq) {
@@ -4486,6 +4498,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
     burningModeState.active = false;
     burningModeState.activatedAt = 0;
     burningModeState.endsAt = 0;
+    skillQCancelUnlockAt = 0;
+    emitOverdriveState(false);
     burningModePreludeAuraFxRoot.visible = false;
     burningModeHeadFxRoot.visible = false;
     burningModeHeadLight.visible = false;
@@ -4530,6 +4544,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     burningModeState.endsAt = Number.POSITIVE_INFINITY;
     attachBurningModeHeadFx();
     burningModeHeadFxRoot.visible = true;
+    emitOverdriveState(true);
   };
 
   const resolveSecondaryBurnAnchor = () => {
@@ -5974,6 +5989,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     activateBurningMode(now);
     activateSecondaryBurn(now, { linkToBurningMode: true });
     activateSuperBurn(now);
+    skillQCancelUnlockAt = now + skillQCancelLockMs;
     return playActionBinding(skillQBinding);
   };
 
@@ -9342,6 +9358,9 @@ export const createRuntime: CharacterRuntimeFactory = ({
   const handleSkillQ = () => {
     const now = performance.now();
     if (burningModeState.active || skillQState.active) {
+      if (now < skillQCancelUnlockAt) {
+        return false;
+      }
       finishSkillQ();
       deactivateBurningMode();
       return true;
@@ -9629,6 +9648,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     lastRuntimeUpdateAt = 0;
     lastRuntimeDeltaMs = 16;
     flareFxCombatQuality = "high";
+    emitOverdriveState(false);
     baseRuntime.resetState?.();
   };
 
@@ -9751,6 +9771,12 @@ export const createRuntime: CharacterRuntimeFactory = ({
         key === "q" &&
         (burningModeState.active || skillQState.active)
       ) {
+        if (now < skillQCancelUnlockAt) {
+          return {
+            ...baseModifier,
+            allow: false,
+          };
+        }
         return {
           ...baseModifier,
           ignoreCostAndCooldown: true,
@@ -9930,6 +9956,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       }
       inactiveSkillRBurnExplosions.length = 0;
       skillRBurnHitVisualDebounceByTarget.clear();
+      emitOverdriveState(false);
       baseRuntime.dispose();
     },
     isFacingLocked: () =>

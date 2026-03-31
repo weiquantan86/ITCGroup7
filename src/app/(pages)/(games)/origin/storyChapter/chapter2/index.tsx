@@ -131,6 +131,13 @@ const CHAPTER2_DIRECT_PRIMARY_OR_R_HIT_DAMAGE = new Set([
   40, // Flare super basic attacks
   46, // Flare R direct / projectile
 ]);
+const CHAPTER2_BONFIRE_PROGRESS_BASIC_ATTACK_DAMAGE = new Set([
+  18, // Flare normal attack 1
+  24, // Flare normal attack 2
+  32, // Flare normal attack 3
+  40, // Flare super basic attacks
+]);
+const CHAPTER2_FLARE_OVERDRIVE_STATE_EVENT = "flare:overdrive-state";
 
 const CHAPTER2_INTRO_LINE_FADE_MS = 280;
 const CHAPTER2_INTRO_TRANSITION_MS = 920;
@@ -326,6 +333,24 @@ function Chapter2GameFrame({
     chapterUiState.chapter2WoodIgnited,
     chapterUiState.chapter2WoodBurnLevel,
   ]);
+
+  useEffect(() => {
+    const handleFlareOverdriveState = (event: Event) => {
+      const typed = event as CustomEvent<{ active?: boolean }>;
+      superBurnActiveRef.current = Boolean(typed.detail?.active);
+    };
+    window.addEventListener(
+      CHAPTER2_FLARE_OVERDRIVE_STATE_EVENT,
+      handleFlareOverdriveState as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        CHAPTER2_FLARE_OVERDRIVE_STATE_EVENT,
+        handleFlareOverdriveState as EventListener
+      );
+      superBurnActiveRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     postFestivalModeRef.current = Boolean(chapterUiState.chapter2PostFestivalMode);
@@ -1364,18 +1389,21 @@ function Chapter2GameFrame({
           label: "chapter2WoodPile",
           onHit: (hit) => {
             const now = hit?.now ?? performance.now();
+            const typedHit = hit as PlayerAttackHit | undefined;
+            const roundedDamage = Math.round(Number(typedHit?.damage) || 0);
             const isDirectPrimaryOrSkillRHit = (() => {
-              if (!hit) return false;
-              const typedHit = hit as PlayerAttackHit;
+              if (!typedHit) return false;
               if (typedHit.source === "projectile") {
                 return true;
               }
               if (typedHit.source !== "slash") {
                 return false;
               }
-              const roundedDamage = Math.round(Number(typedHit.damage) || 0);
               return CHAPTER2_DIRECT_PRIMARY_OR_R_HIT_DAMAGE.has(roundedDamage);
             })();
+            const isBasicAttackBonfireProgressHit =
+              typedHit?.source === "slash" &&
+              CHAPTER2_BONFIRE_PROGRESS_BASIC_ATTACK_DAMAGE.has(roundedDamage);
             if (!woodPileIgnited) {
               if (!weaponIgnitedRef.current || !isDirectPrimaryOrSkillRHit) return;
               woodPileIgnited = true;
@@ -1389,8 +1417,8 @@ function Chapter2GameFrame({
               });
               return;
             }
-            if (!isDirectPrimaryOrSkillRHit) return;
             if (!superBurnActiveRef.current) return;
+            if (!isBasicAttackBonfireProgressHit) return;
             if (now - lastBurnGainAt < CHAPTER2_WOOD_BURN_GAIN_COOLDOWN_MS) return;
             lastBurnGainAt = now;
             const nextBurnLevel = Math.min(
@@ -1774,8 +1802,6 @@ function Chapter2GameFrame({
         event.stopImmediatePropagation();
         return;
       }
-      if (event.repeat) return;
-      superBurnActiveRef.current = !superBurnActiveRef.current;
     };
 
     window.addEventListener("keydown", handleQPermissionAndTracking, true);
