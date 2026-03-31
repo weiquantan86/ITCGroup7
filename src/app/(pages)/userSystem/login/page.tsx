@@ -1,30 +1,34 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import './page.css';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import "./page.css";
 
 export default function Login() {
-  const [identifier, setIdentifier] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [message, setMessage] = useState('');
+  const [identifier, setIdentifier] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [message, setMessage] = useState("");
   const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminInput, setAdminInput] = useState('');
-  const [adminError, setAdminError] = useState('');
+  const [adminInput, setAdminInput] = useState("");
+  const [adminError, setAdminError] = useState("");
   const [adminSubmitting, setAdminSubmitting] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (loginIdentifier, loginPassword) => {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: loginIdentifier, password: loginPassword }),
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: loginIdentifier,
+        password: loginPassword,
+      }),
     });
     const data = await res.json();
     const success = Boolean(data.success);
-    setMessage(data.error || (success ? 'Login successful' : 'Login failed'));
+    setMessage(data.error || (success ? "Login successful" : "Login failed"));
     if (success) {
-      router.push('/userSystem/user');
+      router.push("/userSystem/user");
     }
   };
 
@@ -33,7 +37,10 @@ export default function Login() {
     await handleLogin(identifier, loginPassword);
   };
 
-  const handleAutoLogin = async (autoIdentifier: string, autoPassword: string) => {
+  const handleAutoLogin = async (
+    autoIdentifier: string,
+    autoPassword: string,
+  ) => {
     setIdentifier(autoIdentifier);
     setLoginPassword(autoPassword);
     await handleLogin(autoIdentifier, autoPassword);
@@ -41,115 +48,114 @@ export default function Login() {
 
   const handleAdminEnter = async () => {
     if (adminSubmitting) return;
-    setAdminError('');
+    setAdminError("");
     setAdminSubmitting(true);
     try {
-      const response = await fetch('/api/admin/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: adminInput }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        setAdminError(data.error || 'Invalid admin password.');
+        setAdminError(data.error || "Invalid admin password.");
         return;
       }
-      setAdminInput('');
+      setAdminInput("");
       setShowAdminModal(false);
-      router.push('/admin');
+      router.push("/admin");
     } catch (error) {
       console.error(error);
-      setAdminError('Failed to verify admin password.');
+      setAdminError("Failed to verify admin password.");
     } finally {
       setAdminSubmitting(false);
     }
   };
 
-  const closeAdminModal = () => {
-    setShowAdminModal(false);
-    setAdminInput('');
-    setAdminError('');
-  };
-
   return (
-    <div className="login-container">
-      <h1>Login</h1>
-      <form className="login-form" onSubmit={handleSubmit}>
-        <input type="text" placeholder="Email, Phone, or Username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
-        <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
-        <button type="submit">Login</button>
-      </form>
-      <div className="auto-login">
-        <button
-          type="button"
-          className="auto-login-button"
-          onClick={() => handleAutoLogin('Sarcus', '123456')}
-        >
-          Auto Login (Sarcus)
-        </button>
-        <button
-          type="button"
-          className="auto-login-button"
-          onClick={() => handleAutoLogin('weiquan', 'weiquan')}
-        >
-          Auto Login (weiquan)
-        </button>
+    <div className="login-screen">
+      <div className="forest-bg">
+        <div className="tree tree-left"></div>
+        <div className="tree tree-right"></div>
       </div>
-      <p className="message">{message}</p>
-      <div className="link">
-        <a href="/userSystem/register">Don't have an account? Register</a>
+
+      <div className="login-card">
+        <form className="login-form" onSubmit={handleSubmit}>
+          <input
+            type="text"
+            placeholder="Email, Phone, or Username"
+            className="login-input"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            className="login-input"
+            value={loginPassword}
+            onChange={(e) => setLoginPassword(e.target.value)}
+            required
+          />
+          <button type="submit" className="main-login-btn">
+            Login
+          </button>
+        </form>
+
+        <div className="auto-login-section">
+          <button
+            type="button"
+            className="auto-btn"
+            onClick={() => handleAutoLogin("Sarcus", "123456")}
+          >
+            Auto Login (Sarcus)
+          </button>
+          <button
+            type="button"
+            className="auto-btn"
+            onClick={() => handleAutoLogin("weiquan", "weiquan")}
+          >
+            Auto Login (weiquan)
+          </button>
+        </div>
+
+        {message && <p className="status-message">{message}</p>}
+
+        <div className="register-link">
+          <Link href="/userSystem/register">
+            Don't have an account? Register
+          </Link>
+        </div>
       </div>
 
       <button
         type="button"
-        className="settings-entry-button"
-        aria-label="Open admin access"
+        className="settings-fab"
         onClick={() => setShowAdminModal(true)}
       >
-        ⚙
+        <div className="gear-icon">⚙</div>
       </button>
 
       {showAdminModal && (
-        <div className="admin-modal-backdrop" onClick={closeAdminModal}>
+        <div
+          className="admin-modal-backdrop"
+          onClick={() => setShowAdminModal(false)}
+        >
           <div
             className="admin-modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Admin password dialog"
             onClick={(e) => e.stopPropagation()}
           >
             <h2>Admin Access</h2>
-            <p>Enter admin password</p>
             <input
-              type="text"
+              type="password"
               placeholder="Admin password"
               value={adminInput}
               onChange={(e) => setAdminInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  void handleAdminEnter();
-                }
-              }}
-              autoFocus
             />
-            {adminError ? <p className="admin-error">{adminError}</p> : null}
             <div className="admin-modal-actions">
-              <button
-                type="button"
-                className="admin-cancel-button"
-                onClick={closeAdminModal}
-                disabled={adminSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="admin-enter-button"
-                onClick={() => void handleAdminEnter()}
-                disabled={adminSubmitting}
-              >
-                {adminSubmitting ? 'Checking...' : 'Enter'}
+              <button onClick={() => setShowAdminModal(false)}>Cancel</button>
+              <button onClick={handleAdminEnter} className="enter-btn">
+                Enter
               </button>
             </div>
           </div>
