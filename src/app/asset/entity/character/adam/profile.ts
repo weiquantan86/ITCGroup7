@@ -51,7 +51,7 @@ export const profile: CharacterProfile = {
   },
   slash: {
     enabled: true,
-    color: 0x8bc34a,
+    color: 0x22d3ee,
     freezeArms: true,
     effect: {
       radius: 1.5,

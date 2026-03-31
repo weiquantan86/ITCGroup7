@@ -94,7 +94,7 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
   const createSkillGlow = (): SkillGlow => {
     // We want the *actual left antenna tip* to glow, not a floating overlay mesh.
     // The GLB is generated from primitives and multiple parts share materials, so
-    // we must clone materials to avoid turning all dark parts green.
+    // we must clone materials to avoid turning all dark parts cyan.
     let boundModel: THREE.Object3D | null = null;
     let hornTarget: THREE.Mesh | null = null;
     let originalMaterial: THREE.Material | THREE.Material[] | null = null;
@@ -117,9 +117,9 @@ const createChargeHud = (mount?: HTMLElement): ChargeHud => {
         emissiveIntensity?: number;
         toneMapped?: boolean;
       };
-        if (asAny.color) asAny.color.set(0x22c55e);
+        if (asAny.color) asAny.color.set(0x06b6d4);
         if (asAny.emissive) {
-          asAny.emissive.set(0x22c55e);
+          asAny.emissive.set(0x06b6d4);
           asAny.emissiveIntensity = baseGlowIntensity;
         }
         if (typeof asAny.toneMapped === "boolean") {
@@ -369,7 +369,7 @@ const createElectricAura = ({
   radius,
   arcCount,
   pointsPerArc,
-  color = 0x22c55e,
+  color = 0x06b6d4,
   opacity = 0.72,
   jitter = 0.2,
   lineWidth = 2.5,
@@ -543,18 +543,18 @@ export const createRuntime: CharacterRuntimeFactory = ({
     outerLineMaxCount: 14,
     outerLineStacksPerLine: 2,
     visualColor: {
-      sphereBase: new THREE.Color(0x22c55e),
-      sphereDeep: new THREE.Color(0x052e16),
-      emissiveBase: new THREE.Color(0x22c55e),
-      emissiveDeep: new THREE.Color(0x0f4d2a),
-      vortexCoreBase: new THREE.Color(0xdcfce7),
-      vortexCoreDeep: new THREE.Color(0x86efac),
-      vortexRingBase: new THREE.Color(0x86efac),
-      vortexRingDeep: new THREE.Color(0x22c55e),
-      vortexOrbBase: new THREE.Color(0xbbf7d0),
-      vortexOrbDeep: new THREE.Color(0x4ade80),
-      outerLineBase: new THREE.Color(0xbbf7d0),
-      outerLineDeep: new THREE.Color(0x22c55e),
+      sphereBase: new THREE.Color(0x06b6d4),
+      sphereDeep: new THREE.Color(0x083344),
+      emissiveBase: new THREE.Color(0x06b6d4),
+      emissiveDeep: new THREE.Color(0x164e63),
+      vortexCoreBase: new THREE.Color(0xcffafe),
+      vortexCoreDeep: new THREE.Color(0x67e8f9),
+      vortexRingBase: new THREE.Color(0x67e8f9),
+      vortexRingDeep: new THREE.Color(0x06b6d4),
+      vortexOrbBase: new THREE.Color(0xa5f3fc),
+      vortexOrbDeep: new THREE.Color(0x22d3ee),
+      outerLineBase: new THREE.Color(0xa5f3fc),
+      outerLineDeep: new THREE.Color(0x06b6d4),
     },
   };
   const skillRLingeringExplosionConfig = {
@@ -599,10 +599,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     28
   );
   const skillRSphereMaterial = new THREE.MeshStandardMaterial({
-    color: 0x22c55e,
+    color: 0x06b6d4,
     roughness: 0.14,
     metalness: 0.06,
-    emissive: 0x22c55e,
+    emissive: 0x06b6d4,
     emissiveIntensity: 1.05,
     transparent: true,
     opacity: 0.42,
@@ -622,7 +622,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     18
   );
   const skillRVortexCoreMaterial = new THREE.MeshBasicMaterial({
-    color: 0xdcfce7,
+    color: 0xcffafe,
     transparent: true,
     opacity: 0.34,
     blending: THREE.AdditiveBlending,
@@ -640,7 +640,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     84
   );
   const skillRVortexRingMaterial = new THREE.MeshBasicMaterial({
-    color: 0x86efac,
+    color: 0x67e8f9,
     transparent: true,
     opacity: 0.42,
     blending: THREE.AdditiveBlending,
@@ -671,7 +671,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
     10
   );
   const skillRVortexOrbMaterial = new THREE.MeshBasicMaterial({
-    color: 0xbbf7d0,
+    color: 0xa5f3fc,
     transparent: true,
     opacity: 0.8,
     blending: THREE.AdditiveBlending,
@@ -706,7 +706,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
   }
   skillROuterLineGeometry.setFromPoints(skillROuterLineVertices);
   const skillROuterLineMaterial = new THREE.LineBasicMaterial({
-    color: 0xbbf7d0,
+    color: 0xa5f3fc,
     transparent: true,
     opacity: 0.68,
     blending: THREE.AdditiveBlending,
@@ -736,10 +736,10 @@ export const createRuntime: CharacterRuntimeFactory = ({
     26
   );
   const skillQProjectileMaterial = new THREE.MeshStandardMaterial({
-    color: 0x22c55e,
+    color: 0x06b6d4,
     roughness: 0.18,
     metalness: 0.06,
-    emissive: 0x22c55e,
+    emissive: 0x06b6d4,
     emissiveIntensity: 1.2,
   });
   const skillQChargeAura = createElectricAura({
@@ -1030,7 +1030,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       Math.max(0.5, radius) * THREE.MathUtils.clamp(1 + resolvedStack * 0.018, 1, 1.7);
     const ringGeometry = new THREE.TorusGeometry(1, 0.08, 10, 56);
     const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0x86efac,
+      color: 0x67e8f9,
       transparent: true,
       opacity: 0.58,
       depthWrite: false,
@@ -1044,7 +1044,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     const shellGeometry = new THREE.SphereGeometry(1, 24, 16);
     const shellMaterial = new THREE.MeshBasicMaterial({
-      color: 0x22c55e,
+      color: 0x06b6d4,
       transparent: true,
       opacity: 0.22,
       wireframe: true,
@@ -1057,7 +1057,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
 
     const shockGeometry = new THREE.TorusGeometry(1, 0.05, 8, 44);
     const shockMaterial = new THREE.MeshBasicMaterial({
-      color: 0xbbf7d0,
+      color: 0xa5f3fc,
       transparent: true,
       opacity: 0.48,
       depthWrite: false,
@@ -1157,7 +1157,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       12
     );
     const coreMaterial = new THREE.MeshBasicMaterial({
-      color: 0x86efac,
+      color: 0x67e8f9,
       transparent: true,
       opacity: 0.74,
       depthWrite: false,
@@ -1173,7 +1173,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       56
     );
     const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0x22c55e,
+      color: 0x06b6d4,
       transparent: true,
       opacity: 0.54,
       depthWrite: false,
@@ -1189,7 +1189,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       Math.max(0.15, resolvedRadius * 0.34)
     );
     const bladeMaterial = new THREE.MeshBasicMaterial({
-      color: 0xbbf7d0,
+      color: 0xa5f3fc,
       transparent: true,
       opacity: 0.46,
       depthWrite: false,
@@ -1209,7 +1209,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       6
     );
     const orbMaterial = new THREE.MeshBasicMaterial({
-      color: 0xdcfce7,
+      color: 0xcffafe,
       transparent: true,
       opacity: 0.84,
       depthWrite: false,
@@ -1436,7 +1436,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       Math.PI * 1.18
     );
     const arcMaterialA = new THREE.MeshBasicMaterial({
-      color: 0x86efac,
+      color: 0x67e8f9,
       transparent: true,
       opacity: 0.62,
       depthWrite: false,
@@ -1444,7 +1444,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       side: THREE.DoubleSide,
     });
     const arcMaterialB = new THREE.MeshBasicMaterial({
-      color: 0x22c55e,
+      color: 0x06b6d4,
       transparent: true,
       opacity: 0.46,
       depthWrite: false,
@@ -1464,7 +1464,7 @@ export const createRuntime: CharacterRuntimeFactory = ({
       8
     );
     const orbMaterial = new THREE.MeshBasicMaterial({
-      color: 0xdcfce7,
+      color: 0xcffafe,
       transparent: true,
       opacity: 0.86,
       depthWrite: false,
@@ -2089,8 +2089,8 @@ export const createRuntime: CharacterRuntimeFactory = ({
         projectileType: "abilityOrb",
         speed,
         lifetime,
-        color: 0x22c55e,
-        emissive: 0x22c55e,
+        color: 0x06b6d4,
+        emissive: 0x06b6d4,
         emissiveIntensity: 0.9,
         scale: 12.24,
         damage: empoweredDamage,
