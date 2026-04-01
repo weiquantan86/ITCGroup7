@@ -49,79 +49,115 @@ function MenuArtwork({ kind }: { kind: MenuArtKind }) {
   switch (kind) {
     case "snack":
       return (
-        <svg viewBox="0 0 240 180" className="h-full w-full text-white/90" aria-hidden="true">
-          <path {...baseProps} d="M50 150 66 80l26-27h56l25 26-10 71H76Z" />
-          <path {...baseProps} d="m92 53-10-30 32 13 18-18 14 35" />
-          <path {...baseProps} d="m66 80 18 17m89-17-20 18M95 53l10 97m33-97-10 97" />
-          <path {...baseProps} d="M95 83c12 7 26 10 42 10m-40 20c12 7 28 11 46 11" />
-          <path {...baseProps} d="M103 119c8 4 14 10 17 18m18-20c9 3 16 8 21 15" />
+        <svg viewBox="-20 -40 240 180" className="h-full w-full text-white/90" aria-hidden="true">
+          <path {...baseProps} d="M10 60
+            L10 10
+            A10 -10 0 0 1 20 0
+            L120 0
+            A10 -10 0 0 1 130 10
+            L130 120
+            A10 -10 0 0 1 120 130
+            L20 130
+            A10 -10 0 0 1 10 120
+            Z" />
+            <path {...baseProps} d="M10 5 30 -40 50 0 70 -40 90 0 110 -40 130 5" />
+            <path {...baseProps} d="M10 30 130 30"/>
+            <path {...baseProps} d="M70 100 45 115 50 95 35 80 55 80 70 50 85 80 105 80 90 95 95 115 70 100"/>
         </svg>
       );
     case "character":
       return (
         <svg viewBox="0 0 240 180" className="h-full w-full text-white/75" aria-hidden="true">
-          <path {...baseProps} d="M140 57c0 23-18 41-40 41S60 80 60 57 78 16 100 16s40 18 40 41Z" />
-          <path {...baseProps} d="M52 156c14-28 42-45 69-45 30 0 57 17 70 45" />
-          <path {...baseProps} d="M81 60c4 6 10 10 18 11m22 0c8-2 13-5 18-11m-28-22c4-9 13-14 24-14" />
+          <circle cx="120" cy="70" r="60" fill="none" stroke="currentColor" strokeWidth="4" />
+          <path {...baseProps} d="M105 70 80 50"/>
+          <path {...baseProps} d="M105 85 85 100"/>
+          <path {...baseProps} d="M 85 100 Q 60 75, 80 50" fill="none" />
+          <path {...baseProps} d="M 80 105 Q 55 75, 75 45" fill="none" />
+          <path {...baseProps} d="M135 70 160 50"/>
+          <path {...baseProps} d="M135 90 155 100"/>
+          <path {...baseProps} d="M 160 50 Q 175 75, 155 100" fill="none" />
+          <path {...baseProps} d="M 165 45 Q 180 75, 160 105" fill="none" />
+          <circle cx="30" cy="100" r="20" fill="none" stroke="currentColor" strokeWidth="4" />
+          <circle cx="200" cy="110" r="20" fill="none" stroke="currentColor" strokeWidth="4" />
         </svg>
       );
     case "storage":
       return (
         <svg viewBox="0 0 240 180" className="h-full w-full text-white/75" aria-hidden="true">
-          <path {...baseProps} d="M58 62 120 31l62 31-62 30-62-30Z" />
+          <path {...baseProps} d="M58 62 120 31 l62 31 -62 30 -62 -30Z" />
           <path {...baseProps} d="M58 62v54l62 33 62-33V62" />
-          <path {...baseProps} d="M120 92v57M91 46l58 30m-62 15 33 17" />
+          <path {...baseProps} d="M120 92v57M91 46" />
+          <path {...baseProps} d="M59 90 l61 30 l61 -30" />
         </svg>
       );
     case "community":
       return (
         <svg viewBox="0 0 240 180" className="h-full w-full text-white/72" aria-hidden="true">
-          <path {...baseProps} d="M44 53h84a18 18 0 0 1 18 18v32a18 18 0 0 1-18 18H91l-25 22v-22H44a18 18 0 0 1-18-18V71a18 18 0 0 1 18-18Z" />
-          <path {...baseProps} d="M146 78h45a18 18 0 0 1 18 18v26a18 18 0 0 1-18 18h-15l-18 15v-15h-12a18 18 0 0 1-18-18V96a18 18 0 0 1 18-18Z" />
-          <path {...baseProps} d="M64 86h43m-43 18h28m95 5h-27m-74-23h0" />
-          <circle {...baseProps} cx="63" cy="86" r="1" />
+          <path {...baseProps} d="M44 53h84a18 18 0 0 1 18 18v32a18 18 0 0 1-18 18H91l-25 22v-22H44a18 18 0 0 1-18-18V71a18 18 0 0 1 18-18Z"/>
+          <path {...baseProps} d="M166 78h45a18 18 0 0 1 18 18v26a18 18 0 0 1-18 18h-15l-18 15v-15h-12a18 18 0 0 1-18-18V96a18 18 0 0 1 18-18Z" />
+          <path {...baseProps} d="M84 86h43m-43 18h28 m87 5 h-27" />
         </svg>
       );
     case "surge":
       return (
-        <svg viewBox="0 0 240 180" className="h-full w-full text-white/78" aria-hidden="true">
-          <path {...baseProps} d="M63 150 109 49l14 41 31-9-53 93-10-42-28 5Z" />
-          <path {...baseProps} d="M134 47c17 5 31 13 45 24m-35 21c13 3 24 9 35 18m-98 12c20 1 37 8 55 20" />
+        <svg viewBox="0 -50 240 180" className="h-full w-full text-white/78" aria-hidden="true">
+          <path {...baseProps} d="" />
+          <circle cx="100" cy="30" r="65" fill="none" stroke="currentColor" strokeWidth="4" />
+          <path {...baseProps} d="M90 35 q-35 13 -28 -20" />
+          <path {...baseProps} d="M90 35 l-28 -20" />
+          <path {...baseProps} d="M110 35 l28 -20" />
+          <path {...baseProps} d="M110 35 q35 13 28 -20" />
+          <path {...baseProps} d="M170 100 l15 7.5 40 -100 -15 -7.5Z" />
+          <path {...baseProps} d="M227 8 l10 5 -6 -50 -30 33Z" />
         </svg>
       );
     case "battle":
       return (
-        <svg viewBox="0 0 240 180" className="h-full w-full text-white/76" aria-hidden="true">
-          <path {...baseProps} d="M82 49 113 80m0 0 46 46m-46-46 10-34 23-11-10 24-23 11Z" />
-          <path {...baseProps} d="m158 49-31 31m0 0-46 46m46-46-10-34-23-11 10 24 23 11Z" />
-          <circle {...baseProps} cx="120" cy="95" r="17" />
+        <svg viewBox="0 -20 240 180" className="h-full w-full text-white/76" aria-hidden="true">
+          <circle cx="130" cy="85" r="65" fill="none" stroke="currentColor" strokeWidth="4" />
+          <path {...baseProps} d="M125 90 q-50 18 -40 -30" />
+          <path {...baseProps} d="M125 90 l-40 -30" />
+          <path {...baseProps} d="M135 90 l40 -30" />
+          <path {...baseProps} d="M135 90 q50 13 40 -30" />
+          // Sword
+          <path {...baseProps} d="M10 152 l10 0 0 -20 -10 0 0 20" />
+          <path {...baseProps} d="M10 132 l-10 -10 30 0 -10 10" />
+          <path {...baseProps} d="M10 122 l-5 -100 10 -20 10 20 -5 100" />
+          // Ball
+          <circle cx="230" cy="110" r="30" fill="none" stroke="currentColor" strokeWidth="4" />
+          <rect x="198" y="105" width="65" height="15" fill="currentColor" />
+          // Clown
+          <path {...baseProps} d="M90 20 l80 0 5 -20 -25 10 -20 -20 -20 20 -25 -10Z" />
         </svg>
       );
     case "lab":
       return (
-        <svg viewBox="0 0 240 180" className="h-full w-full text-white/72" aria-hidden="true">
+        <svg viewBox="0 -20 240 180" className="h-full w-full text-white/72" aria-hidden="true">
           <path {...baseProps} d="M94 33h52m-15 0v34l34 56a15 15 0 0 1-13 23H88a15 15 0 0 1-13-23l34-56V33" />
-          <path {...baseProps} d="M90 103c11 8 21 11 32 11 12 0 24-4 39-17" />
+          <path {...baseProps} d="M110 60 l20 0" />
           <circle {...baseProps} cx="99" cy="124" r="5" />
           <circle {...baseProps} cx="130" cy="133" r="8" />
           <circle {...baseProps} cx="151" cy="110" r="4" />
+          <path {...baseProps} d="M92 33 v-20 h56 v20" />
+          <path {...baseProps} stroke="red" d="M82 53 l-50 -30 q -10 60 50 30" />
+          <path {...baseProps} stroke="red" d="M152 53 l50 -30 q 10 60 -50 30" />
         </svg>
       );
     case "origin":
       return (
-        <svg viewBox="0 0 240 180" className="h-full w-full text-white/70" aria-hidden="true">
-          <path {...baseProps} d="M49 129 90 88l33 17 52-44" />
-          <path {...baseProps} d="M68 58h35m34 0h35m-69 76h39" />
-          <circle {...baseProps} cx="49" cy="129" r="8" />
-          <circle {...baseProps} cx="90" cy="88" r="8" />
-          <circle {...baseProps} cx="123" cy="105" r="8" />
-          <circle {...baseProps} cx="175" cy="61" r="8" />
+        <svg viewBox="00 240 180" className="h-full w-full text-white/70" aria-hidden="true">
+          <circle {...baseProps} cx="150" cy="40" r="30" />
+          <path {...baseProps} d="M132 68 q-30 20 -20 50" />
+          <path {...baseProps} d="M168 68 q30 20 20 50" />
+          //heart
+          <path {...baseProps} stroke="pink" d="M150 35 q45 -25 0 30 M150 35 q-45 -25 0 30" />
         </svg>
       );
     case "starshop":
       return (
         <svg viewBox="0 0 240 180" className="h-full w-full text-white/78" aria-hidden="true">
-          <path {...baseProps} d="m67 86 11-24 33-4 19-22 16 23 32 5 12 22-18 22 4 32-30 13-16 24-23-20-33 7-6-33-29-16 8-31-18-28Z" />
+          <path {...baseProps} d="M75 145 v-90 h90 v90" />
+          <path {...baseProps} d="M80 55 l-20 -10 20 -10 10 5 30 -30 30 30 10 -5 20 10 -20 10" />
           <path {...baseProps} d="m120 66 8 16 18 3-13 12 3 18-16-9-16 9 3-18-13-12 18-3 8-16Z" />
           <path {...baseProps} d="M51 145h138M164 145l8 20m-92-20-8 20" />
           <path {...baseProps} d="M183 74h22m-11-11v22" />
