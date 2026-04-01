@@ -24,11 +24,14 @@ export default function GachaClient({ inventory, rateList }: GachaClientProps) {
       const width = container.clientWidth;
       const height = container.clientHeight;
       if (width <= 0 || height <= 0) return;
-      const nextScale = Math.min(
-        width / GACHA_STAGE_BASE_WIDTH,
-        height / GACHA_STAGE_BASE_HEIGHT,
-        1
-      );
+
+      // Calculate scale to fit either width or height
+      const scaleW = width / GACHA_STAGE_BASE_WIDTH;
+      const scaleH = height / GACHA_STAGE_BASE_HEIGHT;
+      
+      // We use the smaller scale to ensure it fits completely
+      const nextScale = Math.min(scaleW, scaleH, 1);
+      
       setStageScale((current) =>
         Math.abs(current - nextScale) < 0.001 ? current : nextScale
       );

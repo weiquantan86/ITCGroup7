@@ -85,16 +85,16 @@ export default async function GachaPage() {
       {/* subtle vignette */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(2,4,10,0.55)_100%)]" />
 
-      <div className="relative mx-auto flex h-full w-full max-w-[1920px] flex-col px-6 py-6 lg:px-12">
+      <div className="relative mx-auto flex h-full w-full max-w-[1920px] flex-col px-4 py-4 md:px-12 md:py-6">
         {/* rainbow title */}
-        <div className="flex items-center justify-center pb-4 pt-2">
-          <h1 className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-5xl font-bold italic tracking-[0.18em] text-transparent drop-shadow-[0_0_28px_rgba(236,72,153,0.4)] md:text-6xl">
+        <div className="flex items-center justify-center pb-2 pt-1 md:pb-4 md:pt-2">
+          <h1 className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-3xl font-bold italic tracking-[0.18em] text-transparent drop-shadow-[0_0_28px_rgba(236,72,153,0.4)] sm:text-4xl md:text-6xl">
             Snack Gacha
           </h1>
         </div>
 
         {/* main card - fills remaining height */}
-        <div className="min-h-0 flex-1 overflow-hidden rounded-[36px] border border-white/10 bg-white/[0.03] shadow-[0_0_60px_rgba(59,130,246,0.2)] backdrop-blur-md">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-2xl md:rounded-[36px] border border-white/10 bg-white/[0.03] shadow-[0_0_60px_rgba(59,130,246,0.2)] backdrop-blur-md">
           <GachaClient inventory={inventory} rateList={rateList} />
         </div>
       </div>

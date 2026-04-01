@@ -43,20 +43,20 @@ export default function UserProfileClient({
 
   return (
     <div className="flex h-full flex-col gap-8">
-      <div className="flex flex-wrap items-center justify-between gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+          <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-slate-400">
             Username
           </p>
-          <div className="mt-2 text-3xl font-semibold text-slate-100">
+          <div className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-slate-100 truncate">
             {username}
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+        <div className="sm:text-right">
+          <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-slate-400">
             Created
           </p>
-          <div className="mt-2 text-lg font-semibold text-slate-200">
+          <div className="mt-1 sm:mt-2 text-base sm:text-lg font-semibold text-slate-200">
             {createdAtLabel}
           </div>
         </div>

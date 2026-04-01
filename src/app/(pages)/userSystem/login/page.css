@@ -1,22 +1,27 @@
 
-.login-screen {
-  background-color: #000;
+.login-container {
   min-height: 100vh;
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, #1a0f16 0%, #0c0408 100%);
   position: relative;
   overflow: hidden;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  padding: 1rem;
 }
 
 .tree {
   position: absolute;
-  bottom: 0;
-  width: 150px;
-  height: 400px;
-  background: #3e2e1a; 
-  z-index: 1;
+  font-size: 8rem;
+  opacity: 0.1;
+  pointer-events: none;
+  filter: blur(2px);
+}
+
+@media (max-width: 768px) {
+  .tree {
+    font-size: 5rem;
+  }
 }
 
 .tree::before {
@@ -35,17 +40,23 @@
 .tree-right { right: 5%; }
 
 .login-card {
-  position: relative;
-  z-index: 10;
-  background-color: #9275f0;
-  padding: 40px;
-  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px);
+  padding: 2.5rem;
+  border-radius: 2rem;
   width: 100%;
   max-width: 450px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 10;
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 1.5rem;
+    border-radius: 1.5rem;
+  }
 }
 
 .login-input {

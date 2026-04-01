@@ -11,7 +11,7 @@ type PanelProps = {
 function Panel({ children, className = "" }: PanelProps) {
   return (
     <div
-      className={`relative overflow-hidden rounded-[24px] border border-slate-200/20 bg-[#0d1219]/90 p-6 shadow-[0_0_28px_rgba(90,140,220,0.14)] before:pointer-events-none before:absolute before:inset-[6px] before:rounded-[18px] before:border before:border-slate-200/10 before:content-[''] ${className}`}
+      className={`relative overflow-hidden rounded-[24px] border border-slate-200/20 bg-[#0d1219]/90 p-4 sm:p-6 lg:p-8 shadow-[0_0_28px_rgba(90,140,220,0.14)] before:pointer-events-none before:absolute before:inset-[6px] before:rounded-[18px] before:border before:border-slate-200/10 before:content-[''] ${className}`}
     >
       {children}
     </div>
