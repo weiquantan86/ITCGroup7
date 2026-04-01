@@ -1,7 +1,13 @@
 import type { CharacterStats, SkillHudIndicators, SkillKey } from "../types";
 
 export type StatusHud = {
-  setStats: (current: CharacterStats, max: CharacterStats) => void;
+  setStats: (
+    current: CharacterStats,
+    max: CharacterStats,
+    options?: {
+      staminaLocked?: boolean;
+    }
+  ) => void;
   setSkillCooldowns: (
     cooldowns: Record<SkillKey, number>,
     durations: Record<SkillKey, number>
@@ -68,10 +74,10 @@ export const createStatusHud = (
     const fillBar = document.createElement("div");
     fillBar.style.cssText =
       `height:100%;width:100%;background:${fill};` +
-      `box-shadow:0 0 12px ${glow};transition:width 120ms ease;`;
+      `box-shadow:0 0 12px ${glow};transition:width 120ms ease,background 120ms ease,box-shadow 120ms ease,color 120ms ease;`;
     track.appendChild(fillBar);
     row.append(text, track, value);
-    return { row, fillBar, value };
+    return { row, text, fillBar, value };
   };
 
   const healthBar = createBar("HP", "#ef4444", "rgba(239,68,68,0.65)");
@@ -194,6 +200,19 @@ export const createStatusHud = (
   host.append(hud, cooldownPanel, damageOverlay, bossPanel);
   updateCooldownPanelPosition();
 
+  const setStaminaLockedAppearance = (locked: boolean) => {
+    staminaBar.fillBar.style.background = locked ? "#94a3b8" : "#f59e0b";
+    staminaBar.fillBar.style.boxShadow = locked
+      ? "0 0 12px rgba(148,163,184,0.38)"
+      : "0 0 12px rgba(245,158,11,0.6)";
+    staminaBar.text.style.color = locked
+      ? "rgba(203,213,225,0.82)"
+      : "rgba(226,232,240,0.9)";
+    staminaBar.value.style.color = locked
+      ? "rgba(203,213,225,0.76)"
+      : "rgba(226,232,240,0.85)";
+  };
+
   const updateFill = (
     fillBar: HTMLDivElement,
     value: HTMLSpanElement,
@@ -284,7 +303,14 @@ export const createStatusHud = (
   };
 
   return {
-    setStats: (current: CharacterStats, max: CharacterStats) => {
+    setStats: (
+      current: CharacterStats,
+      max: CharacterStats,
+      options?: {
+        staminaLocked?: boolean;
+      }
+    ) => {
+      setStaminaLockedAppearance(Boolean(options?.staminaLocked));
       updateFill(healthBar.fillBar, healthBar.value, current.health, max.health);
       updateFill(staminaBar.fillBar, staminaBar.value, current.stamina, max.stamina);
       updateFill(manaBar.fillBar, manaBar.value, current.mana, max.mana);

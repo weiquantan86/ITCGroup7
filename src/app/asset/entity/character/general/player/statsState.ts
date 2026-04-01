@@ -82,6 +82,7 @@ const resolveCameraConfig = (
 type SkillCost = number | "all";
 const STAMINA_DRAIN_PER_SECOND = 15;
 const STAMINA_RECOVERY_PER_SECOND = 10;
+const STAMINA_UNLOCK_THRESHOLD = 20;
 
 export const createPlayerStatsState = ({
   profile,
@@ -111,12 +112,18 @@ export const createPlayerStatsState = ({
   let manaConfig: ManaConfigResolved = resolveManaConfig(profile);
   let movementConfig: MovementConfigResolved = resolveMovementConfig(profile);
   let cameraConfig: CameraConfigResolved = resolveCameraConfig(profile);
+  let staminaLocked = false;
   let statsDirty = true;
   let lastUiStateSnapshot = "";
 
+  const getResolvedStaminaUnlockThreshold = () =>
+    Math.max(0, Math.min(STAMINA_UNLOCK_THRESHOLD, maxStats.stamina));
+
   const syncHud = () => {
     if (!statsDirty) return;
-    statusHud.setStats(currentStats, maxStats);
+    statusHud.setStats(currentStats, maxStats, {
+      staminaLocked,
+    });
     statsDirty = false;
   };
 
@@ -133,6 +140,7 @@ export const createPlayerStatsState = ({
     cameraConfig = resolveCameraConfig(nextProfile);
     skillCooldownDurations = resolveSkillCooldownDurations(nextProfile);
     skillCooldownUntil = { q: 0, e: 0, r: 0 };
+    staminaLocked = false;
     if (infiniteFire && maxStats.mana > 0) {
       currentStats.mana = maxStats.mana;
     }
@@ -148,6 +156,7 @@ export const createPlayerStatsState = ({
 
   const resetCurrentToMax = () => {
     currentStats = { ...maxStats };
+    staminaLocked = false;
     markDirty();
   };
 
@@ -179,17 +188,27 @@ export const createPlayerStatsState = ({
     const gained = next - currentStats.stamina;
     if (gained > 0) {
       currentStats.stamina = next;
+      if (
+        staminaLocked &&
+        currentStats.stamina + 0.0001 >= getResolvedStaminaUnlockThreshold()
+      ) {
+        staminaLocked = false;
+      }
       markDirty();
     }
     return gained;
   };
 
   const spendStamina = (amount: number) => {
-    if (amount <= 0 || currentStats.stamina <= 0) return 0;
+    if (amount <= 0 || currentStats.stamina <= 0 || staminaLocked) return 0;
+    const previous = currentStats.stamina;
     const next = Math.max(0, currentStats.stamina - amount);
     const spent = currentStats.stamina - next;
     if (spent > 0) {
       currentStats.stamina = next;
+      if (previous > 0 && next <= 0.0001) {
+        staminaLocked = true;
+      }
       markDirty();
     }
     return spent;
@@ -361,7 +380,7 @@ export const createPlayerStatsState = ({
     isSprinting: boolean
   ) => {
     if (maxStats.stamina > 0) {
-      if (isSprinting) {
+      if (isSprinting && !staminaLocked) {
         spendStamina(STAMINA_DRAIN_PER_SECOND * delta);
       } else {
         applyStamina(STAMINA_RECOVERY_PER_SECOND * delta);
@@ -409,8 +428,9 @@ export const createPlayerStatsState = ({
   };
 
   const restoreFullStamina = () => {
-    if (currentStats.stamina >= maxStats.stamina) return false;
+    if (currentStats.stamina >= maxStats.stamina && !staminaLocked) return false;
     currentStats.stamina = maxStats.stamina;
+    staminaLocked = false;
     markDirty();
     return true;
   };
@@ -443,6 +463,7 @@ export const createPlayerStatsState = ({
       cooldownDurations,
       staminaCurrent: currentStats.stamina,
       staminaMax: maxStats.stamina,
+      staminaLocked,
       manaCurrent: currentStats.mana,
       manaMax: maxStats.mana,
       energyCurrent: currentStats.energy,
@@ -458,6 +479,7 @@ export const createPlayerStatsState = ({
       cooldownDurations.r.toFixed(2),
       Math.round(currentStats.stamina),
       Math.round(maxStats.stamina),
+      staminaLocked ? "1" : "0",
       Math.round(currentStats.mana),
       Math.round(maxStats.mana),
       Math.round(currentStats.energy),
@@ -475,6 +497,9 @@ export const createPlayerStatsState = ({
     },
     get currentStats() {
       return currentStats;
+    },
+    get staminaLocked() {
+      return staminaLocked;
     },
     get energyConfig() {
       return energyConfig;

@@ -264,7 +264,10 @@ export const createPlayerFrameUpdater = ({
           right,
         });
     const shiftHeld = pressedKeys.has("shift");
-    const canSprint = shiftHeld && statsState.currentStats.stamina > 0;
+    const canSprint =
+      shiftHeld &&
+      !statsState.staminaLocked &&
+      statsState.currentStats.stamina > 0;
     const miniOrbitYawInput =
       (pressedKeys.has("z") ? 1 : 0) + (pressedKeys.has("x") ? -1 : 0);
     if (miniOrbitYawInput !== 0) {
@@ -319,7 +322,7 @@ export const createPlayerFrameUpdater = ({
       dashRequested = false;
       if (hasMoveInput && !movementLocked && dashRemainingDistance <= 0) {
         const currentStamina = statsState.currentStats.stamina;
-        if (currentStamina >= DASH_STAMINA_COST) {
+        if (!statsState.staminaLocked && currentStamina >= DASH_STAMINA_COST) {
           const spent = statsState.spendStamina(DASH_STAMINA_COST);
           if (spent >= DASH_STAMINA_COST - 0.0001) {
             dashDirection.copy(moveDir).normalize();

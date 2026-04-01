@@ -98,6 +98,7 @@ export interface PlayerUiState {
   cooldownDurations: Record<SkillKey, number>;
   staminaCurrent: number;
   staminaMax: number;
+  staminaLocked: boolean;
   manaCurrent: number;
   manaMax: number;
   energyCurrent: number;
