@@ -383,8 +383,8 @@ function MenuButton({ label, className = "", href, art }: MenuButtonProps) {
 
   const labelNode = (
     <span
-      className={`pointer-events-none absolute left-3 top-3 z-40 block origin-top-left bg-[linear-gradient(90deg,#fb7185_0%,#f59e0b_18%,#fde047_34%,#4ade80_50%,#38bdf8_68%,#a78bfa_84%,#f472b6_100%)] bg-clip-text text-left text-[clamp(1.1rem,1.65vw,2.1rem)] font-thin uppercase leading-[0.9] tracking-[0.2em] text-transparent drop-shadow-[0_1px_10px_rgba(2,6,23,0.9)] [text-wrap:balance] [transform:scaleX(0.84)] ${
-        art ? "max-w-[50%]" : "max-w-[78%]"
+      className={`pointer-events-none absolute left-3 top-3 z-40 block origin-top-left break-keep bg-[linear-gradient(90deg,#fb7185_0%,#f59e0b_18%,#fde047_34%,#4ade80_50%,#38bdf8_68%,#a78bfa_84%,#f472b6_100%)] bg-clip-text text-left text-[clamp(1.1rem,1.65vw,2.1rem)] font-thin uppercase leading-[0.9] tracking-[0.14em] text-transparent drop-shadow-[0_1px_10px_rgba(2,6,23,0.9)] [overflow-wrap:normal] [text-wrap:balance] [transform:scaleX(0.84)] ${
+        art ? "max-w-[62%]" : "max-w-[78%]"
       }`}
     >
       {label}
