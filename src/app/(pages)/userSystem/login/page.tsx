@@ -64,14 +64,16 @@ export default function Login() {
   };
 
   return (
-    <div className="login-screen">
+    <div className="login-container">
       <div className="forest-bg">
-        <div className="tree tree-left"></div>
-        <div className="tree tree-right"></div>
+        <div className="tree" style={{ left: "10%", bottom: "20%" }}>🌲</div>
+        <div className="tree" style={{ right: "15%", bottom: "10%" }}>🌲</div>
+        <div className="tree" style={{ left: "40%", bottom: "5%" }}>🌲</div>
       </div>
 
       <div className="login-card">
-        <form className="login-form" onSubmit={handleSubmit}>
+        <h1>Login</h1>
+        <form onSubmit={handleSubmit} className="login-form">
           <input
             type="text"
             placeholder="Email, Phone, or Username"

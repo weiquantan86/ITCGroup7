@@ -533,7 +533,7 @@ export default async function UserPage() {
   const stageHeight = `calc(${stageWidth} * 9 / 16)`;
 
   return (
-    <main className="relative min-h-[100dvh] w-full overflow-hidden bg-[#05070d] text-slate-100">
+    <main className="relative min-h-[100dvh] w-full overflow-x-hidden bg-[#05070d] text-slate-100">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[length:38px_38px]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_20%,rgba(251,146,60,0.42),transparent_36%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_14%,rgba(96,165,250,0.34),transparent_34%)]" />
@@ -542,110 +542,91 @@ export default async function UserPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_52%_48%,rgba(168,85,247,0.14),transparent_36%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(110deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.5)_38%,rgba(2,6,23,0.82)_68%,rgba(2,6,23,0.96)_100%)]" />
 
-      <div className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center p-[clamp(0.6rem,1.2vw,1rem)]">
-        <div style={{ width: stageWidth, height: stageHeight }} className="relative">
-          <div className="h-full w-full rounded-[clamp(24px,2.4vw,36px)] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.055),transparent_28%),linear-gradient(155deg,rgba(7,11,19,0.9)_0%,rgba(11,17,30,0.92)_48%,rgba(5,8,14,0.95)_100%)] px-[clamp(0.8rem,1.8vw,3.2rem)] py-[clamp(0.8rem,2.2dvh,2.6rem)] shadow-[0_0_48px_rgba(34,197,94,0.06),0_0_64px_rgba(96,165,250,0.08),0_0_88px_rgba(236,72,153,0.08)] backdrop-blur-md">
-            <div className="grid h-full min-h-0 gap-[clamp(0.5rem,1vw,1.2rem)] grid-cols-[1fr_1.5fr_1fr] grid-rows-[minmax(180px,0.72fr)_minmax(0,1.28fr)]">
-              <Panel className="grid h-full min-h-0 grid-rows-3 gap-[clamp(0.5rem,0.9vw,1.1rem)]">
-                <div className="relative flex h-full min-h-0 items-center justify-center">
-                  <div className="absolute left-0 top-1/2 z-10 -translate-y-1/2">
-                    <EmailLauncher
-                      username={username}
-                      initialHasUnreadEmail={hasUnreadEmail}
-                    />
-                  </div>
-                  <span className="flex min-w-0 items-center justify-center gap-3 px-[clamp(3rem,5vw,5rem)] text-base text-slate-200/90">
-                    <span className="h-2.5 w-2.5 rounded-full bg-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.7)]" />
-                    <span className="inline-flex items-center text-center text-[clamp(1.25rem,2.15vw,1.9rem)] font-semibold tracking-wide">
-                      {username}
-                      {isAuthorised ? (
-                        <span className="ml-2.5 inline-flex h-[clamp(1.5rem,2vw,2rem)] w-[clamp(1.5rem,2vw,2rem)] items-center justify-center">
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="h-full w-full drop-shadow-[0_0_10px_rgba(251,191,36,0.95)]"
-                            aria-label="Authorised"
-                            role="img"
-                          >
-                            <path
-                              d="M12 2.6l2.75 5.57 6.15.9-4.45 4.34 1.05 6.13L12 16.66l-5.5 2.88 1.05-6.13L3.1 9.07l6.15-.9L12 2.6z"
-                              fill="#facc15"
-                              stroke="#fff7cc"
-                              strokeWidth="1.5"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </span>
-                      ) : null}
-                    </span>
+      <div className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center p-4 sm:p-[clamp(0.6rem,1.2vw,1rem)]">
+        <div 
+          style={{ width: stageWidth, height: stageHeight }}
+          className="relative flex flex-col lg:grid lg:grid-cols-[1fr_1.5fr_1fr] lg:grid-rows-[minmax(180px,0.72fr)_minmax(0,1.28fr)] lg:gap-[clamp(0.5rem,1vw,1.2rem)]"
+        >
+          <div className="contents lg:block">
+            <Panel className="flex flex-col gap-4 lg:grid lg:grid-rows-3 lg:gap-[clamp(0.5rem,0.9vw,1.1rem)]">
+              <div className="relative flex h-full min-h-[60px] items-center justify-center">
+                <div className="absolute left-0 top-1/2 z-10 -translate-y-1/2">
+                  <EmailLauncher
+                    username={username}
+                    initialHasUnreadEmail={hasUnreadEmail}
+                  />
+                </div>
+                <span className="flex min-w-0 items-center justify-center gap-3 px-[clamp(3rem,5vw,5rem)] text-base text-slate-200/90">
+                  <span className="h-2.5 w-2.5 rounded-full bg-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.7)]" />
+                  <span className="inline-flex items-center text-center text-[clamp(1.25rem,2.15vw,1.9rem)] font-semibold tracking-wide">
+                    {username}
+                    {isAuthorised ? (
+                      <span className="ml-2.5 inline-flex h-[clamp(1.5rem,2vw,2rem)] w-[clamp(1.5rem,2vw,2rem)] items-center justify-center">
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-full w-full drop-shadow-[0_0_10px_rgba(251,191,36,0.95)]"
+                          aria-label="Authorised"
+                          role="img"
+                        >
+                          <path
+                            d="M12 2.6l2.75 5.57 6.15.9-4.45 4.34 1.05 6.13L12 16.66l-5.5 2.88 1.05-6.13L3.1 9.07l6.15-.9L12 2.6z"
+                            fill="#facc15"
+                            stroke="#fff7cc"
+                            strokeWidth="1.5"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                    ) : null}
                   </span>
-                </div>
+                </span>
+              </div>
 
-                <a
-                  href="/userSystem/userProfile"
-                  className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-orange-500/85 to-pink-500/80 px-4 py-2 text-[clamp(1rem,1.7vw,1.45rem)] font-semibold tracking-[0.06em] text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition duration-200 hover:brightness-105"
+              <a
+                href="/userSystem/userProfile"
+                className="relative flex h-12 lg:h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-orange-500/85 to-pink-500/80 px-4 py-2 text-[clamp(1rem,1.7vw,1.45rem)] font-semibold tracking-[0.06em] text-white shadow-[0_10px_30px_rgba(236,72,153,0.28)] transition duration-200 hover:brightness-105"
+              >
+                View my profile
+                <span className="pointer-events-none absolute inset-[5px] rounded-[14px] border border-white/20" />
+              </a>
+
+              <form action="/api/logout" method="post" className="h-12 lg:h-full w-full">
+                <button
+                  type="submit"
+                  className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-sky-500/85 to-cyan-400/85 px-4 py-2 text-[clamp(1rem,1.7vw,1.45rem)] font-semibold tracking-[0.06em] text-white shadow-[0_10px_30px_rgba(14,165,233,0.28)] transition duration-200 hover:brightness-105"
                 >
-                  View my profile
+                  Log out
                   <span className="pointer-events-none absolute inset-[5px] rounded-[14px] border border-white/20" />
-                </a>
-
-                <form action="/api/logout" method="post" className="h-full w-full">
-                  <button
-                    type="submit"
-                    className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[18px] border border-white/15 bg-gradient-to-r from-sky-500/85 to-cyan-400/85 px-4 py-2 text-[clamp(1rem,1.7vw,1.45rem)] font-semibold tracking-[0.06em] text-white shadow-[0_10px_30px_rgba(14,165,233,0.28)] transition duration-200 hover:brightness-105"
-                  >
-                    Log out
-                    <span className="pointer-events-none absolute inset-[5px] rounded-[14px] border border-white/20" />
-                  </button>
-                </form>
-              </Panel>
-
-              <Panel className="flex h-full items-center justify-between gap-[clamp(0.8rem,2vw,2.5rem)] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.05),transparent_32%),linear-gradient(145deg,rgba(42,17,40,0.75)_0%,rgba(15,23,42,0.86)_52%,rgba(16,28,53,0.82)_100%)] px-[clamp(0.8rem,2vw,2.5rem)] py-[clamp(0.7rem,1.8dvh,1.9rem)] shadow-[0_0_34px_rgba(236,72,153,0.1)]">
-                <div className="h-[clamp(2.2rem,3vw,3.5rem)] w-[clamp(2.2rem,3vw,3.5rem)] rounded-full border border-pink-200/20 bg-[radial-gradient(circle_at_35%_35%,rgba(251,191,36,0.52),rgba(236,72,153,0.18)_60%,transparent_76%)] shadow-[0_0_24px_rgba(251,191,36,0.16)]" />
-                <div className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-center text-[clamp(2.4rem,4.5vw,4.8rem)] font-semibold italic tracking-[0.16em] text-transparent">
-                  Strike!
-                </div>
-                <div className="h-[clamp(2.2rem,3vw,3.5rem)] w-[clamp(2.2rem,3vw,3.5rem)] rounded-full border border-sky-200/20 bg-[radial-gradient(circle_at_35%_35%,rgba(125,211,252,0.52),rgba(59,130,246,0.16)_60%,transparent_76%)] shadow-[0_0_24px_rgba(96,165,250,0.16)]" />
-              </Panel>
-
-              <Panel className="grid h-full min-h-0 grid-rows-4 gap-[clamp(0.5rem,0.9vw,1.1rem)] col-start-3 row-span-2 row-start-1">
-                <MenuButton label="Snack Gacha" art="snack" className="h-full" href="/gacha" />
-                <MenuButton
-                  label="Character"
-                  art="character"
-                  className="h-full"
-                  href="/characterManagement"
-                />
-                <MenuButton label="Storage" art="storage" className="h-full" href="/storage" />
-                <MenuButton
-                  label="Community"
-                  art="community"
-                  className="h-full"
-                  href="/community"
-                />
-              </Panel>
-
-              <Panel className="grid h-full min-h-0 grid-rows-3 gap-[clamp(0.5rem,0.9vw,1.1rem)]">
-                <MenuButton
-                  label="Mochi Soldier Surge"
-                  art="surge"
-                  className="h-full"
-                  href="/mochiSoldierSurge"
-                />
-                <MenuButton
-                  label="Mochi General Battle"
-                  art="battle"
-                  className="h-full"
-                  href="/mochiGeneralBattle"
-                />
-                <MenuButton label="? ? ?" art="lab" className="h-full" href="/madacombat" />
-              </Panel>
-
-              <Panel className="grid h-full min-h-0 grid-rows-2 gap-[clamp(0.5rem,0.9vw,1.1rem)]">
-                <MenuButton label="Origin" art="origin" className="h-full" href="/origin" />
-                <MenuButton label="Star Shop" art="starshop" className="h-full" href="/starshop" />
-              </Panel>
-            </div>
+                </button>
+              </form>
+            </Panel>
           </div>
+
+          <Panel className="flex h-24 lg:h-full items-center justify-between gap-[clamp(0.8rem,2vw,2.5rem)] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.05),transparent_32%),linear-gradient(145deg,rgba(42,17,40,0.75)_0%,rgba(15,23,42,0.86)_52%,rgba(16,28,53,0.82)_100%)] px-[clamp(0.8rem,2vw,2.5rem)] py-[clamp(0.7rem,1.8dvh,1.9rem)] shadow-[0_0_34px_rgba(236,72,153,0.1)]">
+            <div className="h-[clamp(2.2rem,3vw,3.5rem)] w-[clamp(2.2rem,3vw,3.5rem)] rounded-full border border-pink-200/20 bg-[radial-gradient(circle_at_35%_35%,rgba(251,191,36,0.52),rgba(236,72,153,0.18)_60%,transparent_76%)] shadow-[0_0_24px_rgba(251,191,36,0.16)]" />
+            <div className="bg-gradient-to-r from-orange-400 via-pink-500 to-sky-400 bg-clip-text text-center text-[clamp(2.4rem,4.5vw,4.8rem)] font-semibold italic tracking-[0.16em] text-transparent">
+              Strike!
+            </div>
+            <div className="h-[clamp(2.2rem,3vw,3.5rem)] w-[clamp(2.2rem,3vw,3.5rem)] rounded-full border border-sky-200/20 bg-[radial-gradient(circle_at_35%_35%,rgba(125,211,252,0.52),rgba(59,130,246,0.16)_60%,transparent_76%)] shadow-[0_0_24px_rgba(96,165,250,0.16)]" />
+          </Panel>
+
+          <Panel className="grid grid-cols-2 lg:grid-cols-1 lg:grid-rows-4 gap-[clamp(0.5rem,0.9vw,1.1rem)] lg:col-start-3 lg:row-span-2 lg:row-start-1">
+            <MenuButton label="Snack Gacha" art="snack" className="h-24 lg:h-full" href="/gacha" />
+            <MenuButton label="Character" art="character" className="h-24 lg:h-full" href="/characterManagement" />
+            <MenuButton label="Storage" art="storage" className="h-24 lg:h-full" href="/storage" />
+            <MenuButton label="Community" art="community" className="h-24 lg:h-full" href="/community" />
+          </Panel>
+
+          <Panel className="grid grid-cols-3 lg:grid-cols-1 lg:grid-rows-3 gap-[clamp(0.5rem,0.9vw,1.1rem)]">
+            <MenuButton label="Soldier Surge" art="surge" className="h-20 lg:h-full" href="/mochiSoldierSurge" />
+            <MenuButton label="General Battle" art="battle" className="h-20 lg:h-full" href="/mochiGeneralBattle" />
+            <MenuButton label="? ? ?" art="lab" className="h-20 lg:h-full" href="/madacombat" />
+          </Panel>
+
+          <Panel className="grid grid-cols-2 lg:grid-cols-1 lg:grid-rows-2 gap-[clamp(0.5rem,0.9vw,1.1rem)]">
+            <MenuButton label="Origin" art="origin" className="h-20 lg:h-full" href="/origin" />
+            <MenuButton label="Star Shop" art="starshop" className="h-20 lg:h-full" href="/starshop" />
+          </Panel>
         </div>
       </div>
     </main>

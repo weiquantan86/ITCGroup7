@@ -5,7 +5,7 @@ export default function Home() {
     <div className="flex min-h-screen items-center justify-center bg-black font-sans">
       <main className="flex w-full max-w-3xl flex-col items-center justify-center gap-8 md:gap-12 px-6 text-center">
         <div className="relative">
-          <h1 className="text-6xl sm:text-8xl md:text-9xl font-black tracking-tighter italic flex select-none">
+          <h1 className="text-5xl xs:text-6xl sm:text-8xl md:text-9xl font-black tracking-tighter italic flex select-none">
             <span className="text-white">S</span>
             <span className="text-[#9880ff] -ml-1 md:-ml-2">T</span>
             <span className="text-white -ml-1 md:-ml-2">R</span>
@@ -15,20 +15,20 @@ export default function Home() {
           </h1>
         </div>
 
-        <p className="max-w-md text-base md:text-lg font-medium leading-relaxed text-[#9880ff]">
+        <p className="max-w-md text-sm sm:text-base md:text-lg font-medium leading-relaxed text-[#9880ff] px-4">
           Defeat Mochi Monsters and earn points! Register or Log in to your
           account to play.
         </p>
 
-        <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row w-full sm:w-auto px-4 sm:px-0">
+        <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row w-full sm:w-auto px-8 sm:px-0 max-w-xs sm:max-w-none">
           <Link
-            className="flex h-12 md:h-14 w-full sm:w-48 items-center justify-center rounded-full bg-white text-lg md:text-xl font-black uppercase tracking-widest text-[#9880ff] transition-transform hover:scale-105 active:scale-95"
+            className="flex h-12 md:h-14 w-full sm:w-48 items-center justify-center rounded-full bg-white text-base md:text-xl font-black uppercase tracking-widest text-[#9880ff] transition-all hover:scale-105 active:scale-95 shadow-lg shadow-white/10"
             href="/userSystem/login"
           >
             Login
           </Link>
           <Link
-            className="flex h-12 md:h-14 w-full sm:w-48 items-center justify-center rounded-full bg-white text-lg md:text-xl font-black uppercase tracking-widest text-[#9880ff] transition-transform hover:scale-105 active:scale-95"
+            className="flex h-12 md:h-14 w-full sm:w-48 items-center justify-center rounded-full bg-white text-base md:text-xl font-black uppercase tracking-widest text-[#9880ff] transition-all hover:scale-105 active:scale-95 shadow-lg shadow-white/10"
             href="/userSystem/register"
           >
             Register

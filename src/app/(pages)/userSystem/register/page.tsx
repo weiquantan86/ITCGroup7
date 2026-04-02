@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import './page.css';
 
 export default function Register() {
@@ -23,17 +24,26 @@ export default function Register() {
 
   return (
     <div className="register-container">
-      <h1>Register</h1>
-      <form className="register-form" onSubmit={handleSubmit}>
+      <div className="forest-bg">
+        <div className="tree" style={{ left: "15%", top: "10%" }}>🌲</div>
+        <div className="tree" style={{ right: "10%", bottom: "15%" }}>🌲</div>
+        <div className="tree" style={{ left: "45%", bottom: "20%" }}>🌲</div>
+      </div>
+
+      <div className="register-card">
+        <h1>Register</h1>
+        <form className="register-form" onSubmit={handleSubmit}>
         <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         <input type="tel" placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} required />
         <input type="text" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} required />
         <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <button type="submit">Register</button>
       </form>
-      <p className="message">{message}</p>
-      <div className="link">
-        <a href="/userSystem/login">Already have an account? Login</a>
+        <div className="link">
+          <Link href="/userSystem/login">
+            Already have an account? Login
+          </Link>
+        </div>
       </div>
     </div>
   );
