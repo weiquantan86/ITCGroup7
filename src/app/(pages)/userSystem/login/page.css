@@ -87,28 +87,6 @@
   background-color: #511bc7;
 }
 
-.auto-login-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: center;
-}
-
-.auto-btn {
-  background-color: #6a3de8;
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 4px;
-  font-weight: 600;
-  width: 80%;
-  cursor: pointer;
-}
-
-.auto-btn:hover {
-  background-color: #5a2ed1;
-}
-
 .register-link {
   text-align: center;
   margin-top: 10px;
