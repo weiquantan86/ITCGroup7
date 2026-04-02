@@ -62,5 +62,5 @@ StrikeF is an immersive 3D action RPG that runs entirely in the browser. It feat
 
 
 
----
+----
 *Developed for ITC Frontendamentals.*
