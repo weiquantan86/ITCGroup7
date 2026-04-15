@@ -1,4 +1,3 @@
-
 .login-container {
   min-height: 100vh;
   display: flex;
@@ -72,7 +71,7 @@
 }
 
 .main-login-btn {
-  background-color: #6366f1;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
   padding: 1rem;
   border: none;
@@ -80,12 +79,13 @@
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
   margin-top: 1rem;
+  box-shadow: 0 14px 30px rgba(99, 102, 241, 0.28);
 }
 
 .main-login-btn:hover {
-  background-color: #4f46e5;
+  filter: brightness(1.06);
   transform: translateY(-1px);
 }
 
@@ -120,25 +120,92 @@
   border: 1px solid rgba(220, 38, 38, 0.2);
 }
 
-.settings-fab {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 50px;
-  height: 50px;
-  background-color: #1a202c;
-  border: 2px solid #2d3748;
-  border-radius: 8px;
+.login-card-footer {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(129, 140, 248, 0.12);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 100;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
-.gear-icon {
-  color: white;
-  font-size: 24px;
+.admin-access-copy {
+  margin: 0;
+  color: rgba(196, 181, 253, 0.82);
+  font-size: 0.85rem;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+.admin-access-trigger {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  width: 100%;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  background:
+    linear-gradient(135deg, rgba(43, 20, 79, 0.95), rgba(22, 27, 57, 0.96));
+  color: #f8fafc;
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 14px 28px rgba(17, 24, 39, 0.34),
+    0 0 0 1px rgba(236, 72, 153, 0.08);
+  transition: transform 0.2s, border-color 0.2s, filter 0.2s, box-shadow 0.2s;
+}
+
+.admin-access-trigger::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 12% 24%, rgba(251, 113, 133, 0.24), transparent 34%),
+    radial-gradient(circle at 88% 78%, rgba(96, 165, 250, 0.22), transparent 34%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+  z-index: 0;
+}
+
+.admin-access-trigger > * {
+  position: relative;
+  z-index: 1;
+}
+
+.admin-access-trigger span:last-child {
+  color: #ede9fe;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.admin-access-trigger:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  border-color: rgba(251, 113, 133, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 34px rgba(17, 24, 39, 0.4),
+    0 0 0 1px rgba(251, 113, 133, 0.16);
+}
+
+.admin-access-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.75rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.28), rgba(244, 63, 94, 0.2));
+  border: 1px solid rgba(251, 146, 60, 0.38);
+  color: #fed7aa;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .admin-modal-backdrop {
@@ -148,12 +215,154 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  padding: 1rem;
   z-index: 200;
 }
 
 .admin-modal-card {
-  background: white;
-  padding: 30px;
-  border-radius: 12px;
-  width: 300px;
+  width: min(100%, 420px);
+  padding: 1.6rem;
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at top left, rgba(244, 63, 94, 0.16), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.16), transparent 30%),
+    linear-gradient(180deg, rgba(18, 18, 28, 0.96), rgba(11, 11, 18, 0.98));
+  border: 1px solid rgba(129, 140, 248, 0.16);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.admin-modal-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.admin-modal-kicker {
+  margin: 0;
+  color: #fda4af;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-modal-card h2 {
+  margin: 0;
+  color: white;
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.admin-modal-description {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.admin-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.admin-modal-field span {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.admin-modal-field input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.95rem 1rem;
+  border-radius: 0.95rem;
+  color: white;
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.admin-modal-field input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(251, 113, 133, 0.5);
+  box-shadow: 0 0 0 4px rgba(244, 63, 94, 0.12);
+}
+
+.admin-modal-field input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.admin-modal-error {
+  margin: 0;
+  border-radius: 0.9rem;
+  background: rgba(127, 29, 29, 0.38);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  color: #fecaca;
+  padding: 0.8rem 0.9rem;
+  font-size: 0.88rem;
+}
+
+.admin-modal-actions {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+.admin-modal-actions button {
+  flex: 1;
+  min-height: 3rem;
+  border-radius: 0.95rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s, filter 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.admin-modal-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.admin-cancel-btn {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.82), rgba(15, 23, 42, 0.92));
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  color: #dbeafe;
+}
+
+.admin-cancel-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(51, 65, 85, 0.88), rgba(30, 41, 59, 0.94));
+  border-color: rgba(96, 165, 250, 0.24);
+}
+
+.admin-confirm-btn {
+  border: none;
+  color: white;
+  background: linear-gradient(135deg, #f43f5e 0%, #fb7185 55%, #f59e0b 100%);
+  box-shadow: 0 16px 30px rgba(244, 63, 94, 0.28);
+}
+
+.admin-confirm-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    border-radius: 1.5rem;
+  }
+
+  .admin-modal-card {
+    padding: 1.25rem;
+  }
+
+  .admin-modal-actions {
+    flex-direction: column-reverse;
+  }
 }

@@ -195,20 +195,28 @@ function SnackSlot({
   snack,
   count,
   max,
+  disabled,
   onAdjust,
   onSetCount,
 }: {
   snack: (typeof SNACK_DEFINITIONS)[number];
   count: number;
   max: number;
+  disabled?: boolean;
   onAdjust: (delta: number) => void;
   onSetCount: (next: number) => void;
 }) {
   const active = count > 0;
+  const canIncrement = !disabled && count < max;
+  const canDecrement = !disabled && count > 0;
   return (
-    <div className="flex flex-col items-center gap-3">
-      <div
-        className="relative flex h-40 w-40 items-center justify-center rounded-full border-2 transition-all duration-300"
+    <div className="pointer-events-auto flex flex-col items-center gap-3">
+      <button
+        type="button"
+        onClick={() => onAdjust(1)}
+        disabled={!canIncrement}
+        className="relative flex h-40 w-40 items-center justify-center rounded-full border-2 transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-80"
+        aria-label={canIncrement ? `Add ${snack.label}` : `${snack.label} unavailable`}
         style={{
           borderColor: active ? snack.accent : "rgba(255,255,255,0.12)",
           background: active
@@ -237,7 +245,7 @@ function SnackSlot({
             {count}
           </div>
         ) : null}
-      </div>
+      </button>
       <p className="max-w-[150px] text-center text-sm font-semibold leading-tight text-slate-200">
         {snack.label}
       </p>
@@ -246,7 +254,7 @@ function SnackSlot({
         <button
           type="button"
           onClick={() => onAdjust(-1)}
-          disabled={count <= 0}
+          disabled={!canDecrement}
           className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-xl font-bold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-20"
         >
           -
@@ -258,6 +266,7 @@ function SnackSlot({
           step={1}
           inputMode="numeric"
           value={count}
+          disabled={disabled}
           onChange={(event) => {
             const nextText = event.target.value.trim();
             if (!nextText) {
@@ -274,7 +283,7 @@ function SnackSlot({
         <button
           type="button"
           onClick={() => onAdjust(1)}
-          disabled={count >= max}
+          disabled={!canIncrement}
           className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-xl font-bold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-20"
         >
           +
@@ -699,11 +708,12 @@ export default function SnackMixer({
         </div>
       ) : null}
 
-      <div className="relative z-10 flex translate-y-8 items-center justify-start">
+      <div className="relative z-20 flex translate-y-8 items-center justify-start pointer-events-auto">
         <SnackSlot
           snack={SNACK_DEFINITIONS[0]}
           count={selected.energy_sugar}
           max={currentInventory.energy_sugar}
+          disabled={isSealing}
           onAdjust={(delta) => adjust("energy_sugar", delta)}
           onSetCount={(next) => setCount("energy_sugar", next)}
         />
@@ -732,11 +742,12 @@ export default function SnackMixer({
         </div>
       </div>
 
-      <div className="relative z-10 flex translate-y-8 items-center justify-end">
+      <div className="relative z-20 flex translate-y-8 items-center justify-end pointer-events-auto">
         <SnackSlot
           snack={SNACK_DEFINITIONS[1]}
           count={selected.dream_fruit_dust}
           max={currentInventory.dream_fruit_dust}
+          disabled={isSealing}
           onAdjust={(delta) => adjust("dream_fruit_dust", delta)}
           onSetCount={(next) => setCount("dream_fruit_dust", next)}
         />
@@ -833,6 +844,7 @@ export default function SnackMixer({
           snack={SNACK_DEFINITIONS[2]}
           count={selected.core_crunch_seed}
           max={currentInventory.core_crunch_seed}
+          disabled={isSealing}
           onAdjust={(delta) => adjust("core_crunch_seed", delta)}
           onSetCount={(next) => setCount("core_crunch_seed", next)}
         />
@@ -881,6 +893,7 @@ export default function SnackMixer({
           snack={SNACK_DEFINITIONS[3]}
           count={selected.star_gel_essence}
           max={currentInventory.star_gel_essence}
+          disabled={isSealing}
           onAdjust={(delta) => adjust("star_gel_essence", delta)}
           onSetCount={(next) => setCount("star_gel_essence", next)}
         />

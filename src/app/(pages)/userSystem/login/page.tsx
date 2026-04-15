@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import "./page.css";
@@ -13,15 +13,49 @@ export default function Login() {
   const [adminInput, setAdminInput] = useState("");
   const [adminError, setAdminError] = useState("");
   const [adminSubmitting, setAdminSubmitting] = useState(false);
+  const adminInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
 
-  const handleLogin = async (loginIdentifier, loginPassword) => {
+  const handleAdminOpen = () => {
+    setAdminInput("");
+    setAdminError("");
+    setShowAdminModal(true);
+  };
+
+  const handleAdminClose = () => {
+    if (adminSubmitting) return;
+    setShowAdminModal(false);
+    setAdminInput("");
+    setAdminError("");
+  };
+
+  useEffect(() => {
+    if (!showAdminModal) return;
+
+    const focusTimer = window.setTimeout(() => {
+      adminInputRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        handleAdminClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showAdminModal, adminSubmitting]);
+
+  const handleLogin = async (loginIdentifier, password) => {
     const res = await fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         identifier: loginIdentifier,
-        password: loginPassword,
+        password,
       }),
     });
     const data = await res.json();
@@ -39,6 +73,11 @@ export default function Login() {
 
   const handleAdminEnter = async () => {
     if (adminSubmitting) return;
+    if (!adminInput.trim()) {
+      setAdminError("Enter the admin password.");
+      return;
+    }
+
     setAdminError("");
     setAdminSubmitting(true);
     try {
@@ -63,12 +102,23 @@ export default function Login() {
     }
   };
 
+  const handleAdminSubmit = async (e) => {
+    e.preventDefault();
+    await handleAdminEnter();
+  };
+
   return (
     <div className="login-container">
       <div className="forest-bg">
-        <div className="tree" style={{ left: "10%", bottom: "20%" }}>🌲</div>
-        <div className="tree" style={{ right: "15%", bottom: "10%" }}>🌲</div>
-        <div className="tree" style={{ left: "40%", bottom: "5%" }}>🌲</div>
+        <div className="tree" style={{ left: "10%", bottom: "20%" }}>
+          {"\u{1F332}"}
+        </div>
+        <div className="tree" style={{ right: "15%", bottom: "10%" }}>
+          {"\u{1F332}"}
+        </div>
+        <div className="tree" style={{ left: "40%", bottom: "5%" }}>
+          {"\u{1F332}"}
+        </div>
       </div>
 
       <div className="login-card">
@@ -102,39 +152,73 @@ export default function Login() {
             Don't have an account? Register
           </Link>
         </div>
+
+        <div className="login-card-footer">
+          <p className="admin-access-copy">Need administrator access?</p>
+          <button
+            type="button"
+            className="admin-access-trigger"
+            onClick={handleAdminOpen}
+          >
+            <span className="admin-access-badge">ADMIN</span>
+            <span>Open admin access</span>
+          </button>
+        </div>
       </div>
 
-      <button
-        type="button"
-        className="settings-fab"
-        onClick={() => setShowAdminModal(true)}
-      >
-        <div className="gear-icon">⚙</div>
-      </button>
-
       {showAdminModal && (
-        <div
-          className="admin-modal-backdrop"
-          onClick={() => setShowAdminModal(false)}
-        >
-          <div
+        <div className="admin-modal-backdrop" onClick={handleAdminClose}>
+          <form
             className="admin-modal-card"
+            role="dialog"
+            aria-modal="true"
+            onSubmit={handleAdminSubmit}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2>Admin Access</h2>
-            <input
-              type="password"
-              placeholder="Admin password"
-              value={adminInput}
-              onChange={(e) => setAdminInput(e.target.value)}
-            />
+            <div className="admin-modal-header">
+              <p className="admin-modal-kicker">Restricted Area</p>
+              <h2>Admin Access</h2>
+              <p className="admin-modal-description">
+                Enter the administrator password to continue to the admin
+                dashboard.
+              </p>
+            </div>
+
+            <label className="admin-modal-field">
+              <span>Admin password</span>
+              <input
+                ref={adminInputRef}
+                type="password"
+                placeholder="Enter admin password"
+                value={adminInput}
+                onChange={(e) => setAdminInput(e.target.value)}
+                disabled={adminSubmitting}
+                autoComplete="current-password"
+              />
+            </label>
+
+            {adminError ? (
+              <p className="admin-modal-error">{adminError}</p>
+            ) : null}
+
             <div className="admin-modal-actions">
-              <button onClick={() => setShowAdminModal(false)}>Cancel</button>
-              <button onClick={handleAdminEnter} className="enter-btn">
-                Enter
+              <button
+                type="button"
+                className="admin-cancel-btn"
+                onClick={handleAdminClose}
+                disabled={adminSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="admin-confirm-btn"
+                disabled={adminSubmitting || !adminInput.trim()}
+              >
+                {adminSubmitting ? "Confirming..." : "Confirm"}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
     </div>
